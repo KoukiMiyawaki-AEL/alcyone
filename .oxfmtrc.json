@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  // Markdown is hand-written Japanese prose with wide-character tables; letting
+  // the formatter re-pad them adds diff noise to every docs edit for no gain.
+  "ignorePatterns": ["**/*.md", "drizzle/**"],
+  "sortImports": true,
+  "sortTailwindcss": {
+    "stylesheet": "src/index.css",
+    "functions": ["cn", "cva"]
+  }
+}

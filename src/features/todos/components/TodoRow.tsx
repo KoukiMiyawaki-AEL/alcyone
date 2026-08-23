@@ -27,30 +27,20 @@ export function TodoRow({ todo, onToggle, onDelete }: TodoRowProps) {
         aria-label={`Mark "${todo.title}" as ${todo.completed ? "not done" : "done"}`}
       />
       <span
-        className={cn(
-          "flex-1 text-sm",
-          todo.completed && "text-muted-foreground line-through",
-        )}
+        className={cn("flex-1 text-sm", todo.completed && "text-muted-foreground line-through")}
       >
         {todo.title}
       </span>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Actions for "${todo.title}"`}
-            >
+            <Button variant="ghost" size="icon-sm" aria-label={`Actions for "${todo.title}"`}>
               <EllipsisVerticalIcon />
             </Button>
           }
         />
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => onDelete(todo.id)}
-          >
+          <DropdownMenuItem variant="destructive" onClick={() => onDelete(todo.id)}>
             <TrashIcon />
             Delete
           </DropdownMenuItem>

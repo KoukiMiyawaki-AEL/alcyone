@@ -4,13 +4,7 @@ import { InboxIcon, TriangleAlertIcon } from "lucide-react";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -26,13 +20,7 @@ export const Route = createFileRoute("/dev/design-system")({
   component: DesignSystemComponent,
 });
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
@@ -51,20 +39,12 @@ function DesignSystemComponent() {
 
       <Section title="Typography">
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Page title
-          </h1>
-          <h2 className="text-lg font-semibold tracking-tight">
-            Section title
-          </h2>
+          <h1 className="text-2xl font-semibold tracking-tight">Page title</h1>
+          <h2 className="text-lg font-semibold tracking-tight">Section title</h2>
           <p className="text-sm">Body text — 標準の本文サイズ。</p>
-          <p className="text-sm text-muted-foreground">
-            Secondary text — 補足情報に使用する。
-          </p>
+          <p className="text-sm text-muted-foreground">Secondary text — 補足情報に使用する。</p>
           <Label>Label</Label>
-          <span className="text-xs text-muted-foreground">
-            Caption — 最小サイズのメタ情報。
-          </span>
+          <span className="text-xs text-muted-foreground">Caption — 最小サイズのメタ情報。</span>
         </div>
       </Section>
 
@@ -81,9 +61,7 @@ function DesignSystemComponent() {
             { name: "border", className: "bg-border" },
           ].map((token) => (
             <div key={token.name} className="flex flex-col gap-1.5">
-              <div
-                className={`h-12 rounded-md border border-border ${token.className}`}
-              />
+              <div className={`h-12 rounded-md border border-border ${token.className}`} />
               <span className="text-xs text-muted-foreground">{token.name}</span>
             </div>
           ))}

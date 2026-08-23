@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test-dom.tsbuildinfo",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": []
+  },
+  // setup-dom.ts must stay in scope: its `@testing-library/jest-dom/vitest`
+  // import is what augments vitest's Assertion type with the DOM matchers.
+  "include": ["test/components", "test/setup-dom.ts"]
+}

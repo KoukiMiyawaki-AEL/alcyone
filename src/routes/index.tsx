@@ -6,10 +6,11 @@ import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiClient } from "@/lib/api-client";
+import { addTodo, deleteTodo, setTodoCompleted } from "@/features/todos/api";
 import { TodoForm } from "@/features/todos/components/TodoForm";
 import { TodoList } from "@/features/todos/components/TodoList";
 import type { Todo } from "@/features/todos/types";
+import { apiClient } from "@/lib/api-client";
 
 export const Route = createFileRoute("/")({
   loader: async (): Promise<{ todos: Todo[]; error: string | null }> => {
@@ -48,21 +49,17 @@ function IndexComponent() {
   const { todos, error } = Route.useLoaderData();
 
   async function handleAdd(title: string) {
-    await apiClient.api.todos.$post({ json: { title } });
-    await router.invalidate();
+    const added = await addTodo(title);
+    if (added) await router.invalidate();
+    return added;
   }
 
   async function handleToggle(id: number, completed: boolean) {
-    await apiClient.api.todos[":id"].$patch({
-      param: { id: String(id) },
-      json: { completed },
-    });
-    await router.invalidate();
+    if (await setTodoCompleted(id, completed)) await router.invalidate();
   }
 
   async function handleDelete(id: number) {
-    await apiClient.api.todos[":id"].$delete({ param: { id: String(id) } });
-    await router.invalidate();
+    if (await deleteTodo(id)) await router.invalidate();
   }
 
   return (
@@ -92,11 +89,7 @@ function IndexComponent() {
             }
           />
         ) : (
-          <TodoList
-            todos={todos}
-            onToggle={handleToggle}
-            onDelete={handleDelete}
-          />
+          <TodoList todos={todos} onToggle={handleToggle} onDelete={handleDelete} />
         )}
       </div>
     </div>

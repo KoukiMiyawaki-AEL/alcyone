@@ -1,13 +1,18 @@
-import { Outlet, createRootRoute } from "@tanstack/react-router";
+import { Link, Outlet, createRootRoute, useRouter } from "@tanstack/react-router";
+import { FileQuestionIcon, TriangleAlertIcon } from "lucide-react";
 
 import { AppHeader } from "@/components/app/app-header";
 import { AppSidebar } from "@/components/app/app-sidebar";
+import { EmptyState } from "@/components/app/empty-state";
 import { ThemeProvider } from "@/components/app/theme-provider";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export const Route = createRootRoute({
   component: RootComponent,
+  errorComponent: RootErrorComponent,
+  notFoundComponent: RootNotFoundComponent,
 });
 
 function RootComponent() {
@@ -26,5 +31,37 @@ function RootComponent() {
         <Toaster />
       </TooltipProvider>
     </ThemeProvider>
+  );
+}
+
+function RootErrorComponent({ error }: { error: Error }) {
+  const router = useRouter();
+
+  return (
+    <EmptyState
+      icon={TriangleAlertIcon}
+      title="Something went wrong"
+      description={error.message}
+      action={
+        <Button size="sm" variant="outline" onClick={() => router.invalidate()}>
+          Retry
+        </Button>
+      }
+    />
+  );
+}
+
+function RootNotFoundComponent() {
+  return (
+    <EmptyState
+      icon={FileQuestionIcon}
+      title="Page not found"
+      description="お探しのページは存在しません。"
+      action={
+        <Button size="sm" variant="outline" render={<Link to="/" />}>
+          Go to Todos
+        </Button>
+      }
+    />
   );
 }

@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type TodoFormProps = {
-  onAdd: (title: string) => Promise<void>;
+  /** Resolves to whether the todo was actually created. */
+  onAdd: (title: string) => Promise<boolean>;
 };
 
 export function TodoForm({ onAdd }: TodoFormProps) {
@@ -19,8 +20,8 @@ export function TodoForm({ onAdd }: TodoFormProps) {
 
     setSubmitting(true);
     try {
-      await onAdd(trimmed);
-      setTitle("");
+      // Keep the text on failure so the user can retry without retyping.
+      if (await onAdd(trimmed)) setTitle("");
     } finally {
       setSubmitting(false);
     }

@@ -1,0 +1,40 @@
+# Architecture Decision Records (ADR)
+
+設計判断とその理由・トレードオフを記録する。[Michael Nygard方式](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)の軽量ADRを採用。
+
+## 一覧
+
+| # | タイトル | ステータス |
+|---|---|---|
+| [0001](./0001-single-vite-process.md) | 単一Vite devサーバー構成（モノレポにしない） | Accepted |
+| [0002](./0002-shadcn-base-ui-nova.md) | shadcn/ui base=Base UI, style=nova | Accepted |
+| [0003](./0003-d1-local-only.md) | D1はローカル開発のみ | Accepted |
+| [0004](./0004-router-loader-over-query.md) | TanStack Router loaderを使い、TanStack Queryは導入しない | Accepted |
+| [0005](./0005-defer-openapi.md) | OpenAPI生成は見送り、Hono RPCを当面の契約とする | Accepted |
+| [0006](./0006-oxfmt-formatter.md) | コードフォーマッタにoxfmtを採用する | Accepted |
+| [0007](./0007-ci-and-codegen.md) | CIをGitHub Actionsで回し、生成物はコミットせずcodegenスクリプトで再生成する | Accepted |
+| [0008](./0008-typescript-7.md) | TypeScript 7（ネイティブ実装）へ更新する | Accepted |
+| [0009](./0009-component-tests-happy-dom.md) | コンポーネントテストをVitest projectsで分離し、happy-dom + Testing Libraryで書く | Accepted |
+
+## ルール
+
+- **採番**: 4桁の連番（`0001`, `0002`, ...）。欠番・削除はしない。
+- **ファイル名**: `NNNN-kebab-case-title.md`
+- **ステータス**:
+  - `Proposed` — 提案中、まだ実施していない
+  - `Accepted` — 採用し、実施済み
+  - `Superseded by NNNN` — 別のADRに置き換えられた（このADR自体は編集せず、ステータス行だけ更新する）
+  - `Deprecated` — 採用しないことにした、または前提が崩れて無効になった
+- **既存ADRは編集しない**（誤字修正を除く）。決定を覆す場合は新しいADRを追加し、古い方のステータスを`Superseded by NNNN`に変える。
+- 新規ADRを追加したら、上の一覧表に追記すること。
+- `Decision Drivers`・`Confirmation`は任意項目（[`template.md`](./template.md)参照）。全ての決定に無理に書く必要はない。目安:
+  - `Decision Drivers` — 複数の選択肢が拮抗する、または関係者の間で意見が割れる決定でのみ書く
+  - `Confirmation` — lint・CI・レビューチェックリストなど、実際に確認できる手段があるときだけ書く
+
+## 書くタイミング
+
+- ライブラリ・アーキテクチャパターンの採用/見送りを決めたとき
+- 複数の選択肢を比較して一つを選んだとき（比較した理由が後から重要になる）
+- 「今回はやらない」と意図的にスコープ外にしたとき
+
+コード規約レベルの細かい話（インデント幅、命名規則など）はADRではなく[`CLAUDE.md`](../../CLAUDE.md)に書く。

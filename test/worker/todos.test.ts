@@ -1,8 +1,8 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import app from "../../src/worker";
 import type { Todo } from "../../src/features/todos/types";
+import app from "../../src/worker";
 
 async function resetTodos() {
   await env.DB.prepare("DELETE FROM todos").run();
@@ -89,15 +89,38 @@ describe("Todos API", () => {
     );
     const { id } = (await createRes.json()) as Todo;
 
-    const deleteRes = await app.request(
-      `/api/todos/${id}`,
-      { method: "DELETE" },
-      env,
-    );
+    const deleteRes = await app.request(`/api/todos/${id}`, { method: "DELETE" }, env);
     expect(deleteRes.status).toBe(204);
 
     const listRes = await app.request("/api/todos", {}, env);
     expect(await listRes.json()).toEqual([]);
+  });
+
+  it("returns a structured 400 when the body is invalid", async () => {
+    const res = await app.request(
+      "/api/todos",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "Bad Request" });
+  });
+
+  it("returns 404 for an unknown /api path", async () => {
+    const res = await app.request("/api/nope", {}, env);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not found" });
+  });
+
+  it("returns 500 without leaking the error when a binding is missing", async () => {
+    // No DB binding -> drizzle throws inside the handler -> app.onError.
+    const res = await app.request("/api/todos", {}, {} as typeof env);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Internal Server Error" });
   });
 
   it("returns 404 when updating a missing todo", async () => {

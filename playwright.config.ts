@@ -5,6 +5,8 @@ const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./test/e2e",
+  // Compiles every route before the first timed assertion. See the file.
+  globalSetup: "./test/e2e/warm-up.ts",
   // These drive one shared database, so they cannot run concurrently.
   workers: 1,
   fullyParallel: false,

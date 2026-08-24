@@ -3,7 +3,15 @@
 export * from "./auth-schema";
 
 import { sql } from "drizzle-orm";
-import { check, index, int, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  index,
+  int,
+  sqliteTable,
+  text,
+  uniqueIndex,
+  type AnySQLiteColumn,
+} from "drizzle-orm/sqlite-core";
 
 import { user } from "./auth-schema";
 
@@ -21,10 +29,21 @@ import { user } from "./auth-schema";
  * `description` is deliberately not here: a note is prose, and a history of
  * prose edits is noise that buries the changes worth seeing.
  */
+/**
+ * How two tasks can be connected.
+ *
+ * `blocks` is directional and `related` is not, which is why they are one
+ * column and not two tables: the difference is what the row means, not what it
+ * holds.
+ */
+export const TODO_LINK_KINDS = ["blocks", "related"] as const;
+export type TodoLinkKind = (typeof TODO_LINK_KINDS)[number];
+
 export const TODO_EVENT_FIELDS = [
   "created",
   "status",
   "assigneeId",
+  "parentId",
   "startAt",
   "dueAt",
   "title",
@@ -172,6 +191,39 @@ export const todoEventsTable = sqliteTable(
   (t) => [index("todo_events_todo_id_idx").on(t.todoId, t.id)],
 );
 
+/**
+ * A link between two tasks that is not the hierarchy.
+ *
+ * `related` is symmetric and stored once — writing both directions would be
+ * two rows that can disagree. `blocks` is directional: `fromTodoId` blocks
+ * `toTodoId`, which is the shape a schedule actually needs.
+ *
+ * The pair is unique per kind, as an index rather than a table constraint:
+ * ADR 0011 records that drizzle's rebuild path re-emits indexes and silently
+ * drops table-level UNIQUE.
+ */
+export const todoLinksTable = sqliteTable(
+  "todo_links",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    fromTodoId: int()
+      .notNull()
+      .references((): AnySQLiteColumn => todosTable.id),
+    toTodoId: int()
+      .notNull()
+      .references((): AnySQLiteColumn => todosTable.id),
+    kind: text().notNull().$type<TodoLinkKind>(),
+    createdAt: text().notNull(),
+  },
+  (t) => [
+    uniqueIndex("todo_links_pair_uidx").on(t.fromTodoId, t.toTodoId, t.kind),
+    index("todo_links_from_idx").on(t.fromTodoId),
+    index("todo_links_to_idx").on(t.toTodoId),
+    // A task related to itself says nothing and would render as a loop.
+    check("todo_links_distinct", sql`${t.fromTodoId} <> ${t.toTodoId}`),
+  ],
+);
+
 export const attachmentsTable = sqliteTable(
   "attachments",
   {
@@ -216,6 +268,23 @@ export const todosTable = sqliteTable(
      * cost is irrelevant next to being able to read what a row says.
      */
     status: text().notNull().default("todo").$type<TodoStatus>(),
+    /**
+     * The task this one is part of. Null means it is top level.
+     *
+     * A column rather than a row in `todo_links`, because a task has at most
+     * one parent and a column is what says so — expressing the hierarchy as
+     * links would make "two parents" representable and then require a rule
+     * nobody can see in the schema.
+     *
+     * Self-referencing with NO ACTION (ADR 0012), which has a consequence: a
+     * hard delete has to detach children first, because SQLite checks the
+     * foreign key row by row as it goes and would hit a child still pointing
+     * at a parent it already removed.
+     *
+     * Cycles are not expressible as a constraint in SQLite, so they are
+     * refused in the repository. See `wouldCycle`.
+     */
+    parentId: int().references((): AnySQLiteColumn => todosTable.id),
     /**
      * Who is doing this. Null means nobody has taken it.
      *

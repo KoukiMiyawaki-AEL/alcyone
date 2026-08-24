@@ -65,3 +65,19 @@ export const removeComment = (id: number) =>
     () => apiClient.api.comments[":id"].$delete({ param: { id: String(id) } }),
     "コメントの削除に失敗しました。",
   );
+
+export const addLink = (todoId: number, toTodoId: number, kind: "blocks" | "related") =>
+  mutate(
+    () =>
+      apiClient.api.todos[":id"].links.$post({
+        param: { id: String(todoId) },
+        json: { toTodoId, kind },
+      }),
+    "関連づけに失敗しました。",
+  );
+
+export const removeLink = (id: number) =>
+  mutate(
+    () => apiClient.api.links[":id"].$delete({ param: { id: String(id) } }),
+    "関連づけの解除に失敗しました。",
+  );

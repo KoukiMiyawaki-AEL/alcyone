@@ -74,8 +74,14 @@ export const PASSWORD = "correct horse battery";
 export async function resetAll() {
   // Order matters: attachments -> todos -> projects -> user. D1 enforces the
   // foreign keys, so a wrong order fails loudly rather than leaving orphans.
+  // `todos.parentId` points into `todos`, and SQLite checks foreign keys row
+  // by row — deleting a parent before its child fails. Detaching first is
+  // cheaper than ordering the rows.
+  await env.DB.prepare("UPDATE todos SET parentId = NULL").run();
+
   for (const table of [
     "attachments",
+    "todo_links",
     "todo_comments",
     "todo_events",
     "todos",

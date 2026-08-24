@@ -25,10 +25,29 @@ export function TodoList({ todos, assignees, onStatusChange, onEdit, onDelete }:
     );
   }
 
+  // Children directly under their parent, one level of indent. Deeper nesting
+  // is real in the data but not drawn: a list that indents four levels stops
+  // being scannable, and the tree is legible in the detail form.
+  //
+  // A child whose parent is not in this view — filtered out, or on a later
+  // page — stays at the top level rather than disappearing. Hiding a task
+  // because of where its parent is would make the list lie about the project.
+  const present = new Set(todos.map((todo) => todo.id));
+  const ordered = todos.flatMap((todo) =>
+    todo.parentId !== null && present.has(todo.parentId)
+      ? []
+      : [
+          { todo, depth: 0 },
+          ...todos
+            .filter((child) => child.parentId === todo.id)
+            .map((child) => ({ todo: child, depth: 1 })),
+        ],
+  );
+
   return (
     <div className="rounded-lg border border-border">
-      {todos.map((todo, index) => (
-        <div key={todo.id}>
+      {ordered.map(({ todo, depth }, index) => (
+        <div key={todo.id} className={depth > 0 ? "pl-6" : undefined}>
           {index > 0 ? <Separator /> : null}
           <TodoRow
             todo={todo}

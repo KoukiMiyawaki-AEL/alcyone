@@ -30,6 +30,7 @@ import {
   type TodoFields,
 } from "../types";
 import { TodoActivity } from "./TodoActivityPanel";
+import { TodoLinksPanel } from "./TodoLinksPanel";
 
 /**
  * Creating and editing are the same form.
@@ -41,10 +42,14 @@ export type TodoEditor = { mode: "create"; title: string } | { mode: "edit"; tod
 
 /** A Select cannot hold null, so "nobody" needs a value of its own. */
 const UNASSIGNED = "__unassigned__";
+/** Same reason, for "no parent". */
+const NO_PARENT = "__none__";
 
 type TodoDetailDialogProps = {
   editor: TodoEditor | null;
   assignees: Assignee[];
+  /** Every task in the project, for choosing a parent or a link target. */
+  siblings: Todo[];
   onOpenChange: (open: boolean) => void;
   /** `todo` is null when creating. Resolves to whether the write happened. */
   onSave: (fields: TodoFields, todo: Todo | null) => Promise<boolean>;
@@ -63,6 +68,7 @@ const orNull = (value: string) => (value.trim() === "" ? null : value);
 export function TodoDetailDialog({
   editor,
   assignees,
+  siblings,
   onOpenChange,
   onSave,
 }: TodoDetailDialogProps) {
@@ -80,6 +86,7 @@ export function TodoDetailDialog({
             key={editor.mode === "edit" ? `edit-${editor.todo.id}` : "create"}
             editor={editor}
             assignees={assignees}
+            siblings={siblings}
             onOpenChange={onOpenChange}
             onSave={onSave}
           />
@@ -92,16 +99,27 @@ export function TodoDetailDialog({
 function TodoDetailForm({
   editor,
   assignees,
+  siblings,
   onOpenChange,
   onSave,
 }: {
   editor: TodoEditor;
   assignees: Assignee[];
+  siblings: Todo[];
   onOpenChange: (open: boolean) => void;
   onSave: (fields: TodoFields, todo: Todo | null) => Promise<boolean>;
 }) {
   const formId = useId();
   const creating = editor.mode === "create";
+  // A task cannot be its own parent, and cannot be parented to one of its own
+  // descendants. Only the first is checkable here — the server refuses the rest
+  // with a recursive walk, because the client does not hold the whole tree.
+  const parentOptions = [
+    { value: NO_PARENT, label: "なし" },
+    ...siblings
+      .filter((s) => (creating ? true : s.id !== editor.todo.id))
+      .map((s) => ({ value: String(s.id), label: s.title })),
+  ];
   const assigneeOptions = [
     { value: UNASSIGNED, label: "未割り当て" },
     ...assignees.map((person) => ({ value: person.id, label: person.name })),
@@ -114,6 +132,7 @@ function TodoDetailForm({
           title: editor.title,
           status: "todo",
           assigneeId: null,
+          parentId: null,
           startAt: null,
           dueAt: null,
           description: null,
@@ -123,6 +142,7 @@ function TodoDetailForm({
           title: editor.todo.title,
           status: editor.todo.status,
           assigneeId: editor.todo.assigneeId,
+          parentId: editor.todo.parentId,
           startAt: editor.todo.startAt,
           dueAt: editor.todo.dueAt,
           description: editor.todo.description,
@@ -195,6 +215,31 @@ function TodoDetailForm({
                 {TODO_STATUSES.map((value) => (
                   <SelectItem key={value} value={value}>
                     {STATUS_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor={`${formId}-parent`}>親タスク</Label>
+            <Select
+              items={parentOptions}
+              value={fields.parentId == null ? NO_PARENT : String(fields.parentId)}
+              onValueChange={(value) =>
+                setFields((f) => ({
+                  ...f,
+                  parentId: value === NO_PARENT ? null : Number(value),
+                }))
+              }
+            >
+              <SelectTrigger id={`${formId}-parent`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {parentOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -310,6 +355,13 @@ function TodoDetailForm({
         Only on an existing task. A comment needs something to be about, and a
         history of a task that does not exist yet is empty by definition.
       */}
+      {creating ? null : (
+        <section className="flex flex-col gap-3 border-t border-border pt-4">
+          <h3 className="text-sm font-medium">関連するタスク</h3>
+          <TodoLinksPanel todo={editor.todo} candidates={siblings} />
+        </section>
+      )}
+
       {creating ? null : (
         <section className="flex flex-col gap-3 border-t border-border pt-4">
           <h3 className="text-sm font-medium">アクティビティ</h3>

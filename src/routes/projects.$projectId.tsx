@@ -267,6 +267,7 @@ function ProjectTodosComponent() {
       <TodoDetailDialog
         editor={editor}
         assignees={assignees}
+        siblings={todos}
         onOpenChange={(open) => setEditor(open ? editor : null)}
         onSave={handleSave}
       />

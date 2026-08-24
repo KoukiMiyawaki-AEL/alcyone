@@ -13,6 +13,7 @@ const todo = (over: Partial<Todo> = {}): Todo => ({
   updatedAt: "2026-08-24T00:00:00.000Z",
   projectId: 1,
   assigneeId: null,
+  parentId: null,
   deletedAt: null,
   startAt: null,
   dueAt: null,
@@ -49,6 +50,45 @@ describe("TodoList", () => {
     expect(screen.getByText("Write tests")).toBeInTheDocument();
     expect(screen.getByText("Ship it")).toBeInTheDocument();
     expect(screen.queryByText("No tasks yet")).not.toBeInTheDocument();
+  });
+
+  it("puts a child directly under its parent", () => {
+    // Order in the data is creation order; order on screen is the hierarchy.
+    renderList({
+      todos: [
+        todo({ id: 1, title: "親A" }),
+        todo({ id: 2, title: "親B" }),
+        todo({ id: 3, title: "Aの子", parentId: 1 }),
+      ],
+    });
+
+    const titles = screen
+      .getAllByRole("checkbox")
+      .map((box) => box.getAttribute("aria-label") ?? "");
+    expect(titles[0]).toContain("親A");
+    expect(titles[1]).toContain("Aの子");
+    expect(titles[2]).toContain("親B");
+  });
+
+  it("keeps a child whose parent is not in view at the top level", () => {
+    // Filtered out, or on a later page. Hiding the child because of where its
+    // parent is would make the list lie about the project.
+    renderList({ todos: [todo({ id: 3, title: "親のいない子", parentId: 99 })] });
+
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getByText("親のいない子")).toBeInTheDocument();
+  });
+
+  it("shows each task once, even with a parent and children mixed together", () => {
+    renderList({
+      todos: [
+        todo({ id: 1, title: "親" }),
+        todo({ id: 2, title: "子1", parentId: 1 }),
+        todo({ id: 3, title: "子2", parentId: 1 }),
+      ],
+    });
+
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
   });
 
   it("moves a todo to done, and back to todo, from the checkbox", async () => {

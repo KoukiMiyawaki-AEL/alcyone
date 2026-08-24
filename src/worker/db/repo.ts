@@ -20,6 +20,8 @@ import { ftsRank, toFtsQuery, toLikePattern, todosFts } from "./fts";
 import {
   TODO_STATUSES,
   attachmentsTable,
+  todoLinksTable,
+  type TodoLinkKind,
   user,
   todoCommentsTable,
   todoEventsTable,
@@ -48,6 +50,14 @@ const now = () => new Date().toISOString();
 const newRevisionId = () => crypto.randomUUID();
 
 /**
+ * How far the ancestor walk goes before giving up.
+ *
+ * A bound, not a product rule: a cycle that somehow already exists must not be
+ * able to hang the request that is trying to prevent another one.
+ */
+const MAX_DEPTH = 50;
+
+/**
  * What a list is narrowed to. Distinct from `TodoStatus` in the schema, which
  * is what a single row *is* — one of these ("active") is not a status at all
  * but "anything unfinished", and conflating the two is how a filter ends up
@@ -60,7 +70,15 @@ export type TodoFilter = "all" | "active" | (typeof TODO_STATUSES)[number];
  * it".
  */
 /** The fields whose changes are worth a history row. See TODO_EVENT_FIELDS. */
-const TRACKED_FIELDS = ["status", "assigneeId", "startAt", "dueAt", "title", "priority"] as const;
+const TRACKED_FIELDS = [
+  "status",
+  "assigneeId",
+  "parentId",
+  "startAt",
+  "dueAt",
+  "title",
+  "priority",
+] as const;
 type TrackedField = (typeof TRACKED_FIELDS)[number];
 
 export type TodoFields = {
@@ -68,6 +86,8 @@ export type TodoFields = {
   status?: TodoStatus;
   /** `null` unassigns. Absent leaves it alone, like every other field here. */
   assigneeId?: string | null;
+  /** `null` makes it top level. */
+  parentId?: number | null;
   startAt?: string | null;
   dueAt?: string | null;
   description?: string | null;
@@ -422,6 +442,82 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .from(user)
         .innerJoin(projectsTable, eq(projectsTable.ownerId, user.id))
         .where(inArray(projectsTable.id, ownedProjectIds(projectId))),
+  };
+
+  /**
+   * Would making `parentId` the parent of `todoId` create a loop?
+   *
+   * SQLite cannot express "not an ancestor of itself" as a constraint, so it is
+   * a query: walk up from the proposed parent and see whether the task itself
+   * appears. A recursive CTE rather than repeated round trips, and bounded to
+   * `MAX_DEPTH` so a cycle that somehow already exists cannot spin forever —
+   * the guard has to survive the corruption it is guarding against.
+   */
+  const wouldCycle = async (todoId: number, parentId: number): Promise<boolean> => {
+    if (todoId === parentId) return true;
+
+    const { results } = await binding
+      .prepare(
+        `with recursive ancestors(id, depth) as (
+           select parentId, 1 from todos where id = ?1 and parentId is not null
+           union all
+           select t.parentId, a.depth + 1
+             from todos t join ancestors a on t.id = a.id
+            where t.parentId is not null and a.depth < ?3
+         )
+         select 1 as hit from ancestors where id = ?2 limit 1`,
+      )
+      .bind(parentId, todoId, MAX_DEPTH)
+      .all();
+
+    return results.length > 0;
+  };
+
+  const links = {
+    /** Both directions in one query: `related` is stored once, not twice. */
+    forTodo: (todoId: number) =>
+      db
+        .select({
+          id: todoLinksTable.id,
+          kind: todoLinksTable.kind,
+          fromTodoId: todoLinksTable.fromTodoId,
+          toTodoId: todoLinksTable.toTodoId,
+        })
+        .from(todoLinksTable)
+        .where(
+          and(
+            or(eq(todoLinksTable.fromTodoId, todoId), eq(todoLinksTable.toTodoId, todoId)),
+            inArray(todoLinksTable.fromTodoId, allOwnedTodoIds()),
+            inArray(todoLinksTable.toTodoId, allOwnedTodoIds()),
+          ),
+        )
+        .orderBy(asc(todoLinksTable.id)),
+
+    /**
+     * Insert-from-select over both endpoints, so ownership of *each* task is
+     * part of the statement. Checking only one would let a link reach out of
+     * the account and, by succeeding or failing, report whether an id exists.
+     */
+    create: (fromTodoId: number, toTodoId: number, kind: TodoLinkKind) =>
+      db.all<{ id: number }>(sql`
+        insert into ${todoLinksTable} ("fromTodoId", "toTodoId", "kind", "createdAt")
+        select ${fromTodoId}, ${toTodoId}, ${kind}, ${now()}
+        where ${fromTodoId} in ${allOwnedTodoIds()}
+          and ${toTodoId} in ${allOwnedTodoIds()}
+        returning id
+      `),
+
+    remove: (id: number) =>
+      db
+        .delete(todoLinksTable)
+        .where(
+          and(
+            eq(todoLinksTable.id, id),
+            inArray(todoLinksTable.fromTodoId, allOwnedTodoIds()),
+            inArray(todoLinksTable.toTodoId, allOwnedTodoIds()),
+          ),
+        )
+        .returning({ id: todoLinksTable.id }),
   };
 
   const events = {
@@ -833,8 +929,16 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
       // projects — so three statements in dependency order. The R2 objects are
       // not rows and survive this; see ownedAttachmentKeys.
       db.delete(attachmentsTable).where(inArray(attachmentsTable.todoId, allOwnedTodoIds())),
+      db.delete(todoLinksTable).where(inArray(todoLinksTable.fromTodoId, allOwnedTodoIds())),
       db.delete(todoCommentsTable).where(inArray(todoCommentsTable.todoId, allOwnedTodoIds())),
       db.delete(todoEventsTable).where(inArray(todoEventsTable.todoId, allOwnedTodoIds())),
+      // Detach before deleting. `todos.parentId` points into `todos`, and
+      // SQLite checks the foreign key row by row — a delete that removes a
+      // parent before its child fails on the child still pointing at it.
+      db
+        .update(todosTable)
+        .set({ parentId: null })
+        .where(inArray(todosTable.id, allOwnedTodoIds())),
       db
         .delete(sharesTable)
         .where(
@@ -909,6 +1013,8 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
   return {
     projects,
     todos,
+    links,
+    wouldCycle,
     assignees,
     comments,
     events,

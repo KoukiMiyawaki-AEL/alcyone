@@ -25,6 +25,8 @@ export type TodoFields = {
   title?: string;
   /** `null` unassigns. Absent leaves it alone. */
   assigneeId?: string | null;
+  /** `null` makes it top level. Absent leaves it alone. */
+  parentId?: number | null;
   status?: TodoStatus;
   startAt?: string | null;
   dueAt?: string | null;
@@ -62,6 +64,7 @@ export const EVENT_LABELS: Record<TodoEvent["field"], string> = {
   created: "作成",
   status: "ステータス",
   assigneeId: "担当者",
+  parentId: "親タスク",
   startAt: "開始日",
   dueAt: "期限日",
   title: "タイトル",

@@ -1,8 +1,9 @@
-import { and, inArray, isNotNull, lt } from "drizzle-orm";
+import { and, inArray, isNotNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import {
   attachmentsTable,
+  todoLinksTable,
   projectsTable,
   sharesTable,
   todoCommentsTable,
@@ -59,7 +60,20 @@ export function createMaintenance(binding: D1Database) {
         .from(todosTable)
         .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before)));
 
-      const results = await db.batch([
+      // Held in variables so their positions can be found rather than counted.
+      // Three separate changes have added statements to this batch, and each
+      // time the caller's hand-written indices silently pointed at the wrong
+      // result. `indexOf` cannot drift.
+      const deletedTodos = db
+        .delete(todosTable)
+        .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before)))
+        .returning({ id: todosTable.id });
+      const deletedProjects = db
+        .delete(projectsTable)
+        .where(and(isNotNull(projectsTable.deletedAt), lt(projectsTable.deletedAt, before)))
+        .returning({ id: projectsTable.id });
+
+      const statements = [
         // Attachments first. `attachments.todoId` references `todos.id` with NO
         // ACTION (ADR 0012), so deleting a todo that still has one fails the
         // foreign key — and because this is a single batch, one such row made
@@ -69,12 +83,26 @@ export function createMaintenance(binding: D1Database) {
         // Children of `todos` first, for the same reason attachments are: a
         // NO ACTION foreign key fails the whole batch, and the batch is the
         // whole nightly job.
+        // Links first, from either end.
+        db
+          .delete(todoLinksTable)
+          .where(
+            or(
+              inArray(todoLinksTable.fromTodoId, expiredTodoIds),
+              inArray(todoLinksTable.toTodoId, expiredTodoIds),
+            ),
+          ),
         db.delete(todoCommentsTable).where(inArray(todoCommentsTable.todoId, expiredTodoIds)),
         db.delete(todoEventsTable).where(inArray(todoEventsTable.todoId, expiredTodoIds)),
+        // Detach children whose parent is going, and children of a surviving
+        // parent that is itself expiring. Row-by-row foreign key checks make
+        // the order of a self-referencing delete matter.
         db
-          .delete(todosTable)
-          .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before)))
-          .returning({ id: todosTable.id }),
+          .update(todosTable)
+          .set({ parentId: null })
+          .where(inArray(todosTable.parentId, expiredTodoIds)),
+        db.update(todosTable).set({ parentId: null }).where(inArray(todosTable.id, expiredTodoIds)),
+        deletedTodos,
         // Same shape of bug as the attachments one above, one table over:
         // `shares.projectId` references `projects.id`, so an expired project
         // with a live share link would fail the foreign key and take the whole
@@ -88,19 +116,14 @@ export function createMaintenance(binding: D1Database) {
               .where(and(isNotNull(projectsTable.deletedAt), lt(projectsTable.deletedAt, before))),
           ),
         ),
-        db
-          .delete(projectsTable)
-          .where(and(isNotNull(projectsTable.deletedAt), lt(projectsTable.deletedAt, before)))
-          .returning({ id: projectsTable.id }),
-      ]);
+        deletedProjects,
+      ] as const;
 
-      // Named here so callers never count commas. Adding a statement to the
-      // batch above is then a one-line change instead of a silent off-by-one
-      // in every caller — which is exactly what happened when comments and
-      // history joined the batch.
+      const results = await db.batch(statements);
+
       return {
-        todos: results[3] as { id: number }[],
-        projects: results[5] as { id: number }[],
+        todos: results[statements.indexOf(deletedTodos)] as { id: number }[],
+        projects: results[statements.indexOf(deletedProjects)] as { id: number }[],
       };
     },
   };

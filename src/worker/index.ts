@@ -9,7 +9,7 @@ import { createAuth } from "./auth";
 import { exportKey, type ExportManifest, type ExportParams } from "./data-export";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todoCursorValue, type Repo } from "./db/repo";
-import { TODO_STATUSES } from "./db/schema";
+import { TODO_LINK_KINDS, TODO_STATUSES } from "./db/schema";
 import { bookmarkCookie, openSession } from "./db/session";
 import {
   DEAD_LETTER_QUEUE,
@@ -55,6 +55,11 @@ const shareTokenParamSchema = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]
 // used as a place to put a file.
 const commentSchema = z.object({ body: z.string().trim().min(1).max(4000) });
 
+const linkSchema = z.object({
+  toTodoId: z.number().int().positive(),
+  kind: z.enum(TODO_LINK_KINDS),
+});
+
 const exportParamSchema = z.object({ instanceId: z.string().min(1).max(200) });
 
 // An enum, not a string: `part` becomes part of an R2 key, and a free-form one
@@ -96,6 +101,7 @@ const todoFieldsSchema = z
     // cannot reach the project. A list in the schema would be a third place
     // to keep in step with the other two.
     assigneeId: z.string().min(1).max(200).nullable().optional(),
+    parentId: z.number().int().positive().nullable().optional(),
     startAt: z.iso.date().nullable().optional(),
     dueAt: z.iso.date().nullable().optional(),
     // Trimmed to null so that "" and "no description" are one state rather
@@ -506,6 +512,26 @@ const app = new Hono<{
       const { comment, ...values } = c.req.valid("json");
       const repo = c.get("repo");
 
+      if (values.parentId != null) {
+        // The foreign key only requires the parent to exist, not to be yours —
+        // the same gap that once let anyone mint a share link for someone
+        // else's project (ADR 0022). A test caught this one too. `find` is
+        // already scoped, so an id you cannot see answers as one that is not
+        // there.
+        const [parent] = await repo.todos.find(values.parentId);
+        if (!parent) return c.json({ error: "Not found" }, 404);
+
+        // Refused here rather than by a constraint, because SQLite cannot
+        // express "not an ancestor of itself". A cycle would make the tree
+        // infinite and every walk over it non-terminating.
+        if (await repo.wouldCycle(id, values.parentId)) {
+          return c.json(
+            { error: "Bad Request", issues: [{ message: "parentId would create a cycle" }] },
+            400,
+          );
+        }
+      }
+
       // The history rows, the note and the change go in one batch, history
       // first: each row reads the value it replaces. The updated row is the
       // last result — named here rather than counted at every call site.
@@ -542,6 +568,40 @@ const app = new Hono<{
   .get("/api/projects/:projectId/assignees", validate("param", projectIdParamSchema), async (c) => {
     const { projectId } = c.req.valid("param");
     return c.json(await c.get("repo").assignees.forProject(projectId));
+  })
+  .get("/api/todos/:id/links", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const repo = c.get("repo");
+
+    const [todo] = await repo.todos.find(id);
+    if (!todo) return c.json({ error: "Not found" }, 404);
+
+    return c.json(await repo.links.forTodo(id));
+  })
+  .post(
+    "/api/todos/:id/links",
+    validate("param", idParamSchema),
+    validate("json", linkSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { toTodoId, kind } = c.req.valid("json");
+
+      // Both endpoints are checked inside the INSERT. A link is a fact about
+      // two tasks, so reaching either one you do not own has to fail the same
+      // way as an id that does not exist.
+      const [created] = await c.get("repo").links.create(id, toTodoId, kind);
+      if (!created) return c.json({ error: "Not found" }, 404);
+
+      return c.json({ id: created.id }, 201);
+    },
+  )
+  .delete("/api/links/:id", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const [removed] = await c.get("repo").links.remove(id);
+
+    if (!removed) return c.json({ error: "Not found" }, 404);
+
+    return c.body(null, 204);
   })
   .get("/api/todos/:id/activity", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");

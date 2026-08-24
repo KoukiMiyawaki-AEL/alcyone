@@ -32,6 +32,13 @@ export default defineConfig({
     cloudflare(),
     workerSourcemaps,
   ],
+  server: {
+    // Pinned because BETTER_AUTH_URL in .dev.vars names this exact origin.
+    // strictPort makes a taken port fail loudly instead of drifting to 5174,
+    // where auth would silently disagree about its own base URL.
+    port: 5173,
+    strictPort: true,
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

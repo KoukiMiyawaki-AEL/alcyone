@@ -15,6 +15,15 @@ import * as authSchema from "./db/auth-schema";
 export function createAuth(env: CloudflareBindings) {
   return betterAuth({
     secret: env.BETTER_AUTH_SECRET,
+    // Set explicitly rather than left to Better Auth's default, which derives
+    // the origin from the incoming request's Host header. Nothing embeds those
+    // URLs today (no email, no OAuth callbacks), but trusting a client-supplied
+    // header for a security-relevant value is not worth carrying forward.
+    //
+    // The dynamic `{ allowedHosts }` form exists for multi-host setups; this
+    // Worker serves the SPA and the API from one origin, so a fixed URL is both
+    // simpler and stricter.
+    baseURL: env.BETTER_AUTH_URL,
     database: drizzleAdapter(drizzle(env.DB), {
       provider: "sqlite",
       schema: authSchema,

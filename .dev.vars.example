@@ -6,3 +6,8 @@
 # In production this is set with `wrangler secret put BETTER_AUTH_SECRET`,
 # never committed and never placed in wrangler.jsonc.
 BETTER_AUTH_SECRET=
+
+# The origin this app is served from. Must match exactly — Better Auth would
+# otherwise fall back to trusting the request's Host header.
+# The dev server port is pinned to 5173 in vite.config.ts for this reason.
+BETTER_AUTH_URL=http://localhost:5173

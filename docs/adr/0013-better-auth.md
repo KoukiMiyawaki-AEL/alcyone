@@ -21,6 +21,12 @@ Accepted
 - adapterは `drizzleAdapter(drizzle(env.DB), { provider: "sqlite" })`。**D1専用adapterは存在しない。**
 - `createAuth(env)` はリクエストごとに構築する。Workersのモジュールスコープに `env` は無い。
 - `basePath` は既定の `/api/auth`。`wrangler.jsonc` の `run_worker_first: ["/api/*"]` の内側に入るので**ルーティング設定の変更は不要**。
+- **`baseURL` は `BETTER_AUTH_URL` から明示的に与える。** 未設定だとBetter Authはリクエストの
+  Hostヘッダからoriginを導出し、起動時に警告を出す。クライアントが送るヘッダを
+  セキュリティ上の値の source にするのは避けたい。動的な `{ allowedHosts }` 形式もあるが、
+  この Worker は SPA と API を単一originで出すので、固定値の方が単純かつ厳格。
+  副作用として **dev サーバのポートを 5173 に固定した**（`strictPort: true`）。
+  ポートがずれると `BETTER_AUTH_URL` と食い違うので、黙って 5174 に流れるより落ちた方がよい。
 - メール検証とパスワード再発行は**無効**。基盤が無いため。
 - `minPasswordLength: 12`。
 
@@ -58,6 +64,11 @@ Better Authの依存に `@noble/hashes` があり、**ハッシュは純JS（scr
 - **Freeプランでは動かない構成になった**（scryptのCPU時間）。本番を考えるときはWorkers Paid前提。
 - メール検証が無いので、**メールアドレスの到達性を確認していない**。パスワードを忘れたユーザーは自力で復帰できない。メール基盤を入れるまでの既知の制限。
 - Better Authは**Originヘッダによる検証を標準で行う**。Originが無いリクエストは403 `MISSING_OR_NULL_ORIGIN`、別Originからは403 `INVALID_ORIGIN`（どちらも実測で確認）。マップ3-7の「CSRF対策」はこれで実質的に満たされる。副作用として、**curlでAPIを叩くときは `Origin` ヘッダが必要**。
+
+  **ただしこの検証はテストでは働いていない。** `app.request()` はOriginヘッダを持たないリクエストを
+  作るが、テストではそれが通る（HTTP経由だと403になる）。つまり**Origin検証を通しているのは
+  ブラウザとcurlでの手動確認だけで、テストスイートはこの経路を一度も踏んでいない**。
+  CSRFが「テストで守られている」とは言えない状態であることを、そのまま記録しておく。
 - テストは実際のサインアップ経由でセッションを作る（`test/worker/auth-helper.ts`）。セッショントークンはハッシュされ、Cookieは署名されるので、行を直接挿入して偽のCookieを作るやり方は「動くふり」をテストすることになる。代償として**workerテストが実際にscryptを走らせるので遅くなった**。
 - `better-auth` を更新したら auth-schema.ts を再生成すること。生成コマンドは`@better-auth/drizzle-adapter` の `generateDrizzleSchema` を `provider: "sqlite"` で呼ぶ。
 - 組織単位のテナンシーが必要になったら `better-auth/plugins/organization` がある。今は使っていない（[ADR 0014](./0014-user-owned-projects.md)）。

@@ -25,7 +25,7 @@ pnpm run db:migrate:local
 ## よく使うコマンド
 
 ```bash
-pnpm dev                  # Vite dev server（SPA + Hono Workerを同時に起動）
+pnpm dev                  # Vite dev server（SPA + Hono Workerを同時に起動。ポートは5173固定）
 pnpm test                 # Vitest 両プロジェクト（worker: D1込みの統合 / components: happy-dom）
 pnpm run check            # CIと同じ全工程（codegen→format→lint→typecheck→build→test→dry-run）
 pnpm run codegen          # worker-configuration.d.ts と src/routeTree.gen.ts を生成

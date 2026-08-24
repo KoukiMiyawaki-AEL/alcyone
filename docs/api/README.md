@@ -27,11 +27,13 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 | * | `/api/auth/*` | Better Auth（サインアップ/イン/アウト等） | — | — | `403` Origin不正 |
 | GET | `/api/projects` | Project一覧（id昇順） | — | `Project[]` | — |
 | POST | `/api/projects` | Project作成 | `{ name: string }`（1〜100文字） | `201` `Project` | `400` |
-| DELETE | `/api/projects/:projectId` | Project削除（配下のTodoも削除） | — | `204` (body無し) | `400`, `404` |
+| DELETE | `/api/projects/:projectId` | Project削除（**論理削除**。配下のTodoも同時に） | — | `204` (body無し) | `400`, `404` |
+| POST | `/api/projects/:projectId/restore` | Projectの復元（配下のTodoも同時に） | — | `200` `Project` | `400`, `404` |
 | GET | `/api/projects/:projectId/todos` | そのProjectのTodo一覧（id昇順） | — | `{ project, todos }` | `400`, `404` |
 | POST | `/api/projects/:projectId/todos` | Todo作成 | `{ title: string }`（1〜200文字） | `201` `Todo` | `400`, `404` |
 | PATCH | `/api/todos/:id` | 完了状態の更新 | `{ completed: boolean }` | `200` `Todo` | `400`, `404` |
-| DELETE | `/api/todos/:id` | Todo削除 | — | `204` (body無し) | `400`, `404` |
+| DELETE | `/api/todos/:id` | Todo削除（**論理削除**） | — | `204` (body無し) | `400`, `404` |
+| POST | `/api/todos/:id/restore` | Todoの復元 | — | `200` `Todo` | `400`, `404` |
 
 Todo一覧が裸の配列ではなく`{ project, todos }`を返すのは、画面のタイトルに使うProject情報を
 2回目のリクエスト無しで得るためと、将来カーソルを足すときに破壊的変更にしないため。
@@ -46,7 +48,11 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 `Todo` / `Project` の型は`src/worker/db/schema.ts`から`drizzle-orm`が推論する。
 
 - `Todo`: `{ id: number, title: string, completed: boolean, createdAt: string, updatedAt: string, projectId: number }`
-- `Project`: `{ id: number, name: string, createdAt: string }`
+- `Project`: `{ id: number, name: string, createdAt: string, ownerId: string, deletedAt: string | null }`
+
+`deletedAt` が非nullの行は論理削除済みで、一覧にも取得にも現れない
+（[ADR 0015](../adr/0015-soft-delete-items-hard-delete-accounts.md)）。アカウント削除
+（`POST /api/auth/delete-user`）だけは論理削除済みの行も含めて物理的に消す。
 
 **時刻はISO-8601（`2026-08-23T12:44:13.000Z`）でアプリ側が生成する。** DBのデフォルトは使わない
 （SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。

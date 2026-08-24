@@ -264,6 +264,11 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 - **DBアクセスは`createRepo(binding, ownerId)`経由で、返るメソッドは全て所有者でスコープ済み。**
   ハンドラがスコープされていないクエリを受け取ることがないので、絞り込みを忘れられない。
   ここに新しいメソッドを足すときは、必ず`ownerId`で絞ること（[ADR 0014](./docs/adr/0014-user-owned-projects.md)）。
+- **読み取りは`deletedAt IS NULL`でも絞る。** Project/Todoは論理削除で、忘れると削除済みの行が
+  見える（型エラーにもテスト失敗にもならない）。物理削除するのは退会時の`purgeOwnedData()`だけ
+  （[ADR 0015](./docs/adr/0015-soft-delete-items-hard-delete-accounts.md)）。
+- **論理削除はUndoとセットで出す**（`src/lib/undo-toast.ts`）。復元手段が無い論理削除は、
+  ユーザーから見ればただの削除で、隠し列を増やしただけになる。
 - Better AuthはOriginヘッダを検証する。**curlでAPIを叩くときは`Origin`ヘッダが必要**（無いと403）。
 
 ## Testing
@@ -309,4 +314,5 @@ pnpm test --project worker     # APIのみ
 - テストカバレッジの計測
 - メール送信（そのためメール検証とパスワード再発行は無効）
 - 組織単位のテナンシー（Projectはユーザー所有）
+- ゴミ箱UI・論理削除された行のパージ（復元できるのは削除直後のtoastからだけ）
 - 実際のCloudflareアカウントへのD1作成・本番デプロイ

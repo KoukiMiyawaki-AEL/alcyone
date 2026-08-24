@@ -20,6 +20,7 @@
 | [0012](./0012-no-on-delete-cascade.md) | `ON DELETE CASCADE`を使わず、子の削除は`batch()`で明示する | Accepted |
 | [0013](./0013-better-auth.md) | 認証にBetter Authを採用し、メール+パスワードで始める | Accepted |
 | [0014](./0014-user-owned-projects.md) | Projectはユーザーが所有し、Todoの所有はProject経由の推移的関係にする | Accepted |
+| [0015](./0015-soft-delete-items-hard-delete-accounts.md) | 項目は論理削除、アカウントは物理削除にする | Accepted |
 
 ## ルール
 

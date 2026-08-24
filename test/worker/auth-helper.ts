@@ -56,7 +56,17 @@ export const PASSWORD = "correct horse battery";
 
 /** Clears every table these tests touch, children before parents. */
 export async function resetAll() {
-  for (const table of ["todos", "projects", "session", "account", "verification", "user"]) {
+  // Order matters: attachments -> todos -> projects -> user. D1 enforces the
+  // foreign keys, so a wrong order fails loudly rather than leaving orphans.
+  for (const table of [
+    "attachments",
+    "todos",
+    "projects",
+    "session",
+    "account",
+    "verification",
+    "user",
+  ]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
   }
 }

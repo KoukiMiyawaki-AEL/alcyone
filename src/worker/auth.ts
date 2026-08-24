@@ -41,6 +41,16 @@ export function createAuth(env: CloudflareBindings) {
         // (ADR 0013), so only the app's tables need handling here.
         beforeDelete: async (user) => {
           const repo = createRepo(env.DB, user.id);
+
+          // Read the keys before the rows go: R2 is not part of the database,
+          // so deleting rows would strand the files with nothing pointing at
+          // them. Objects go first — a leftover row is recoverable, a leftover
+          // object is invisible.
+          const keys = (await repo.ownedAttachmentKeys()).map((row) => row.key);
+          if (keys.length > 0) {
+            await env.ATTACHMENTS.delete(keys);
+          }
+
           await repo.batch(repo.purgeOwnedData());
         },
       },

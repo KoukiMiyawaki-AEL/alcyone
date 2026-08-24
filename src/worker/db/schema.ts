@@ -31,6 +31,23 @@ export const projectsTable = sqliteTable(
   ],
 );
 
+export const attachmentsTable = sqliteTable(
+  "attachments",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    todoId: int()
+      .notNull()
+      .references(() => todosTable.id),
+    /** Object key in R2. Opaque and unguessable — see the repo for why. */
+    key: text().notNull(),
+    filename: text().notNull(),
+    contentType: text().notNull(),
+    size: int().notNull(),
+    createdAt: text().notNull(),
+  },
+  (t) => [index("attachments_todo_id_idx").on(t.todoId)],
+);
+
 export const todosTable = sqliteTable(
   "todos",
   {

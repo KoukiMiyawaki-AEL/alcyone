@@ -277,6 +277,9 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 - **論理削除はUndoとセットで出す**（`src/lib/undo-toast.ts`）。復元手段が無い論理削除は、
   ユーザーから見ればただの削除で、隠し列を増やしただけになる。
 - Better AuthはOriginヘッダを検証する。**curlでAPIを叩くときは`Origin`ヘッダが必要**（無いと403）。
+- **R2のオブジェクトはDBの外**。行とオブジェクトは別々に消す必要があり、順序も決まっている ——
+  アップロードは所有権チェックのあとに書く（先に書くと、どの行からも参照されないオブジェクトが残る）、
+  削除は行を先に消す（先にオブジェクトを消して失敗すると、実体の無い行が残る）。
 
 ## Testing
 
@@ -319,7 +322,7 @@ pnpm test --project worker     # APIのみ
 - TanStack Query
 - Turborepo
 - Alchemy
-- R2 / KV / Queues
+- KV / Queues / Durable Objects
 - Storybook
 - テストカバレッジの計測
 - メール送信（そのためメール検証とパスワード再発行は無効）

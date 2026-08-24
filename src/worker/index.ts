@@ -37,6 +37,9 @@ const todoQuerySchema = z.object({
   sort: z.enum(["created", "due", "priority"]).default("created"),
 });
 
+/** Small enough to buffer in a Worker's 128MB without thinking about it. */
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
 const patchTodoSchema = z.object({
   // `null` clears the due date, which is different from omitting the field.
   dueAt: z.iso.date().nullable().optional(),
@@ -201,6 +204,83 @@ const app = new Hono<{
       return c.json(todo);
     },
   )
+  .get("/api/todos/:id/attachments", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    return c.json(await c.get("repo").attachments.listByTodo(id));
+  })
+  .post("/api/todos/:id/attachments", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const repo = c.get("repo");
+
+    // The todo has to exist and be this user's before anything is written to
+    // R2 — an orphaned object is invisible to every query and never cleaned up.
+    const [todo] = await repo.todos.find(id);
+    if (!todo) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    const form = await c.req.parseBody();
+    const file = form["file"];
+    if (!(file instanceof File)) {
+      return c.json({ error: "Bad Request", issues: [{ message: "file is required" }] }, 400);
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      return c.json({ error: "Payload Too Large" }, 413);
+    }
+
+    // Random rather than derived from the filename: keys are only unguessable
+    // if nothing about them is guessable, and two todos may share a filename.
+    const key = `${todo.id}/${crypto.randomUUID()}`;
+    await c.env.ATTACHMENTS.put(key, await file.arrayBuffer(), {
+      httpMetadata: { contentType: file.type || "application/octet-stream" },
+    });
+
+    const [attachment] = await repo.attachments.create({
+      todoId: todo.id,
+      key,
+      filename: file.name,
+      contentType: file.type || "application/octet-stream",
+      size: file.size,
+    });
+
+    return c.json(attachment, 201);
+  })
+  .get("/api/attachments/:id", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const [attachment] = await c.get("repo").attachments.find(id);
+    if (!attachment) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    const object = await c.env.ATTACHMENTS.get(attachment.key);
+    if (!object) {
+      // The row and the object can drift — R2 is not part of the transaction.
+      // Saying "not found" is honest; pretending it is a server fault is not.
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": attachment.contentType,
+        "Content-Length": String(attachment.size),
+        // `attachment` rather than inline: these are arbitrary user uploads, and
+        // rendering them on our own origin would be a stored-XSS vector.
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(attachment.filename)}"`,
+      },
+    });
+  })
+  .delete("/api/attachments/:id", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const [attachment] = await c.get("repo").attachments.remove(id);
+    if (!attachment) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    // Row first, object second. The other order can delete the file and then
+    // fail, leaving a row pointing at nothing.
+    await c.env.ATTACHMENTS.delete(attachment.key);
+    return c.body(null, 204);
+  })
   .post("/api/todos/:id/restore", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
     const [todo] = await c.get("repo").todos.restore(id);

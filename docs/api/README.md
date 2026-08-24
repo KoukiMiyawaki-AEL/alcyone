@@ -33,6 +33,10 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 | POST | `/api/projects/:projectId/todos` | Todo作成 | `{ title: string }`（1〜200文字） | `201` `Todo` | `400`, `404` |
 | PATCH | `/api/todos/:id` | 完了状態の更新 | `{ completed: boolean }` | `200` `Todo` | `400`, `404` |
 | PATCH | `/api/todos/:id/details` | 期限・優先度の更新 | `{ dueAt?: string\|null, priority?: 0-3 }` | `200` `Todo` | `400`, `404` |
+| GET | `/api/todos/:id/attachments` | 添付一覧 | — | `Attachment[]` | `400`, `404` |
+| POST | `/api/todos/:id/attachments` | 添付の追加（multipart、フィールド名`file`、5MBまで） | multipart | `201` `Attachment` | `400`, `404`, `413` |
+| GET | `/api/attachments/:id` | 添付のダウンロード | — | ファイル本体 | `400`, `404` |
+| DELETE | `/api/attachments/:id` | 添付の削除（R2のオブジェクトも消す） | — | `204` (body無し) | `400`, `404` |
 | DELETE | `/api/todos/:id` | Todo削除（**論理削除**） | — | `204` (body無し) | `400`, `404` |
 | POST | `/api/todos/:id/restore` | Todoの復元 | — | `200` `Todo` | `400`, `404` |
 
@@ -56,6 +60,13 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 `sort=due`では**期限なしを末尾**に置く（SQLiteに任せるとNULLが最小＝最優先として扱われる）。
 
 `dueAt`に`null`を送ると期限を消す。フィールドを省略した場合は変更しない —— この2つは別物。
+
+添付のダウンロードは常に `Content-Disposition: attachment` を返す。任意のユーザーがアップロード
+したファイルを自分のオリジンでインライン表示すると、蓄積型XSSの経路になる。
+
+**R2のオブジェクトはデータベースの外にある。** 行を消してもファイルは残るので、削除系の処理は
+必ず両方を扱う（退会時も同様）。逆に、オブジェクトが無いのに行がある状態も起こりうるので、
+ダウンロードは404を返す。
 
 `deletedAt` が非nullの行は論理削除済みで、一覧にも取得にも現れない
 （[ADR 0015](../adr/0015-soft-delete-items-hard-delete-accounts.md)）。アカウント削除

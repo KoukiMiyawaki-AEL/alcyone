@@ -26,6 +26,14 @@
   },
   // Makes production stack traces map back to TypeScript source.
   "upload_source_maps": true,
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS",
+      // Placeholder like database_id — no bucket has been created on a real
+      // Cloudflare account. See docs/adr/0003-d1-local-only.md.
+      "bucket_name": "alcyone-attachments",
+    },
+  ],
   "d1_databases": [
     {
       "binding": "DB",

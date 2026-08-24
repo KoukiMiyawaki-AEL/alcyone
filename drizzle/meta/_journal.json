@@ -57,6 +57,13 @@
       "when": 1787577835363,
       "tag": "0007_left_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1787578186361,
+      "tag": "0008_tricky_marvel_boy",
+      "breakpoints": true
     }
   ]
 }

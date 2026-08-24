@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/d1";
 
-import { projectsTable, todosTable } from "./schema";
+import { attachmentsTable, projectsTable, todosTable } from "./schema";
 
 /**
  * Timestamps are generated here, not by the database.
@@ -124,6 +124,18 @@ export function createRepo(binding: D1Database, ownerId: string) {
   };
 
   const todos = {
+    find: (id: number) =>
+      db
+        .select()
+        .from(todosTable)
+        .where(
+          and(
+            eq(todosTable.id, id),
+            isNull(todosTable.deletedAt),
+            inArray(todosTable.projectId, ownedProjectIds()),
+          ),
+        ),
+
     listByProject: (projectId: number, options: TodoListOptions = {}) =>
       db
         .select()
@@ -224,8 +236,27 @@ export function createRepo(binding: D1Database, ownerId: string) {
    * Returns statements rather than running them, so the caller can put the
    * user row's own deletion in the same batch.
    */
+  /** Every todo id owned by this user, ignoring soft-delete state. */
+  const allOwnedTodoIds = () =>
+    db
+      .select({ id: todosTable.id })
+      .from(todosTable)
+      .where(
+        inArray(
+          todosTable.projectId,
+          db
+            .select({ id: projectsTable.id })
+            .from(projectsTable)
+            .where(eq(projectsTable.ownerId, ownerId)),
+        ),
+      );
+
   const purgeOwnedData = () =>
     [
+      // Three levels now — attachments reference todos, todos reference
+      // projects — so three statements in dependency order. The R2 objects are
+      // not rows and survive this; see ownedAttachmentKeys.
+      db.delete(attachmentsTable).where(inArray(attachmentsTable.todoId, allOwnedTodoIds())),
       db
         .delete(todosTable)
         .where(
@@ -240,10 +271,69 @@ export function createRepo(binding: D1Database, ownerId: string) {
       db.delete(projectsTable).where(eq(projectsTable.ownerId, ownerId)),
     ] as const;
 
+  /** Todo ids this owner may touch. Live todos only. */
+  const ownedTodoIds = (todoId?: number) =>
+    db
+      .select({ id: todosTable.id })
+      .from(todosTable)
+      .where(
+        and(
+          inArray(todosTable.projectId, ownedProjectIds()),
+          isNull(todosTable.deletedAt),
+          todoId === undefined ? undefined : eq(todosTable.id, todoId),
+        ),
+      );
+
+  const attachments = {
+    listByTodo: (todoId: number) =>
+      db
+        .select()
+        .from(attachmentsTable)
+        .where(inArray(attachmentsTable.todoId, ownedTodoIds(todoId)))
+        .orderBy(asc(attachmentsTable.id)),
+
+    create: (values: {
+      todoId: number;
+      key: string;
+      filename: string;
+      contentType: string;
+      size: number;
+    }) =>
+      db
+        .insert(attachmentsTable)
+        .values({ ...values, createdAt: now() })
+        .returning(),
+
+    find: (id: number) =>
+      db
+        .select()
+        .from(attachmentsTable)
+        .where(and(eq(attachmentsTable.id, id), inArray(attachmentsTable.todoId, ownedTodoIds()))),
+
+    remove: (id: number) =>
+      db
+        .delete(attachmentsTable)
+        .where(and(eq(attachmentsTable.id, id), inArray(attachmentsTable.todoId, ownedTodoIds())))
+        .returning(),
+  };
+
   return {
     projects,
     todos,
+    attachments,
     purgeOwnedData,
+    /**
+     * Every R2 key this owner has. Read this before `purgeOwnedData` runs.
+     *
+     * The object store is not part of the database, so deleting rows leaves the
+     * files behind forever. Collecting the keys first is the only way to know
+     * what to remove.
+     */
+    ownedAttachmentKeys: () =>
+      db
+        .select({ key: attachmentsTable.key })
+        .from(attachmentsTable)
+        .where(inArray(attachmentsTable.todoId, allOwnedTodoIds())),
     /**
      * The only way to make more than one statement atomic on D1. Statements run
      * sequentially and non-concurrently; if any fails the whole sequence rolls

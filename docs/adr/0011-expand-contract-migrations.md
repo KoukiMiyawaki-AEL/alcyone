@@ -33,6 +33,11 @@ D1は常にFKを強制する（`PRAGMA foreign_keys`は`1`）。その状態でS
 
 **`ON DELETE CASCADE`を使っていたら、この`DROP TABLE`は全todoを無言で削除していた**（[ADR 0012](./0012-no-on-delete-cascade.md)）。NO ACTIONだったのでエラーで止まり、データが守られた。
 
+> **追記（添付ファイル導入時）**: 当時「`todos`を参照するテーブルがまだ無いので再構築は通る」と
+> 書いたが、**その前提はもう成り立たない**。`attachments`が`todos`を参照するようになったので、
+> 今後`todos`を再構築するマイグレーションは`projects`と同じくdetach/reattachが要る。
+> 参照される側のテーブルは増える一方であることの実例。
+
 ### 3. drizzle-kitはスキーマを生成するがデータを生成しない
 
 seed、backfill、フォーマット変換はすべて手書きになる。今回は3つ必要だった。

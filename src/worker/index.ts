@@ -60,7 +60,7 @@ const exportParamSchema = z.object({ instanceId: z.string().min(1).max(200) });
 // An enum, not a string: `part` becomes part of an R2 key, and a free-form one
 // would let a caller walk out of their own prefix.
 const exportPartParamSchema = exportParamSchema.extend({
-  part: z.enum(["manifest", "projects", "todos", "attachments"]),
+  part: z.enum(["manifest", "projects", "todos", "attachments", "comments", "events"]),
 });
 
 const searchQuerySchema = z

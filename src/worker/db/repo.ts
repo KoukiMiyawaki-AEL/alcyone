@@ -845,6 +845,13 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           .select()
           .from(attachmentsTable)
           .where(inArray(attachmentsTable.todoId, allOwnedTodoIds())),
+      comments: () =>
+        db
+          .select()
+          .from(todoCommentsTable)
+          .where(inArray(todoCommentsTable.todoId, allOwnedTodoIds())),
+      events: () =>
+        db.select().from(todoEventsTable).where(inArray(todoEventsTable.todoId, allOwnedTodoIds())),
     },
     /**
      * The only way to make more than one statement atomic on D1. Statements run

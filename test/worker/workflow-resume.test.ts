@@ -41,7 +41,13 @@ describe("a data export whose step fails", () => {
 
     const manifest = (await instance.getOutput()) as ExportManifest;
     // Every part is present and counted: the failure cost time, not data.
-    expect(manifest.parts.map((p) => p.name)).toEqual(["projects", "todos", "attachments"]);
+    expect(manifest.parts.map((p) => p.name)).toEqual([
+      "projects",
+      "todos",
+      "attachments",
+      "comments",
+      "events",
+    ]);
     expect(manifest.parts.find((p) => p.name === "projects")?.count).toBe(1);
 
     // And the objects are really in R2, not just named in a return value.

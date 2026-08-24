@@ -22,6 +22,10 @@
 | `todos` | `title` | 同上 | 本人が入力 |
 | `attachments` | `filename` | 添付ファイル名。**自由入力なので個人情報が入りうる** | 本人が入力 |
 | `shares` | `token` | 公開リンクのトークン。それ自体は個人情報ではないが、**projectの中身を誰でも読める状態にする** | サーバが生成 |
+| `todo_comments` | `body` | コメント本文。**自由入力なので個人情報が入りうる** | 本人が入力 |
+| `todo_comments` | `authorId` | 書き手 | サーバが記録 |
+| `todo_events` | `fromValue` / `toValue` | 変更前後の値。タイトルの変更履歴を含むので**自由入力が残る** | サーバが記録 |
+| `todo_events` | `actorId` | 変更した人 | サーバが記録 |
 
 ### データベースの外
 
@@ -52,7 +56,7 @@
 `/account` からの退会で、上記すべてが物理削除される（[ADR 0015](./adr/0015-soft-delete-items-hard-delete-accounts.md)）。
 
 - `user` / `session` / `account`: Better Auth が削除。session と account は `user` からcascade
-- `projects` / `todos` / `attachments` / `shares`: `beforeDelete` フックが**論理削除済みの行も含めて**物理削除
+- `projects` / `todos` / `attachments` / `shares` / `todo_comments` / `todo_events`: `beforeDelete` フックが**論理削除済みの行も含めて**物理削除
 - R2の添付とエクスポート: 同フックが**行より先に**削除する（行を先に消すと、オブジェクトを指すものが無くなって永久に残る）
 
 検証は `test/worker/account-deletion.test.ts`。
@@ -60,6 +64,9 @@
 ## 未対応
 
 - 論理削除された `projects` / `todos` は**30日で自動削除**される（`src/worker/scheduled.ts`）。それ以外の保持期間は未定義
+- **`todo_events` に保持期限が無い。** タスクが物理削除されるときに一緒に消えるだけで、
+  生きているタスクの履歴は増え続ける。**追記専用なので、間引く手段を作ると追記専用でなくなる**
+  という緊張がある（[ADR 0027](./adr/0027-comments-and-append-only-history.md)）
 - **Analytics Engineのイベントを個別に消せない。** データセットは追記専用で、
   「このユーザーの分だけ削除」ができない。だから**識別情報を最初から書いていない**という
   設計で対応しており、これは事後の削除では取り返せない性質の判断である（[ADR 0023](./adr/0023-analytics-engine-events.md)）

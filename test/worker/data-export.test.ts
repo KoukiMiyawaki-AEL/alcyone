@@ -58,9 +58,47 @@ describe("data export", () => {
 
     const manifest = await waitForManifest(alice, id);
     expect(manifest).not.toBeNull();
-    expect(manifest!.parts.map((p) => p.name)).toEqual(["projects", "todos", "attachments"]);
+    // Every table holding this user's data, not just the ones the export
+    // started with — an export that names itself "your data" and omits two of
+    // them is worse than one that never claimed to be complete.
+    expect(manifest!.parts.map((p) => p.name)).toEqual([
+      "projects",
+      "todos",
+      "attachments",
+      "comments",
+      "events",
+    ]);
     expect(manifest!.parts.find((p) => p.name === "projects")?.count).toBe(1);
     expect(manifest!.parts.find((p) => p.name === "todos")?.count).toBe(1);
+  });
+
+  it("includes the comments and the history", async () => {
+    const projectId = await createProject(alice, "Discussed");
+    const created = await app.request(
+      `/api/projects/${projectId}/todos`,
+      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({ title: "話題" }) },
+      env,
+    );
+    const { id } = (await created.json()) as { id: number };
+    await app.request(
+      `/api/todos/${id}/comments`,
+      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({ body: "書いた" }) },
+      env,
+    );
+
+    const started = await app.request("/api/exports", { method: "POST", headers: alice }, env);
+    const { id: instanceId } = (await started.json()) as { id: string };
+    await waitForManifest(alice, instanceId);
+
+    const comments = await app.request(
+      `/api/exports/${instanceId}/comments`,
+      { headers: alice },
+      env,
+    );
+    expect(((await comments.json()) as { body: string }[]).map((c) => c.body)).toEqual(["書いた"]);
+
+    const events = await app.request(`/api/exports/${instanceId}/events`, { headers: alice }, env);
+    expect(((await events.json()) as { field: string }[]).map((e) => e.field)).toContain("created");
   });
 
   it("serves a part as a download", async () => {

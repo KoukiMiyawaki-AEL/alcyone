@@ -146,7 +146,7 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 |---|---|---|---|---|---|
 | POST | `/api/exports` | エクスポートを開始 | — | `202 { id, status }` | — |
 | GET | `/api/exports/:instanceId` | 状態と（完成していれば）manifest | — | `{ id, status, manifest }` | `404` |
-| GET | `/api/exports/:instanceId/:part` | 1部品をダウンロード | `part`は`manifest`/`projects`/`todos`/`attachments` | `200` JSON | `400` `404` |
+| GET | `/api/exports/:instanceId/:part` | 1部品をダウンロード | `part`は`manifest`/`projects`/`todos`/`attachments`/`comments`/`events` | `200` JSON | `400` `404` |
 
 `manifest`が非nullなら完成している。**部品はmanifestより先に書かれる**ので、
 manifestに載っているものは必ず存在する。

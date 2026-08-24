@@ -59,6 +59,15 @@ export class DataExportWorkflow extends WorkflowEntrypoint<CloudflareBindings, E
     const attachments = await step.do("export attachments", async () =>
       write("attachments", await repo.exportable.attachments()),
     );
+    // Added when comments and history were: an export that names itself "your
+    // data" and leaves out two tables of it is worse than one that never
+    // claimed to be complete.
+    const comments = await step.do("export comments", async () =>
+      write("comments", await repo.exportable.comments()),
+    );
+    const events = await step.do("export history", async () =>
+      write("events", await repo.exportable.events()),
+    );
 
     // Written last and on its own, so its existence is what "the export is
     // complete" means. A reader that finds a manifest can trust every part it
@@ -68,7 +77,7 @@ export class DataExportWorkflow extends WorkflowEntrypoint<CloudflareBindings, E
         userId,
         // Inside the step, so a resume does not restamp a finished export.
         generatedAt: new Date().toISOString(),
-        parts: [projects, todos, attachments],
+        parts: [projects, todos, attachments, comments, events],
       };
       await this.env.ATTACHMENTS.put(
         exportKey(userId, instanceId, "manifest"),

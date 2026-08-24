@@ -69,7 +69,12 @@ drizzle-kitはFTS5仮想テーブルもトリガーも表現できない。よ�
 ただ結果が少しずつ古くなる。**気づく手段が無い**種類の壊れ方である。
 
 `test/worker/migrations.test.ts` がトリガー3本の存在を検証しており、
-消えたらCIが赤くなる。`auth-schema.ts` のUNIQUE制約をインデックスに置き換えたのと同じ発想。
+消えたらCIが赤くなる。
+
+**追記**: この危険は[ADR 0024](./0024-todo-status-instead-of-completed.md)で**実際に発生した**。
+`completed` を落とすために `todos` を作り直したところ、トリガーは予告通り消え、
+`todos_fts` は行を保持したまま**エラーを出さずに古い結果を返し続けた**。
+このテストが赤くなることも確認済み（復元を書かずに一度適用した）。`auth-schema.ts` のUNIQUE制約をインデックスに置き換えたのと同じ発想。
 
 クエリ側のテーブル定義は `src/worker/db/fts.ts` に置き、**`schema.ts` からは export しない**。
 drizzle-kitは `schema.ts` しか読まないので、これで「drizzleからクエリできるが、

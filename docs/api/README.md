@@ -73,8 +73,8 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 `Todo` / `Project` の型は`src/worker/db/schema.ts`から`drizzle-orm`が推論する。
 
 - `Todo`: `{ id, title, status, createdAt, updatedAt, projectId, startAt: string|null, dueAt: string|null, description: string|null, priority: 0-3, deletedAt: string|null }`
-  - `completed: boolean` も返るが、**`status` に置き換え済みで読んではいけない**。
-    contractのマイグレーションで列ごと消えるまでの間だけ残っている（[ADR 0011](../adr/0011-expand-contract-migrations.md)）
+  - `status` は `todo` / `in_progress` / `blocked` / `done` のいずれか。
+    **DBのCHECK制約でも縛られている**ので、この4つ以外は保存されない
 - `Project`: `{ id: number, name: string, createdAt: string, ownerId: string, deletedAt: string | null }`
 
 一覧は**キーセットページネーション**。`nextCursor`が非nullなら次のページがあり、そのまま

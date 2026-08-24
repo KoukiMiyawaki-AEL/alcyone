@@ -322,20 +322,9 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
 
     create: (values: TodoFields & { title: string; projectId: number }) => {
       const timestamp = now();
-      const status = values.status ?? "todo";
       return db
         .insert(todosTable)
-        .values({
-          ...values,
-          status,
-          // Written alongside `status` until the contract migration drops it.
-          // Two columns saying the same thing is exactly the drift this change
-          // is removing, so nothing reads this one — but a rollback to the
-          // previous deploy would, and that is what the expand step is for.
-          completed: status === "done",
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        })
+        .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
         .returning();
     },
 
@@ -347,11 +336,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
     update: (id: number, values: TodoFields) =>
       db
         .update(todosTable)
-        .set({
-          ...values,
-          ...(values.status === undefined ? {} : { completed: values.status === "done" }),
-          updatedAt: now(),
-        })
+        .set({ ...values, updatedAt: now() })
         .where(
           and(
             eq(todosTable.id, id),
@@ -364,7 +349,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
     setStatus: (id: number, status: TodoStatus) =>
       db
         .update(todosTable)
-        .set({ status, completed: status === "done", updatedAt: now() })
+        .set({ status, updatedAt: now() })
         .where(
           and(
             eq(todosTable.id, id),

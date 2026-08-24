@@ -144,7 +144,7 @@ function SearchComponent() {
                   <Link to="/projects/$projectId" params={{ projectId: String(todo.projectId) }} />
                 }
               >
-                <span className={todo.completed ? "line-through opacity-60" : undefined}>
+                <span className={todo.status === "done" ? "line-through opacity-60" : undefined}>
                   {todo.title}
                 </span>
               </Button>

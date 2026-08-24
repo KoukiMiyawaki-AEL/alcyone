@@ -1,7 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { projectsTable, sharesTable, todosTable } from "./db/schema";
+import { projectsTable, sharesTable, todosTable, type TodoStatus } from "./db/schema";
 
 /**
  * What a shared link shows. Deliberately not the database rows: this is served
@@ -10,7 +10,7 @@ import { projectsTable, sharesTable, todosTable } from "./db/schema";
  */
 export type SharedView = {
   project: { name: string };
-  todos: { title: string; completed: boolean; dueAt: string | null; priority: number }[];
+  todos: { title: string; status: TodoStatus; dueAt: string | null; priority: number }[];
 };
 
 /**
@@ -60,7 +60,7 @@ export async function readSharedView(
   const todos = await orm
     .select({
       title: todosTable.title,
-      completed: todosTable.completed,
+      status: todosTable.status,
       dueAt: todosTable.dueAt,
       priority: todosTable.priority,
     })

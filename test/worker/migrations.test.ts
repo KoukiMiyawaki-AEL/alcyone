@@ -130,6 +130,36 @@ describe("migrations", () => {
     ]);
   });
 
+  it("refuses a status the application does not know", async () => {
+    // A CHECK rather than validation alone. Zod guards the endpoint; this
+    // guards the table, including every path that does not go through zod —
+    // a migration, a console, a future handler.
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO todos (title, createdAt, updatedAt, projectId, status) VALUES ('x','t','t',1,'almost')",
+      ).run(),
+    ).rejects.toThrow();
+  });
+
+  it("refuses a start date after the due date", async () => {
+    // The rule validation cannot enforce on its own: a PATCH that moves only
+    // `startAt` has no `dueAt` to compare against. The row always does.
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO todos (title, createdAt, updatedAt, projectId, startAt, dueAt) VALUES ('x','t','t',1,'2026-02-02','2026-02-01')",
+      ).run(),
+    ).rejects.toThrow();
+  });
+
+  it("has no `completed` column left", async () => {
+    // The contract half of ADR 0011: once nothing reads it, the duplicate goes.
+    // Two columns saying the same thing is the drift this replaced.
+    const { results } = await env.DB.prepare("SELECT name FROM pragma_table_info('todos')").all<{
+      name: string;
+    }>();
+    expect(results.map((r) => r.name)).not.toContain("completed");
+  });
+
   it("indexes the todos that already existed when the index was created", async () => {
     // 0009 backfills. A migration that only starts indexing new rows leaves
     // every older todo permanently unfindable, which no query would report.

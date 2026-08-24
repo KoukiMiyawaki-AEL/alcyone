@@ -14,7 +14,7 @@ Hono + Drizzle ORM + Cloudflare D1 をCloudflare Workers上で動かすバック
 | UI | Tailwind CSS v4 + shadcn/ui（base: Base UI, style: nova, baseColor: neutral） |
 | API | Hono（`src/worker/index.ts`）+ `@hono/zod-validator` + zod |
 | クライアント | `hono/client`の`hc<AppType>`で型安全に呼び出す（`src/lib/api-client.ts`） |
-| DB | Drizzle ORM (`drizzle-orm/d1`) + Cloudflare D1（リクエスト毎にD1 Session。[ADR 0021](./docs/adr/0021-d1-sessions-for-read-replicas.md)） |
+| DB | Drizzle ORM (`drizzle-orm/d1`) + Cloudflare D1（リクエスト毎にD1 Session。[ADR 0021](./docs/adr/0021-d1-sessions-for-read-replicas.md)）。**値域の制約はCHECKでDB側にも置く**（[ADR 0024](./docs/adr/0024-todo-status-instead-of-completed.md)） |
 | テスト | Vitest（`test.projects`で2分割）。`worker`= `@cloudflare/vitest-plugin`（D1込みの統合テスト）、`components`= happy-dom + Testing Library（[ADR 0009](./docs/adr/0009-component-tests-happy-dom.md)） |
 | Lint / Format | `oxlint` + `oxfmt`（[ADR 0006](./docs/adr/0006-oxfmt-formatter.md)） |
 | CI | GitHub Actions（`.github/workflows/ci.yml`で`pnpm run check`。[ADR 0007](./docs/adr/0007-ci-and-codegen.md)） |
@@ -286,6 +286,12 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 - **DBアクセスは`createRepo(binding, ownerId)`経由で、返るメソッドは全て所有者でスコープ済み。**
   ハンドラがスコープされていないクエリを受け取ることがないので、絞り込みを忘れられない。
   ここに新しいメソッドを足すときは、必ず`ownerId`で絞ること（[ADR 0014](./docs/adr/0014-user-owned-projects.md)）。
+- **Todoの更新は`PATCH /api/todos/:id`の1本だけ。** 完了もタイトルも日付も同じ部分更新を通る。
+  **省略は「変えない」、`null`は「空にする」** —— 同じ扱いにすると「期限を外す」が表現できない
+  （[ADR 0024](./docs/adr/0024-todo-status-instead-of-completed.md)。zodの`.transform()`が
+  `undefined`を畳んで実際に踏んだ）。
+- **行の`status`と一覧の絞り込みを同じ型にしない。** `all` / `active` はstatusではなく
+  「statusを名指ししない方法」で、`active`は「`done`以外」。型も`TodoStatus` / `TodoFilter`で分けてある。
 - **読み取りは`deletedAt IS NULL`でも絞る。** Project/Todoは論理削除で、忘れると削除済みの行が
   見える（型エラーにもテスト失敗にもならない）。物理削除するのは退会時の`purgeOwnedData()`だけ
   （[ADR 0015](./docs/adr/0015-soft-delete-items-hard-delete-accounts.md)）。

@@ -3,6 +3,7 @@ import { CheckCircle2Icon, CircleIcon } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
+import { STATUS_LABELS } from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
 import type { SharedView } from "@/worker/share";
 
@@ -48,14 +49,29 @@ function SharedProjectComponent() {
                 key={`${todo.title}-${index}`}
                 className="flex items-center gap-3 border-b border-border py-2 last:border-b-0"
               >
-                {todo.completed ? (
+                {todo.status === "done" ? (
                   <CheckCircle2Icon className="size-4 shrink-0 text-muted-foreground" />
                 ) : (
                   <CircleIcon className="size-4 shrink-0 text-muted-foreground" />
                 )}
-                <span className={todo.completed ? "text-muted-foreground line-through" : undefined}>
+                <span
+                  className={
+                    todo.status === "done" ? "text-muted-foreground line-through" : undefined
+                  }
+                >
                   {todo.title}
                 </span>
+                {/*
+                  A shared board is read to answer "where is this", so the two
+                  states between not-started and finished are worth showing.
+                  "todo" gets nothing: it is the default, and labelling it would
+                  bury the ones that have moved.
+                */}
+                {todo.status === "in_progress" || todo.status === "blocked" ? (
+                  <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                    {STATUS_LABELS[todo.status]}
+                  </span>
+                ) : null}
                 {todo.dueAt && (
                   <span className="ml-auto text-xs text-muted-foreground">{todo.dueAt}</span>
                 )}

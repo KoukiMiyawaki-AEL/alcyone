@@ -8,7 +8,6 @@ import type { Todo } from "@/features/todos/types";
 const todo = (over: Partial<Todo> = {}): Todo => ({
   id: 1,
   title: "Write tests",
-  completed: false,
   status: "todo",
   createdAt: "2026-08-24T00:00:00.000Z",
   updatedAt: "2026-08-24T00:00:00.000Z",
@@ -57,7 +56,7 @@ describe("TodoList", () => {
     const user = userEvent.setup();
     const onStatusChange = vi.fn().mockResolvedValue(undefined);
     renderList({
-      todos: [todo(), todo({ id: 2, title: "Ship it", status: "done", completed: true })],
+      todos: [todo(), todo({ id: 2, title: "Ship it", status: "done" })],
       onStatusChange,
     });
 

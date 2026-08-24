@@ -2,7 +2,8 @@
 // drizzle-kit — which is pointed at this file alone — sees the whole schema.
 export * from "./auth-schema";
 
-import { index, int, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { check, index, int, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 import { user } from "./auth-schema";
 
@@ -91,7 +92,6 @@ export const todosTable = sqliteTable(
   {
     id: int().primaryKey({ autoIncrement: true }),
     title: text().notNull(),
-    completed: int({ mode: "boolean" }).notNull().default(false),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
     // No `onDelete` on purpose. D1 cannot disable foreign key enforcement, so
@@ -104,10 +104,10 @@ export const todosTable = sqliteTable(
     /**
      * Where the task is, not whether it is finished.
      *
-     * Replaces the `completed` boolean above, which stays only until the
-     * contract migration drops it (ADR 0011). A boolean cannot say "started"
-     * or "blocked", and adding those as separate flags would let a row claim
-     * to be both at once.
+     * Replaced a `completed` boolean, which migration 0012 dropped. A boolean
+     * cannot say "started" or "blocked", and adding those as separate flags
+     * would let a row claim to be both at once. The set is pinned by a CHECK
+     * below, so a value the application does not know cannot be stored at all.
      *
      * Stored as text rather than an integer so the value is readable in a
      * query result and in an export; the set is small and fixed, so the space
@@ -133,5 +133,14 @@ export const todosTable = sqliteTable(
     // by status. Without status in the index that last predicate is a scan
     // over the project's rows, and D1 bills what it scans.
     index("todos_status_idx").on(t.projectId, t.deletedAt, t.status),
+    // Constraints rather than validation alone. Zod can only see one request:
+    // a PATCH that moves `startAt` cannot check it against a `dueAt` it was
+    // not given. The database sees the whole row, so this is the only place
+    // the rule can be true of every row rather than of every request.
+    check("todos_status_known", sql`${t.status} in ('todo', 'in_progress', 'blocked', 'done')`),
+    check(
+      "todos_dates_ordered",
+      sql`${t.startAt} is null or ${t.dueAt} is null or ${t.startAt} <= ${t.dueAt}`,
+    ),
   ],
 );

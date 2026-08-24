@@ -8,7 +8,8 @@ import { assigneeName } from "../assignee";
 import {
   applyDrag,
   buildTimeline,
-  isoFromDayNumber,
+  dayNumber,
+  days as dayColumns,
   monthSpans,
   type DragMode,
   type DragResult,
@@ -29,6 +30,8 @@ type TodoTimelineProps = {
 
 /** One column per day. Narrow enough that a couple of months fit on a laptop. */
 const DAY_WIDTH = 26;
+/** The task-name column, frozen while the axis scrolls under it. */
+const LABEL_WIDTH = 200;
 
 /** Bars are coloured by status, so a delayed task is visible without reading it. */
 const BAR_CLASS: Record<Todo["status"], string> = {
@@ -72,7 +75,8 @@ export function TodoTimeline({
     fromX: number;
     deltaDays: number;
   } | null>(null);
-  const { from, days, bars, unscheduled, todayOffset, clipped } = buildTimeline(todos, today);
+  const { from, days, bars, unscheduled, clipped } = buildTimeline(todos, today);
+  const columns = dayColumns(from, days, today);
 
   /** The dates a bar would get if the drag ended now. */
   const pending = (todo: Todo): DragResult =>
@@ -155,16 +159,45 @@ export function TodoTimeline({
         <p className="text-sm text-muted-foreground">
           日付が設定されたタスクがまだありません。開始日か期限日を設定すると、ここに並びます。
         </p>
-      ) : (
+      ) : null}
+
+      {
+        // Drawn whether or not anything is on it. A calendar with nothing
+        // scheduled is the state a plan is made in, and an axis that only
+        // appears once a date exists cannot be planned against.
+
         // The axis is the one thing here that legitimately exceeds the page
         // width, so it scrolls inside its own box rather than pushing the body.
         <div className="overflow-x-auto rounded-lg border border-border">
-          <div style={{ width: days * DAY_WIDTH + 200 }} className="min-w-full">
+          <div style={{ width: days * DAY_WIDTH + LABEL_WIDTH }} className="min-w-full">
             <div
-              className="grid"
-              style={{ gridTemplateColumns: `200px repeat(${days}, ${DAY_WIDTH}px)` }}
+              className="relative grid"
+              style={{ gridTemplateColumns: `${LABEL_WIDTH}px repeat(${days}, ${DAY_WIDTH}px)` }}
             >
-              <div className="sticky left-0 z-10 border-r border-b border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground">
+              {/*
+                One layer for the weekend and today stripes, instead of a cell
+                per day per row. With ninety columns and a hundred tasks that
+                would be nine thousand elements to say something the background
+                can say once.
+              */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 grid"
+                style={{ gridTemplateColumns: `${LABEL_WIDTH}px repeat(${days}, ${DAY_WIDTH}px)` }}
+              >
+                <div />
+                {columns.map((day) => (
+                  <div
+                    key={day.iso}
+                    className={cn(
+                      day.weekend && "bg-muted/40",
+                      day.isToday && "bg-primary/10 ring-1 ring-primary/40 ring-inset",
+                    )}
+                  />
+                ))}
+              </div>
+
+              <div className="sticky left-0 z-20 border-r border-b border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground">
                 タスク
               </div>
               {monthSpans(from, days).map((month) => (
@@ -177,9 +210,28 @@ export function TodoTimeline({
                 </div>
               ))}
 
+              {/* The day row: a schedule argued over in weeks needs day numbers. */}
+              <div className="sticky left-0 z-20 border-r border-b border-border bg-background" />
+              {columns.map((day) => (
+                <div
+                  key={day.iso}
+                  title={day.iso}
+                  className={cn(
+                    "border-b border-border pb-1 text-center text-[10px] tabular-nums",
+                    day.isToday
+                      ? "font-semibold text-primary"
+                      : day.weekend
+                        ? "text-muted-foreground/70"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {day.label}
+                </div>
+              ))}
+
               {bars.map((bar) => (
                 <div key={bar.todo.id} className="contents">
-                  <div className="sticky left-0 z-10 truncate border-r border-b border-border bg-background px-3 py-1.5">
+                  <div className="sticky left-0 z-20 truncate border-r border-b border-border bg-background px-3 py-1.5">
                     <button
                       type="button"
                       onClick={() => onEdit(bar.todo)}
@@ -195,29 +247,28 @@ export function TodoTimeline({
                   </div>
 
                   {/*
-                    An empty cell before the bar, then the bar spanning its
-                    days. Grid placement rather than absolute positioning keeps
-                    the row height honest when a title wraps.
+                    The whole row as one cell, with the bar positioned inside
+                    it. Grid spans cannot express a ghost overlapping its own
+                    bar, and a column is a fixed width, so the arithmetic is the
+                    same either way.
                   */}
-                  {bar.offset > 0 ? (
-                    <div
-                      style={{ gridColumn: `span ${bar.offset}` }}
-                      className="border-b border-border"
-                    />
-                  ) : null}
                   <div
-                    style={{ gridColumn: `span ${Math.min(bar.length, days - bar.offset)}` }}
-                    className="border-b border-border px-0.5 py-1.5"
+                    style={{ gridColumn: `span ${days}` }}
+                    className="relative border-b border-border py-1.5"
                   >
                     <div
+                      style={{
+                        marginLeft: bar.offset * DAY_WIDTH + 1,
+                        width: Math.min(bar.length, days - bar.offset) * DAY_WIDTH - 2,
+                      }}
                       className={cn(
-                        "group/bar relative flex h-4 items-stretch rounded-sm",
+                        "flex h-4 items-stretch rounded-sm",
                         BAR_CLASS[bar.todo.status],
-                        drag?.id === bar.todo.id && "ring-2 ring-primary",
+                        drag?.id === bar.todo.id && "opacity-40",
                       )}
                       // The bar is decoration; the row's name and this label
                       // are what a screen reader gets.
-                      title={`${STATUS_LABELS[bar.todo.status]}: ${pending(bar.todo).startAt ?? "—"} 〜 ${pending(bar.todo).dueAt ?? "—"}`}
+                      title={`${STATUS_LABELS[bar.todo.status]}: ${bar.todo.startAt ?? "—"} 〜 ${bar.todo.dueAt ?? "—"}`}
                       onPointerDown={(event) => startDrag(event, bar.todo, "move")}
                     >
                       {/*
@@ -237,26 +288,23 @@ export function TodoTimeline({
                         onPointerDown={(event) => startDrag(event, bar.todo, "end")}
                       />
                     </div>
+
+                    {/*
+                      Where it would land. Drawn alongside the faded original so
+                      both ends of the change are visible at once — a bar that
+                      simply moved would answer "where to" and lose "from
+                      where".
+                    */}
+                    {drag?.id === bar.todo.id ? (
+                      <Ghost dates={pending(bar.todo)} from={from} />
+                    ) : null}
                   </div>
-                  {days - bar.offset - bar.length > 0 ? (
-                    <div
-                      style={{ gridColumn: `span ${days - bar.offset - bar.length}` }}
-                      className="border-b border-border"
-                    />
-                  ) : null}
                 </div>
               ))}
             </div>
-
-            {todayOffset !== null ? (
-              <p className="px-3 py-1.5 text-xs text-muted-foreground">
-                本日 {isoFromDayNumber(from + todayOffset)} は左から{todayOffset + 1}
-                日目の位置です。
-              </p>
-            ) : null}
           </div>
         </div>
-      )}
+      }
 
       {unscheduled.length > 0 ? (
         <details className="rounded-lg border border-border p-3">
@@ -283,6 +331,35 @@ export function TodoTimeline({
           </ul>
         </details>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Where a dragged bar would land.
+ *
+ * Positioned in the same pixel arithmetic as the bar itself — a column is a
+ * fixed width, so "two columns right" is exactly `2 * DAY_WIDTH`. The dates are
+ * printed beside it because a rectangle answers "roughly when" and a schedule
+ * argument is about exact days.
+ */
+function Ghost({ dates, from }: { dates: DragResult; from: number }) {
+  const start = dates.startAt ?? dates.dueAt;
+  const end = dates.dueAt ?? dates.startAt;
+  if (!start || !end) return null;
+
+  const offset = dayNumber(start) - from;
+  const length = dayNumber(end) - dayNumber(start) + 1;
+
+  return (
+    <div
+      aria-hidden
+      style={{ marginLeft: offset * DAY_WIDTH + 1, width: length * DAY_WIDTH - 2 }}
+      className="pointer-events-none absolute top-1.5 flex h-4 items-center rounded-sm border-2 border-dashed border-primary bg-primary/20"
+    >
+      <span className="absolute left-full ml-1.5 rounded bg-popover px-1.5 py-0.5 text-[10px] whitespace-nowrap text-popover-foreground tabular-nums shadow-sm ring-1 ring-border">
+        {dates.startAt ?? "—"} 〜 {dates.dueAt ?? "—"}
+      </span>
     </div>
   );
 }

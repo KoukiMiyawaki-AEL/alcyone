@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  LEAD_DAYS,
+  MIN_DAYS,
   applyDrag,
   buildTimeline,
   dayNumber,
   isoFromDayNumber,
+  days,
   monthSpans,
 } from "@/features/todos/timeline";
 import type { Todo } from "@/features/todos/types";
@@ -51,18 +54,19 @@ describe("buildTimeline", () => {
       "2026-11-02",
     );
 
-    expect(isoFromDayNumber(from)).toBe("2026-11-02");
+    // The axis opens `LEAD_DAYS` before today, so the bar sits that far in.
+    expect(isoFromDayNumber(from)).toBe("2026-10-26");
     // Three days: the 2nd, 3rd and 4th. An exclusive end would show two.
-    expect(bars[0]).toMatchObject({ offset: 0, length: 3 });
+    expect(bars[0]).toMatchObject({ offset: LEAD_DAYS, length: 3 });
   });
 
   it("marks a single day for a task with only one date", () => {
     // Inventing the other end would put a date on screen that nobody chose.
     const onlyDue = buildTimeline([todo({ dueAt: "2026-11-10" })], "2026-11-10");
-    expect(onlyDue.bars[0]).toMatchObject({ offset: 0, length: 1 });
+    expect(onlyDue.bars[0]).toMatchObject({ offset: LEAD_DAYS, length: 1 });
 
     const onlyStart = buildTimeline([todo({ startAt: "2026-11-10" })], "2026-11-10");
-    expect(onlyStart.bars[0]).toMatchObject({ offset: 0, length: 1 });
+    expect(onlyStart.bars[0]).toMatchObject({ offset: LEAD_DAYS, length: 1 });
   });
 
   it("hands back tasks with no dates instead of dropping them", () => {
@@ -77,17 +81,48 @@ describe("buildTimeline", () => {
     expect(unscheduled.map((t) => t.title)).toEqual(["no dates"]);
   });
 
-  it("always keeps today on the axis", () => {
-    // Otherwise a project entirely in the future opens somewhere with no
-    // reference point for "now".
-    const { from, todayOffset, days } = buildTimeline(
+  it("always keeps today on the axis, with room before it", () => {
+    // Otherwise a project entirely in the future opens with no reference point
+    // for "now", and a task that started last week is pinned to the very edge.
+    const { from, todayOffset } = buildTimeline(
       [todo({ startAt: "2026-12-01", dueAt: "2026-12-05" })],
       "2026-11-20",
     );
 
-    expect(isoFromDayNumber(from)).toBe("2026-11-20");
-    expect(todayOffset).toBe(0);
-    expect(days).toBe(16);
+    expect(isoFromDayNumber(from)).toBe("2026-11-13");
+    expect(todayOffset).toBe(LEAD_DAYS);
+  });
+
+  it("draws a calendar wider than the work, so empty stretches are visible", () => {
+    // Sizing the axis to the tasks makes a two-task project rescale every time
+    // a date moves, and you cannot see that a month is free if the month is
+    // not drawn.
+    const { days } = buildTimeline(
+      [todo({ startAt: "2026-11-02", dueAt: "2026-11-04" })],
+      "2026-11-02",
+    );
+
+    expect(days).toBe(MIN_DAYS);
+  });
+
+  it("grows past the minimum when the work needs it", () => {
+    const { days } = buildTimeline(
+      [todo({ startAt: "2026-11-02", dueAt: "2027-01-31" })],
+      "2026-11-02",
+      { minDays: 30, maxDays: 365 },
+    );
+
+    // 7 lead days plus the task's own span.
+    expect(days).toBeGreaterThan(90);
+  });
+
+  it("shows a calendar even with no tasks at all", () => {
+    // An empty project still has a schedule to plan against.
+    const { days, bars, todayOffset } = buildTimeline([], "2026-11-05");
+
+    expect(bars).toEqual([]);
+    expect(days).toBe(MIN_DAYS);
+    expect(todayOffset).toBe(LEAD_DAYS);
   });
 
   it("places today between tasks that straddle it", () => {
@@ -99,8 +134,10 @@ describe("buildTimeline", () => {
       "2026-11-05",
     );
 
-    expect(todayOffset).toBe(4);
-    expect(bars.map((b) => b.offset)).toEqual([0, 7]);
+    // The axis opens `LEAD_DAYS` before today, and both tasks start after that
+    // point — so today sits at the lead and the bars fall where they fall.
+    expect(todayOffset).toBe(LEAD_DAYS);
+    expect(bars.map((b) => b.offset)).toEqual([3, 10]);
   });
 
   it("orders bars by when they start", () => {
@@ -119,30 +156,20 @@ describe("buildTimeline", () => {
     const { days, clipped } = buildTimeline(
       [todo({ startAt: "2026-01-01", dueAt: "2030-01-01" })],
       "2026-01-01",
-      180,
+      { maxDays: 180 },
     );
 
     expect(days).toBe(180);
     expect(clipped).toBe(true);
   });
 
-  it("drops nothing and claims no clipping when everything fits", () => {
-    const { clipped, days } = buildTimeline(
+  it("claims no clipping when everything fits", () => {
+    const { clipped } = buildTimeline(
       [todo({ startAt: "2026-11-01", dueAt: "2026-11-03" })],
       "2026-11-01",
-      180,
     );
 
     expect(clipped).toBe(false);
-    expect(days).toBe(3);
-  });
-
-  it("works with no tasks at all", () => {
-    const { days, bars, todayOffset } = buildTimeline([], "2026-11-05");
-
-    expect(bars).toEqual([]);
-    expect(days).toBe(1);
-    expect(todayOffset).toBe(0);
   });
 });
 
@@ -219,5 +246,33 @@ describe("dragging a bar", () => {
     // `updatedAt` and tell every other tab to refetch for nothing.
     const dates = { startAt: "2026-11-02", dueAt: "2026-11-06" };
     expect(applyDrag(dates, "move", 0)).toEqual(dates);
+  });
+});
+
+describe("day columns", () => {
+  it("labels each column with its day of the month", () => {
+    const from = dayNumber("2026-01-30");
+    expect(days(from, 3, "2026-01-30").map((d) => d.label)).toEqual(["30", "31", "1"]);
+  });
+
+  it("marks Saturdays and Sundays", () => {
+    // 2026-11-07 is a Saturday. Read in UTC, because the whole axis is — the
+    // local getter would shift which column counts as the weekend for anyone
+    // who is not on UTC.
+    const from = dayNumber("2026-11-05");
+    expect(days(from, 5, "2026-11-05").map((d) => d.weekend)).toEqual([
+      false,
+      false,
+      true,
+      true,
+      false,
+    ]);
+  });
+
+  it("marks exactly one column as today", () => {
+    const from = dayNumber("2026-11-05");
+    const marked = days(from, 10, "2026-11-08").filter((d) => d.isToday);
+
+    expect(marked.map((d) => d.iso)).toEqual(["2026-11-08"]);
   });
 });

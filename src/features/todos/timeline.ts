@@ -20,6 +20,18 @@ export const isoFromDayNumber = (day: number): string =>
 /** A task placed on the timeline: which day it starts, and how many it spans. */
 export type Bar = { todo: Todo; offset: number; length: number };
 
+/** How wide the axis is, independent of what is on it. */
+export type TimelineWindow = { minDays?: number; maxDays?: number; leadDays?: number };
+
+/**
+ * Roughly three months, which is the span a schedule is usually argued over.
+ * Wide enough that an empty stretch is visibly empty rather than absent.
+ */
+export const MIN_DAYS = 92;
+export const MAX_DAYS = 180;
+/** Days drawn before today, so the recent past has somewhere to be. */
+export const LEAD_DAYS = 7;
+
 export type Timeline = {
   /** Inclusive first day of the axis. */
   from: number;
@@ -42,7 +54,11 @@ export type Timeline = {
  * chose. A task with neither is not on the axis at all, and is handed back
  * separately so the caller can say so rather than quietly dropping it.
  */
-export function buildTimeline(todos: Todo[], today: string, maxDays = 180): Timeline {
+export function buildTimeline(
+  todos: Todo[],
+  today: string,
+  { minDays = MIN_DAYS, maxDays = MAX_DAYS, leadDays = LEAD_DAYS }: TimelineWindow = {},
+): Timeline {
   const scheduled = todos.filter((todo) => todo.startAt || todo.dueAt);
   const unscheduled = todos.filter((todo) => !todo.startAt && !todo.dueAt);
 
@@ -56,14 +72,20 @@ export function buildTimeline(todos: Todo[], today: string, maxDays = 180): Time
   });
 
   const todayDay = dayNumber(today);
-  // Today is always on the axis, so "where are we" needs no scrolling to answer
-  // even when every task is in the future.
-  const first = Math.min(todayDay, ...spans.map((s) => s.start));
-  const last = Math.max(todayDay, ...spans.map((s) => s.end));
 
-  const from = Number.isFinite(first) ? first : todayDay;
-  const fullDays = (Number.isFinite(last) ? last : todayDay) - from + 1;
-  const days = Math.min(fullDays, maxDays);
+  // A few days before today, so a task that started last week is not pinned to
+  // the very edge of the chart with nothing to its left.
+  const earliest = Math.min(todayDay - leadDays, ...spans.map((s) => s.start));
+  const from = Number.isFinite(earliest) ? earliest : todayDay - leadDays;
+
+  const latest = Math.max(todayDay, ...spans.map((s) => s.end));
+  const needed = (Number.isFinite(latest) ? latest : todayDay) - from + 1;
+
+  // The axis is a calendar, not a bounding box around the work. Sizing it to
+  // the tasks makes an empty project one column wide and a two-task project
+  // shift its scale every time a date moves — you cannot see that a month is
+  // free if the month is not drawn.
+  const days = Math.min(Math.max(needed, minDays), maxDays);
 
   return {
     from,
@@ -79,7 +101,7 @@ export function buildTimeline(todos: Todo[], today: string, maxDays = 180): Time
       .filter((bar) => bar.offset < days),
     unscheduled,
     todayOffset: todayDay - from < days ? todayDay - from : null,
-    clipped: fullDays > maxDays,
+    clipped: needed > maxDays,
   };
 }
 
@@ -143,4 +165,32 @@ export function applyDrag(
   const moved = dayNumber(todo.dueAt) + deltaDays;
   const limit = todo.startAt === null ? -Infinity : dayNumber(todo.startAt);
   return { startAt: todo.startAt, dueAt: isoFromDayNumber(Math.max(moved, limit)) };
+}
+
+/** One column of the axis, for the day header and the background stripes. */
+export type Day = {
+  iso: string;
+  /** Day of the month, which is all that fits in a column. */
+  label: string;
+  /** Saturday or Sunday. Shaded, because a plan that ignores them slips. */
+  weekend: boolean;
+  isToday: boolean;
+};
+
+export function days(from: number, count: number, today: string): Day[] {
+  const todayIso = today.slice(0, 10);
+
+  return Array.from({ length: count }, (_, i) => {
+    const iso = isoFromDayNumber(from + i);
+    // `getUTCDay` because the whole axis is UTC; the local getter would shift
+    // which column counts as Saturday for anyone not on UTC.
+    const weekday = new Date(`${iso}T00:00:00Z`).getUTCDay();
+
+    return {
+      iso,
+      label: String(Number(iso.slice(8, 10))),
+      weekend: weekday === 0 || weekday === 6,
+      isToday: iso === todayIso,
+    };
+  });
 }

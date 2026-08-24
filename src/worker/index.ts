@@ -7,6 +7,7 @@ import { createAuth } from "./auth";
 import { exportKey, type ExportManifest, type ExportParams } from "./data-export";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todoCursorValue, type Repo } from "./db/repo";
+import { bookmarkCookie, openSession } from "./db/session";
 import { handleObjectCleanup, type CleanupMessage } from "./object-cleanup";
 import { clientIp, enforce } from "./rate-limit";
 import { notifyUser } from "./realtime";
@@ -74,12 +75,48 @@ const patchTodoSchema = z.object({
 
 const app = new Hono<{
   Bindings: CloudflareBindings;
-  Variables: RequestIdVariables & { repo: Repo; userId: string };
+  Variables: RequestIdVariables & { db: D1DatabaseSession; repo: Repo; userId: string };
 }>()
   // First in the chain so that everything downstream — including failures in
   // the auth middleware — can be tied back to one request. Also echoed to the
   // client as X-Request-Id, which is what makes a bug report actionable.
   .use("*", requestId())
+  // Opens the request's D1 session before anything queries, and carries its
+  // bookmark forward afterwards. First so that every downstream reader — auth
+  // included — shares one ordering; see db/session.ts for why that matters.
+  .use("*", async (c, next) => {
+    const session = openSession(c.env.DB, c.req.header("Cookie"));
+    c.set("db", session);
+
+    await next();
+
+    const cookie = bookmarkCookie(session, c.req.url);
+    if (!cookie) return;
+
+    try {
+      // Appended rather than set: the auth endpoints issue their own cookies on
+      // the same response, and overwriting them would sign the user straight
+      // out.
+      c.res.headers.append("Set-Cookie", cookie);
+    } catch {
+      // A response that came back from a subrequest — /api/realtime returns the
+      // Durable Object's — has immutable headers, and appending to one throws.
+      // Rebuilding is the only way to add anything to it.
+      //
+      // Except a 101: its WebSocket cannot be carried across a new Response, so
+      // that one goes out without the bookmark. Harmless, because the socket
+      // carries no queries of its own and the next ordinary request will set it.
+      if (c.res.status === 101) return;
+
+      const headers = new Headers(c.res.headers);
+      headers.append("Set-Cookie", cookie);
+      c.res = new Response(c.res.body, {
+        status: c.res.status,
+        statusText: c.res.statusText,
+        headers,
+      });
+    }
+  })
   // Better Auth owns everything under /api/auth. Mounted before the guard
   // below, since signing in obviously cannot require being signed in.
   .on(["GET", "POST"], "/api/auth/*", async (c) => {
@@ -88,7 +125,7 @@ const app = new Hono<{
     const limited = await enforce(c.env.AUTH_RATE_LIMITER, clientIp(c), 60);
     if (limited) return limited;
 
-    return createAuth(c.env).handler(c.req.raw);
+    return createAuth(c.env, c.get("db")).handler(c.req.raw);
   })
   // Unauthenticated liveness probe. Kept outside the guard on purpose: a health
   // check that needs credentials cannot be used by an uptime monitor.
@@ -101,7 +138,7 @@ const app = new Hono<{
   // instance would leak state across invocations. `Variables` does not
   // participate in the RPC schema, so `hc<AppType>` inference is unaffected.
   .use("/api/*", async (c, next) => {
-    const session = await createAuth(c.env).api.getSession({
+    const session = await createAuth(c.env, c.get("db")).api.getSession({
       headers: c.req.raw.headers,
     });
 
@@ -110,7 +147,7 @@ const app = new Hono<{
     }
 
     c.set("userId", session.user.id);
-    c.set("repo", createRepo(c.env.DB, session.user.id));
+    c.set("repo", createRepo(c.get("db"), session.user.id));
     await next();
   })
   // Fans a mutation out to the user's other open tabs.

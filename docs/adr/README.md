@@ -26,6 +26,7 @@
 | [0018](./0018-fts5-trigram-search.md) | 全文検索をFTS5のtrigramトークナイザで実装する | Accepted |
 | [0019](./0019-object-cleanup-queue.md) | R2オブジェクトの削除をQueuesに逃がす | Accepted |
 | [0020](./0020-data-export-workflow.md) | データエクスポートをWorkflowsで実装する | Accepted |
+| [0021](./0021-d1-sessions-for-read-replicas.md) | リクエストごとにD1 Sessionを開き、bookmarkをCookieで引き継ぐ | Accepted |
 
 ## ルール
 

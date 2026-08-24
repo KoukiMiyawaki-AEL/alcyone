@@ -15,7 +15,7 @@ import { deleteObjectsNow, listKeys } from "./object-cleanup";
  * `/api/*` prefix that `wrangler.jsonc`'s `run_worker_first` already routes to
  * this Worker — so no routing config changes.
  */
-export function createAuth(env: CloudflareBindings) {
+export function createAuth(env: CloudflareBindings, db: D1Database | D1DatabaseSession = env.DB) {
   return betterAuth({
     secret: env.BETTER_AUTH_SECRET,
     // Set explicitly rather than left to Better Auth's default, which derives
@@ -27,7 +27,9 @@ export function createAuth(env: CloudflareBindings) {
     // Worker serves the SPA and the API from one origin, so a fixed URL is both
     // simpler and stricter.
     baseURL: env.BETTER_AUTH_URL,
-    database: drizzleAdapter(drizzle(env.DB), {
+    // The request's D1 session, so that signing in and then reading that
+    // session back cannot land on a replica that has not seen the write yet.
+    database: drizzleAdapter(drizzle(db as D1Database), {
       provider: "sqlite",
       schema: authSchema,
     }),

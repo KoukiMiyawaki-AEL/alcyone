@@ -14,7 +14,7 @@ Hono + Drizzle ORM + Cloudflare D1 をCloudflare Workers上で動かすバック
 | UI | Tailwind CSS v4 + shadcn/ui（base: Base UI, style: nova, baseColor: neutral） |
 | API | Hono（`src/worker/index.ts`）+ `@hono/zod-validator` + zod |
 | クライアント | `hono/client`の`hc<AppType>`で型安全に呼び出す（`src/lib/api-client.ts`） |
-| DB | Drizzle ORM (`drizzle-orm/d1`) + Cloudflare D1 |
+| DB | Drizzle ORM (`drizzle-orm/d1`) + Cloudflare D1（リクエスト毎にD1 Session。[ADR 0021](./docs/adr/0021-d1-sessions-for-read-replicas.md)） |
 | テスト | Vitest（`test.projects`で2分割）。`worker`= `@cloudflare/vitest-plugin`（D1込みの統合テスト）、`components`= happy-dom + Testing Library（[ADR 0009](./docs/adr/0009-component-tests-happy-dom.md)） |
 | Lint / Format | `oxlint` + `oxfmt`（[ADR 0006](./docs/adr/0006-oxfmt-formatter.md)） |
 | CI | GitHub Actions（`.github/workflows/ci.yml`で`pnpm run check`。[ADR 0007](./docs/adr/0007-ci-and-codegen.md)） |

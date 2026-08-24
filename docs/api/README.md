@@ -131,6 +131,16 @@ R2の鍵は**セッションのuser idから組み立てる**ので、`instanceI
 
 自分の非GETリクエストが成功したときだけ配られる。宛先はユーザー単位なので、他人の変更は届かない。
 
+## Cookie
+
+| 名前 | 誰が発行するか | 用途 |
+|---|---|---|
+| `better-auth.session_token` 等 | Better Auth | セッション |
+| `d1-bookmark` | このWorker | D1のread-your-own-writes（[ADR 0021](../adr/0021-d1-sessions-for-read-replicas.md)） |
+
+`d1-bookmark`はHttpOnlyで、クライアントが読む必要は無い。**古い値や壊れた値を送っても
+エラーにはならず**、順序の保証を失うだけ。
+
 ## エラーレスポンス
 
 エラーは全て`{ error: string }`を含むJSONで返す。例外の内容はクライアントに返さない。

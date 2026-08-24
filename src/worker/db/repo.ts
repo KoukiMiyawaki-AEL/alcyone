@@ -125,8 +125,14 @@ const sortOrder = (sort: TodoSort = "created"): SQL[] => {
  * `async` wrapper would auto-await the builder and silently destroy the second
  * property.
  */
-export function createRepo(binding: D1Database, ownerId: string) {
-  const db = drizzle(binding);
+/**
+ * `D1DatabaseSession` is accepted alongside `D1Database` because drizzle only
+ * needs `prepare` and `batch`, which both provide. Handlers pass the session so
+ * their reads are consistent with their own writes; the cron passes the plain
+ * database, having no user whose writes to be consistent with.
+ */
+export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: string) {
+  const db = drizzle(binding as D1Database);
 
   /** This owner's project ids, as a subquery. Optionally narrowed to one id. */
   const ownedProjectIds = (id?: number) =>

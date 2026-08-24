@@ -3,13 +3,13 @@
   "name": "alcyone",
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-08-23",
-  // Many npm packages reach for Node built-ins (node:crypto, node:buffer, …).
-  // Enabling this up front avoids runtime import errors when a dependency does.
-  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     // Only /api/* reaches the Hono Worker. Everything else is handled by the
     // asset worker, so unknown paths fall back to index.html and TanStack
     // Router renders them client-side instead of hitting Hono's notFound.
+    // Note: matching requests are billed as Worker invocations, and on the free
+    // plan they return 429 past the daily limit rather than falling back to
+    // the asset worker. Static assets themselves are free and unmetered.
     "run_worker_first": ["/api/*"],
     "not_found_handling": "single-page-application",
   },

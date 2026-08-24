@@ -24,34 +24,48 @@ import { TODO_STATUSES } from "@/worker/db/schema";
 
 import { PRIORITY_LABELS, STATUS_LABELS, type Todo, type TodoFields } from "../types";
 
+/**
+ * Creating and editing are the same form.
+ *
+ * `{ mode: "create" }` carries whatever was typed into the quick-add box, so
+ * reaching for the details never costs the words already written.
+ */
+export type TodoEditor = { mode: "create"; title: string } | { mode: "edit"; todo: Todo };
+
 type TodoDetailDialogProps = {
-  todo: Todo | null;
+  editor: TodoEditor | null;
   onOpenChange: (open: boolean) => void;
-  onSave: (id: number, fields: TodoFields) => Promise<boolean>;
+  /** `todo` is null when creating. Resolves to whether the write happened. */
+  onSave: (fields: TodoFields, todo: Todo | null) => Promise<boolean>;
 };
 
 /** An empty date input reads as "", which the API expects as `null`. */
 const orNull = (value: string) => (value.trim() === "" ? null : value);
 
 /**
- * Edits everything a todo carries.
+ * Everything a todo carries, on one form, for both creating and editing.
  *
- * Sends the whole form rather than a diff. The dialog is the only writer while
- * it is open and the fields are few, so a diff would add a way to be wrong
- * without saving a round trip.
+ * Sends the whole form rather than a diff. It is the only writer while it is
+ * open and the fields are few, so a diff would add a way to be wrong without
+ * saving a round trip.
  */
-export function TodoDetailDialog({ todo, onOpenChange, onSave }: TodoDetailDialogProps) {
+export function TodoDetailDialog({ editor, onOpenChange, onSave }: TodoDetailDialogProps) {
   return (
-    <Dialog open={todo !== null} onOpenChange={onOpenChange}>
+    <Dialog open={editor !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         {/*
-          Keyed by the todo, so opening a different one remounts the form with
-          that row's values. Copying props into state inside an effect would do
-          the same thing one render later, and would also overwrite whatever the
-          user had typed the next time the list refetched.
+          Keyed by what is being edited, so opening a different row remounts the
+          form with that row's values. Copying props into state inside an effect
+          would do the same thing one render later, and would also overwrite
+          whatever the user had typed the next time the list refetched.
         */}
-        {todo ? (
-          <TodoDetailForm key={todo.id} todo={todo} onOpenChange={onOpenChange} onSave={onSave} />
+        {editor ? (
+          <TodoDetailForm
+            key={editor.mode === "edit" ? `edit-${editor.todo.id}` : "create"}
+            editor={editor}
+            onOpenChange={onOpenChange}
+            onSave={onSave}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -59,23 +73,37 @@ export function TodoDetailDialog({ todo, onOpenChange, onSave }: TodoDetailDialo
 }
 
 function TodoDetailForm({
-  todo,
+  editor,
   onOpenChange,
   onSave,
 }: {
-  todo: Todo;
+  editor: TodoEditor;
   onOpenChange: (open: boolean) => void;
-  onSave: (id: number, fields: TodoFields) => Promise<boolean>;
+  onSave: (fields: TodoFields, todo: Todo | null) => Promise<boolean>;
 }) {
   const formId = useId();
-  const [fields, setFields] = useState<TodoFields>({
-    title: todo.title,
-    status: todo.status,
-    startAt: todo.startAt,
-    dueAt: todo.dueAt,
-    description: todo.description,
-    priority: todo.priority,
-  });
+  const creating = editor.mode === "create";
+  const [fields, setFields] = useState<TodoFields>(
+    creating
+      ? // A new task starts with only what was typed. Leaving the rest empty is
+        // the honest default: guessing a start date is worse than none.
+        {
+          title: editor.title,
+          status: "todo",
+          startAt: null,
+          dueAt: null,
+          description: null,
+          priority: 0,
+        }
+      : {
+          title: editor.todo.title,
+          status: editor.todo.status,
+          startAt: editor.todo.startAt,
+          dueAt: editor.todo.dueAt,
+          description: editor.todo.description,
+          priority: editor.todo.priority,
+        },
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -91,7 +119,7 @@ function TodoDetailForm({
     }
 
     setSaving(true);
-    const saved = await onSave(todo.id, fields);
+    const saved = await onSave(fields, creating ? null : editor.todo);
     setSaving(false);
     if (saved) onOpenChange(false);
   }
@@ -99,7 +127,7 @@ function TodoDetailForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>タスクの詳細</DialogTitle>
+        <DialogTitle>{creating ? "タスクを追加" : "タスクの詳細"}</DialogTitle>
         <DialogDescription>
           ステータス・期間・メモを設定します。空欄にすると未設定になります。
         </DialogDescription>
@@ -202,7 +230,7 @@ function TodoDetailForm({
       <DialogFooter>
         <DialogClose render={<Button variant="outline">キャンセル</Button>} />
         <Button type="submit" form={formId} disabled={saving}>
-          {saving ? "保存中…" : "保存"}
+          {saving ? "保存中…" : creating ? "追加" : "保存"}
         </Button>
       </DialogFooter>
     </>

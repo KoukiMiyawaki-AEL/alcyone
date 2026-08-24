@@ -43,8 +43,9 @@ export async function createProject(page: Page, name: string) {
 }
 
 export async function createTodo(page: Page, title: string) {
-  await page.getByLabel("New task title").fill(title);
-  await page.getByRole("button", { name: "Add Todo" }).click();
+  await page.getByLabel("新しいタスクのタイトル").fill(title);
+  // `exact` because "詳細を設定して追加" also contains it.
+  await page.getByRole("button", { name: "追加", exact: true }).click();
   await expect(page.getByText(title)).toBeVisible();
 }
 

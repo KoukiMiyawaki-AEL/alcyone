@@ -11,10 +11,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Project } from "@/features/projects/types";
 import { ShareCard } from "@/features/share/ShareCard";
 import { addTodo, deleteTodo, restoreTodo, updateTodo } from "@/features/todos/api";
-import { TodoDetailDialog } from "@/features/todos/components/TodoDetailDialog";
+import { TodoBoard } from "@/features/todos/components/TodoBoard";
+import { TodoDetailDialog, type TodoEditor } from "@/features/todos/components/TodoDetailDialog";
 import { TodoFilters } from "@/features/todos/components/TodoFilters";
 import { TodoForm } from "@/features/todos/components/TodoForm";
 import { TodoList } from "@/features/todos/components/TodoList";
+import { ViewSwitch } from "@/features/todos/components/ViewSwitch";
 import type { Todo, TodoFields, TodoStatus } from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
 import { toastUndo } from "@/lib/undo-toast";
@@ -43,6 +45,10 @@ const searchSchema = z.object({
     .default("all")
     .catch("all"),
   sort: z.enum(["created", "due", "start", "priority"]).default("created").catch("created"),
+  // The board reads the same rows a different way, so it belongs in the same
+  // URL rather than behind a separate route: a link to a filtered board is
+  // still a link to this project's tasks.
+  view: z.enum(["list", "board"]).default("list").catch("list"),
 });
 
 export type TodoListSearch = z.infer<typeof searchSchema>;
@@ -67,7 +73,18 @@ export const Route = createFileRoute("/projects/$projectId")({
     try {
       res = await apiClient.api.projects[":projectId"].todos.$get({
         param: { projectId: params.projectId },
-        query: { status: deps.status, sort: deps.sort },
+        query:
+          deps.view === "board"
+            ? // A board shows every column at once, so narrowing to one status
+              // would empty three of them. The status filter belongs to the
+              // list; the board's own filter is its columns.
+              //
+              // `limit` is the page size, and the board has no "load more" — a
+              // project past this many live tasks shows only the first
+              // BOARD_LIMIT of them, which the UI says out loud rather than
+              // leaving to be discovered.
+              { status: "all", sort: deps.sort, limit: String(BOARD_LIMIT) }
+            : { status: deps.status, sort: deps.sort },
       });
     } catch {
       // Network failure is transient — show the inline Retry card, not a
@@ -111,6 +128,8 @@ export const Route = createFileRoute("/projects/$projectId")({
   notFoundComponent: ProjectNotFound,
 });
 
+const BOARD_LIMIT = 100;
+
 const TRANSIENT = "タスクの取得に失敗しました。";
 
 function TodosPending() {
@@ -149,14 +168,15 @@ function ProjectNotFound() {
 function ProjectTodosComponent() {
   const router = useRouter();
   const { projectId } = Route.useParams();
-  const { status, sort } = Route.useSearch();
+  const { status, sort, view } = Route.useSearch();
   const navigate = Route.useNavigate();
   const { project, todos, shareToken, error } = Route.useLoaderData();
 
-  // Which todo the detail dialog is editing. Held as the row itself rather
-  // than an id so the dialog can open with values already in it — looking the
-  // row up again would only be a second chance to look up the wrong one.
-  const [editing, setEditing] = useState<Todo | null>(null);
+  // What the detail dialog is working on — a new task or an existing row. Held
+  // as the row itself rather than an id so the dialog opens with values already
+  // in it; looking it up again would only be a second chance to look up the
+  // wrong one.
+  const [editor, setEditor] = useState<TodoEditor | null>(null);
 
   async function handleAdd(title: string) {
     const added = await addTodo(projectId, { title });
@@ -164,14 +184,19 @@ function ProjectTodosComponent() {
     return added;
   }
 
-  async function handleStatusChange(id: number, status: TodoStatus) {
-    if (await updateTodo(id, { status })) await router.invalidate();
-  }
+  async function handleSave(fields: TodoFields, todo: Todo | null) {
+    const saved = todo
+      ? await updateTodo(todo.id, fields)
+      : // `title` is required on create and the form enforces it, but the type
+        // cannot know that, so the fallback is here rather than a cast.
+        await addTodo(projectId, { ...fields, title: fields.title ?? "" });
 
-  async function handleSaveDetails(id: number, fields: TodoFields) {
-    const saved = await updateTodo(id, fields);
     if (saved) await router.invalidate();
     return saved;
+  }
+
+  async function handleStatusChange(id: number, status: TodoStatus) {
+    if (await updateTodo(id, { status })) await router.invalidate();
   }
 
   async function handleDelete(id: number) {
@@ -200,24 +225,38 @@ function ProjectTodosComponent() {
           <CardTitle>Add a task</CardTitle>
         </CardHeader>
         <CardContent>
-          <TodoForm onAdd={handleAdd} />
+          <TodoForm
+            onAdd={handleAdd}
+            onAddWithDetails={(title) => setEditor({ mode: "create", title })}
+          />
         </CardContent>
       </Card>
 
       {project && <ShareCard projectId={project.id} token={shareToken} />}
 
       <TodoDetailDialog
-        todo={editing}
-        onOpenChange={(open) => setEditing(open ? editing : null)}
-        onSave={handleSaveDetails}
+        editor={editor}
+        onOpenChange={(open) => setEditor(open ? editor : null)}
+        onSave={handleSave}
       />
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-medium text-muted-foreground">Tasks</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-medium text-muted-foreground">タスク</h2>
+            <ViewSwitch
+              view={view}
+              onChange={(next) => navigate({ search: (prev) => ({ ...prev, view: next }) })}
+            />
+          </div>
+          {/*
+            The status filter is the list's; the board's columns already are
+            one, so offering both would let the two disagree on screen.
+          */}
           <TodoFilters
             status={status}
             sort={sort}
+            showStatus={view === "list"}
             // Merging into the existing search keeps the other control's value
             // when one of them changes.
             onChange={(next) => navigate({ search: (prev) => ({ ...prev, ...next }) })}
@@ -234,11 +273,18 @@ function ProjectTodosComponent() {
               </Button>
             }
           />
+        ) : view === "board" ? (
+          <TodoBoard
+            todos={todos}
+            onStatusChange={handleStatusChange}
+            onEdit={(todo) => setEditor({ mode: "edit", todo })}
+            truncated={todos.length >= BOARD_LIMIT}
+          />
         ) : (
           <TodoList
             todos={todos}
             onStatusChange={handleStatusChange}
-            onEdit={setEditing}
+            onEdit={(todo) => setEditor({ mode: "edit", todo })}
             onDelete={handleDelete}
           />
         )}

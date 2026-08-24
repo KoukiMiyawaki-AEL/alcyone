@@ -30,6 +30,7 @@
 | [0022](./0022-share-links-cached-in-kv.md) | 公開共有リンクを作り、その描画結果をKVにキャッシュする | Accepted |
 | [0023](./0023-analytics-engine-events.md) | 数えるための出来事をAnalytics Engineに書く | Accepted |
 | [0024](./0024-todo-status-instead-of-completed.md) | Todoの完了状態を真偽値から`status`に置き換え、詳細情報を持たせる | Accepted |
+| [0025](./0025-kanban-board-view.md) | Todoをボード表示でも見せ、追加時から詳細を設定できるようにする | Accepted |
 
 ## ルール
 

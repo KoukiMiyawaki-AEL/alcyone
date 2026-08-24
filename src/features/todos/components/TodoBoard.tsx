@@ -1,0 +1,187 @@
+import { CalendarIcon, FlagIcon, KanbanIcon, PlayIcon } from "lucide-react";
+import { useState } from "react";
+
+import { EmptyState } from "@/components/app/empty-state";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { TODO_STATUSES } from "@/worker/db/schema";
+
+import { PRIORITY_LABELS, STATUS_LABELS, type Todo, type TodoStatus } from "../types";
+
+type TodoBoardProps = {
+  todos: Todo[];
+  onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
+  onEdit: (todo: Todo) => void;
+  /** True when the fetch was capped, so the board is not showing everything. */
+  truncated: boolean;
+};
+
+/**
+ * The same tasks as the list, arranged by where they are rather than by when
+ * they were made.
+ *
+ * Dragging is the fast path and not the only one: HTML5 drag and drop is
+ * unreachable by keyboard, so every card also carries a plain menu of the
+ * columns it can move to. Making the drag accessible would mean a drag
+ * library and its own set of ARIA problems; two working paths cost less and
+ * leave nobody out.
+ */
+export function TodoBoard({ todos, onStatusChange, onEdit, truncated }: TodoBoardProps) {
+  // Which column is under the pointer. Purely visual, but without it a drop
+  // target gives no sign it will accept anything.
+  const [over, setOver] = useState<TodoStatus | null>(null);
+
+  const columns = TODO_STATUSES.map((status) => ({
+    status,
+    items: todos.filter((todo) => todo.status === status),
+  }));
+
+  async function move(id: number, to: TodoStatus, from: TodoStatus) {
+    setOver(null);
+    // A drop onto the column a card already sits in is a no-op, not a write.
+    if (to === from) return;
+    await onStatusChange(id, to);
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {truncated ? (
+        <p className="text-xs text-muted-foreground">
+          表示はこのプロジェクトの最初の{todos.length}件です。すべては一覧表示で確認できます。
+        </p>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {columns.map((column) => (
+          <section
+            key={column.status}
+            aria-label={STATUS_LABELS[column.status]}
+            className={cn(
+              "flex min-h-32 flex-col gap-2 rounded-lg border border-border bg-muted/30 p-2 transition-colors",
+              over === column.status && "border-primary bg-accent",
+            )}
+            onDragOver={(event) => {
+              // Without preventDefault the browser refuses the drop entirely.
+              event.preventDefault();
+              setOver(column.status);
+            }}
+            onDragLeave={() => setOver((current) => (current === column.status ? null : current))}
+            onDrop={(event) => {
+              event.preventDefault();
+              const payload = event.dataTransfer.getData("text/plain");
+              const [id, from] = payload.split(":");
+              if (id && from) void move(Number(id), column.status, from as TodoStatus);
+            }}
+          >
+            <h3 className="flex items-center justify-between px-1 text-sm font-medium">
+              {STATUS_LABELS[column.status]}
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {column.items.length}
+              </span>
+            </h3>
+
+            {column.items.map((todo) => (
+              <BoardCard
+                key={todo.id}
+                todo={todo}
+                onEdit={onEdit}
+                onStatusChange={onStatusChange}
+              />
+            ))}
+          </section>
+        ))}
+      </div>
+
+      {todos.length === 0 ? (
+        <EmptyState
+          icon={KanbanIcon}
+          title="No tasks yet"
+          description="上のフォームから最初のタスクを追加してください。"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function BoardCard({
+  todo,
+  onEdit,
+  onStatusChange,
+}: {
+  todo: Todo;
+  onEdit: (todo: Todo) => void;
+  onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
+}) {
+  return (
+    <article
+      draggable
+      onDragStart={(event) => {
+        // The current status travels with the id so the drop can tell a real
+        // move from a card returned to where it started.
+        event.dataTransfer.setData("text/plain", `${todo.id}:${todo.status}`);
+        event.dataTransfer.effectAllowed = "move";
+      }}
+      className="flex flex-col gap-1.5 rounded-md border border-border bg-background p-2.5 text-sm shadow-xs"
+    >
+      {/*
+        The card's own title is the button: clicking anywhere sensible opens the
+        task, and it is reachable by Tab because it is a real button.
+      */}
+      <button
+        type="button"
+        onClick={() => onEdit(todo)}
+        className="text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none"
+      >
+        {todo.title}
+      </button>
+
+      {todo.description ? (
+        <p className="line-clamp-2 text-xs text-muted-foreground">{todo.description}</p>
+      ) : null}
+
+      {todo.startAt || todo.dueAt || todo.priority > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          {todo.startAt ? (
+            <span className="flex items-center gap-1" aria-label={`開始日 ${todo.startAt}`}>
+              <PlayIcon className="size-3" />
+              {todo.startAt}
+            </span>
+          ) : null}
+          {todo.dueAt ? (
+            <span className="flex items-center gap-1" aria-label={`期限日 ${todo.dueAt}`}>
+              <CalendarIcon className="size-3" />
+              {todo.dueAt}
+            </span>
+          ) : null}
+          {todo.priority > 0 ? (
+            <Badge variant="outline" className="gap-1">
+              <FlagIcon className="size-3" />
+              {PRIORITY_LABELS[todo.priority]}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/*
+        The keyboard path. Buttons rather than a menu: there are three of them
+        at most, and a menu would hide the available moves behind an extra
+        press for no gain.
+      */}
+      <div className="flex flex-wrap gap-1 pt-0.5">
+        {TODO_STATUSES.filter((status) => status !== todo.status).map((status) => (
+          <Button
+            key={status}
+            size="sm"
+            variant="ghost"
+            className="h-6 px-1.5 text-xs text-muted-foreground"
+            onClick={() => void onStatusChange(todo.id, status)}
+            aria-label={`「${todo.title}」を${STATUS_LABELS[status]}へ移動`}
+          >
+            → {STATUS_LABELS[status]}
+          </Button>
+        ))}
+      </div>
+    </article>
+  );
+}

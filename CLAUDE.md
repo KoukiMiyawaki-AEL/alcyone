@@ -254,7 +254,8 @@ loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catch�
 （未知のパスは`index.html`にフォールバックし、TanStack Routerがクライアント側で描画する）。
 APIのパスは必ず`/api/`配下に置くこと。
 
-画面は `/`（Project一覧）、`/projects/$projectId`（そのProjectのTodo一覧）、`/dev/design-system`。
+画面は `/`（Project一覧）、`/projects/$projectId`（Todo。一覧/ボードを`view`で切り替え）、
+`/search`、`/account`、`/s/$token`（公開共有）、`/dev/design-system`。
 動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。
 存在しないリソースはloaderで`notFound()`を投げる。**`notFound()`はthrowで動くので、
 fetchのtry/catchの中で投げると握り潰される** —— catchの外で投げること。

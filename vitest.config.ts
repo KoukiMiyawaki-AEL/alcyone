@@ -36,7 +36,10 @@ export default defineConfig(async () => {
           resolve: { alias: srcAlias },
           test: {
             name: "components",
-            include: ["test/components/**/*.test.tsx"],
+            // `.ts` as well as `.tsx`: this project is "runs in a DOM", not
+            // "renders JSX". A pure function that only the client uses belongs
+            // here, and should not have to take a JSX extension to be found.
+            include: ["test/components/**/*.test.ts", "test/components/**/*.test.tsx"],
             environment: "happy-dom",
             setupFiles: ["./test/setup-dom.ts"],
           },

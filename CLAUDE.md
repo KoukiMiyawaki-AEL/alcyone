@@ -254,7 +254,7 @@ loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catch�
 （未知のパスは`index.html`にフォールバックし、TanStack Routerがクライアント側で描画する）。
 APIのパスは必ず`/api/`配下に置くこと。
 
-画面は `/`（Project一覧）、`/projects/$projectId`（Todo。一覧/ボードを`view`で切り替え）、
+画面は `/`（Project一覧）、`/projects/$projectId`（Todo。一覧/ボード/タイムラインを`view`で切り替え）、
 `/search`、`/account`、`/s/$token`（公開共有）、`/dev/design-system`。
 動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。
 存在しないリソースはloaderで`notFound()`を投げる。**`notFound()`はthrowで動くので、
@@ -287,6 +287,9 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 - **DBアクセスは`createRepo(binding, ownerId)`経由で、返るメソッドは全て所有者でスコープ済み。**
   ハンドラがスコープされていないクエリを受け取ることがないので、絞り込みを忘れられない。
   ここに新しいメソッドを足すときは、必ず`ownerId`で絞ること（[ADR 0014](./docs/adr/0014-user-owned-projects.md)）。
+- **暦日（`startAt` / `dueAt`）の計算はUTCで閉じる。** `new Date(y, m, d)`と`toLocaleDateString`を
+  使わない —— ローカル変換はグリニッジより西の利用者にだけ日付を1日ずらし、**作った側には見えない**
+  （[ADR 0026](./docs/adr/0026-timeline-not-a-gantt-chart.md)。`src/features/todos/timeline.ts`が純粋関数）。
 - **Todoの更新は`PATCH /api/todos/:id`の1本だけ。** 完了もタイトルも日付も同じ部分更新を通る。
   **省略は「変えない」、`null`は「空にする」** —— 同じ扱いにすると「期限を外す」が表現できない
   （[ADR 0024](./docs/adr/0024-todo-status-instead-of-completed.md)。zodの`.transform()`が

@@ -1,12 +1,13 @@
-import { KanbanIcon, ListIcon } from "lucide-react";
+import { CalendarRangeIcon, KanbanIcon, ListIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-export type TodoView = "list" | "board";
+export type TodoView = "list" | "board" | "timeline";
 
 const VIEWS = [
   { value: "list", label: "一覧", icon: ListIcon },
   { value: "board", label: "ボード", icon: KanbanIcon },
+  { value: "timeline", label: "タイムライン", icon: CalendarRangeIcon },
 ] as const;
 
 /**

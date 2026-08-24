@@ -16,6 +16,7 @@ import { TodoDetailDialog, type TodoEditor } from "@/features/todos/components/T
 import { TodoFilters } from "@/features/todos/components/TodoFilters";
 import { TodoForm } from "@/features/todos/components/TodoForm";
 import { TodoList } from "@/features/todos/components/TodoList";
+import { TodoTimeline } from "@/features/todos/components/TodoTimeline";
 import { ViewSwitch } from "@/features/todos/components/ViewSwitch";
 import type { Todo, TodoFields, TodoStatus } from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
@@ -48,7 +49,7 @@ const searchSchema = z.object({
   // The board reads the same rows a different way, so it belongs in the same
   // URL rather than behind a separate route: a link to a filtered board is
   // still a link to this project's tasks.
-  view: z.enum(["list", "board"]).default("list").catch("list"),
+  view: z.enum(["list", "board", "timeline"]).default("list").catch("list"),
 });
 
 export type TodoListSearch = z.infer<typeof searchSchema>;
@@ -74,17 +75,21 @@ export const Route = createFileRoute("/projects/$projectId")({
       res = await apiClient.api.projects[":projectId"].todos.$get({
         param: { projectId: params.projectId },
         query:
-          deps.view === "board"
-            ? // A board shows every column at once, so narrowing to one status
-              // would empty three of them. The status filter belongs to the
-              // list; the board's own filter is its columns.
-              //
-              // `limit` is the page size, and the board has no "load more" — a
-              // project past this many live tasks shows only the first
-              // BOARD_LIMIT of them, which the UI says out loud rather than
-              // leaving to be discovered.
-              { status: "all", sort: deps.sort, limit: String(BOARD_LIMIT) }
-            : { status: deps.status, sort: deps.sort },
+          deps.view === "list"
+            ? { status: deps.status, sort: deps.sort }
+            : {
+                // A board shows every column at once, so narrowing to one
+                // status would empty three of them — its columns *are* the
+                // status filter. The timeline keeps it, because "what is
+                // blocked, and when" is a real question to ask of a calendar.
+                status: deps.view === "board" ? "all" : deps.status,
+                sort: deps.sort,
+                // Neither of these has a "load more", so both stop at one page.
+                // A project with more live tasks shows only the first
+                // WHOLE_VIEW_LIMIT, which they say out loud rather than leaving
+                // it to be discovered.
+                limit: String(WHOLE_VIEW_LIMIT),
+              },
       });
     } catch {
       // Network failure is transient — show the inline Retry card, not a
@@ -128,7 +133,14 @@ export const Route = createFileRoute("/projects/$projectId")({
   notFoundComponent: ProjectNotFound,
 });
 
-const BOARD_LIMIT = 100;
+/**
+ * How many tasks the board and the timeline load.
+ *
+ * Both show everything at once and neither paginates, so this is where they
+ * stop. Not a measured number — a guess at "more than a person can hold on one
+ * screen, fewer than makes the page heavy".
+ */
+const WHOLE_VIEW_LIMIT = 100;
 
 const TRANSIENT = "タスクの取得に失敗しました。";
 
@@ -169,6 +181,9 @@ function ProjectTodosComponent() {
   const router = useRouter();
   const { projectId } = Route.useParams();
   const { status, sort, view } = Route.useSearch();
+  // Read once per render rather than inside the timeline, so the view stays a
+  // pure function of its inputs and its layout can be tested without a clock.
+  const today = new Date().toISOString().slice(0, 10);
   const navigate = Route.useNavigate();
   const { project, todos, shareToken, error } = Route.useLoaderData();
 
@@ -273,12 +288,19 @@ function ProjectTodosComponent() {
               </Button>
             }
           />
+        ) : view === "timeline" ? (
+          <TodoTimeline
+            todos={todos}
+            today={today}
+            truncated={todos.length >= WHOLE_VIEW_LIMIT}
+            onEdit={(todo) => setEditor({ mode: "edit", todo })}
+          />
         ) : view === "board" ? (
           <TodoBoard
             todos={todos}
             onStatusChange={handleStatusChange}
             onEdit={(todo) => setEditor({ mode: "edit", todo })}
-            truncated={todos.length >= BOARD_LIMIT}
+            truncated={todos.length >= WHOLE_VIEW_LIMIT}
           />
         ) : (
           <TodoList

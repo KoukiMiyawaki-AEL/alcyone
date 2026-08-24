@@ -10,6 +10,7 @@ const todo = (over: Partial<Todo> = {}): Todo => ({
   title: "Write tests",
   completed: false,
   createdAt: "2026-08-24T00:00:00.000Z",
+  updatedAt: "2026-08-24T00:00:00.000Z",
   projectId: 1,
   ...over,
 });

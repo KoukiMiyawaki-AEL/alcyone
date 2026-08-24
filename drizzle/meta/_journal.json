@@ -15,6 +15,13 @@
       "when": 1787536038964,
       "tag": "0001_curious_butterfly",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787536450495,
+      "tag": "0002_mysterious_the_hood",
+      "breakpoints": true
     }
   ]
 }

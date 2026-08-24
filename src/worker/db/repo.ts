@@ -22,6 +22,15 @@ import { projectsTable, todosTable } from "./schema";
  * `async` wrapper would auto-await the builder and silently destroy the second
  * property.
  */
+/**
+ * Timestamps are generated here, not by the database.
+ *
+ * SQLite's `current_timestamp` produces `2026-08-23 12:44:13` — UTC, but not
+ * ISO-8601, which `new Date()` then reads as local time. Generating them in
+ * app code keeps one format that both SQL and JS agree on.
+ */
+const now = () => new Date().toISOString();
+
 export function createRepo(binding: D1Database) {
   const db = drizzle(binding);
 
@@ -30,7 +39,11 @@ export function createRepo(binding: D1Database) {
 
     find: (id: number) => db.select().from(projectsTable).where(eq(projectsTable.id, id)),
 
-    create: (values: { name: string }) => db.insert(projectsTable).values(values).returning(),
+    create: (values: { name: string }) =>
+      db
+        .insert(projectsTable)
+        .values({ ...values, createdAt: now() })
+        .returning(),
 
     remove: (id: number) => db.delete(projectsTable).where(eq(projectsTable.id, id)).returning(),
   };
@@ -43,11 +56,20 @@ export function createRepo(binding: D1Database) {
         .where(eq(todosTable.projectId, projectId))
         .orderBy(asc(todosTable.id)),
 
-    create: (values: { title: string; projectId: number }) =>
-      db.insert(todosTable).values(values).returning(),
+    create: (values: { title: string; projectId: number }) => {
+      const timestamp = now();
+      return db
+        .insert(todosTable)
+        .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
+        .returning();
+    },
 
     setCompleted: (id: number, completed: boolean) =>
-      db.update(todosTable).set({ completed }).where(eq(todosTable.id, id)).returning(),
+      db
+        .update(todosTable)
+        .set({ completed, updatedAt: now() })
+        .where(eq(todosTable.id, id))
+        .returning(),
 
     remove: (id: number) => db.delete(todosTable).where(eq(todosTable.id, id)).returning(),
 

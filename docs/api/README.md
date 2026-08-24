@@ -83,6 +83,22 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 （SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。
 経緯は[ADR 0011](../adr/0011-expand-contract-migrations.md)。
 
+## リアルタイム更新（WebSocket）
+
+| Method | Path | 用途 |
+|---|---|---|
+| GET | `/api/realtime` | WebSocketにアップグレードし、自分の変更通知を受ける |
+
+`hc<AppType>` では呼ばない（`new WebSocket("/api/realtime")`）。他のエンドポイントと同じ
+セッションガードの後ろにあり、**認証はCookieで通る**（ブラウザはハンドshakeにヘッダを付けられない）。
+アップグレードでないGETは `426` を返す。
+
+サーバから届くのは `{ "type": "invalidate" }` の**1種類だけ**で、変更内容は載せない。
+受け取ったら再取得する。理由は[ADR 0017](../adr/0017-realtime-with-durable-objects.md)。
+**取りこぼしても再取得で正しくなる**前提の設計なので、配信保証は無い。
+
+自分の非GETリクエストが成功したときだけ配られる。宛先はユーザー単位なので、他人の変更は届かない。
+
 ## エラーレスポンス
 
 エラーは全て`{ error: string }`を含むJSONで返す。例外の内容はクライアントに返さない。
@@ -93,6 +109,7 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 | `404` | `{ error: "Not found" }` | 該当IDが無い / `/api/*`配下の未定義パス |
 | `401` | `{ error: "Unauthorized" }` | セッションが無い。`/api/health` と `/api/auth/*` 以外の全 `/api/*` |
 | `413` | `{ error: "Payload Too Large" }` | 添付が5MBを超えた |
+| `426` | （本文なし） | `/api/realtime` にアップグレードでないGETが来た |
 | `429` | `{ error: "Too Many Requests" }` | レート制限。`Retry-After` ヘッダに秒数。`/api/auth/*`（IP単位）と添付アップロード（ユーザー単位）のみ |
 | `500` | `{ error: "Internal Server Error" }` | 未捕捉例外。`app.onError`が構造化JSONログを出したうえで返す |
 

@@ -29,6 +29,12 @@
   // Per-Cloudflare-location and eventually consistent — Cloudflare is explicit
   // that this is "not an accurate accounting system". It raises the cost of
   // abuse; it is not a quota. `period` accepts only 10 or 60.
+  // One instance per user, holding that user's open tabs. SQLite-backed
+  // because KV-backed namespaces are being wound down.
+  "durable_objects": {
+    "bindings": [{ "name": "USER_CHANNEL", "class_name": "UserChannel" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserChannel"] }],
   "ratelimits": [
     {
       // Unauthenticated and brute-forceable, so keyed by IP.

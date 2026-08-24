@@ -7,6 +7,7 @@ import { createAuth } from "./auth";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todoCursorValue, type Repo } from "./db/repo";
 import { clientIp, enforce } from "./rate-limit";
+import { notifyUser } from "./realtime";
 import { purgeExpiredDeletions } from "./scheduled";
 import { validate } from "./validator";
 
@@ -97,6 +98,37 @@ const app = new Hono<{
     c.set("userId", session.user.id);
     c.set("repo", createRepo(c.env.DB, session.user.id));
     await next();
+  })
+  // Fans a mutation out to the user's other open tabs.
+  //
+  // A middleware rather than a call in each handler, for the same reason the
+  // ownership scoping lives in the repository: twelve call sites is twelve
+  // chances to forget, and the one that gets forgotten is silently stale UI.
+  //
+  // Runs after `next()` and only on a successful non-GET, so a rejected write
+  // does not tell anyone to refetch. Never awaited on the response path — a
+  // broadcast failing must not fail a write that already committed.
+  .use("/api/*", async (c, next) => {
+    await next();
+
+    if (c.req.method === "GET" || !c.res.ok) return;
+
+    try {
+      c.executionCtx.waitUntil(notifyUser(c.env, c.get("userId")));
+    } catch {
+      // `executionCtx` throws when there is none — `app.request()` in tests
+      // supplies no context. The broadcast is not what those tests assert.
+    }
+  })
+  // WebSocket upgrade. Sits behind the same session guard as everything else:
+  // browsers cannot set headers on a WebSocket handshake, but they do send
+  // cookies, which is what the session is carried in.
+  //
+  // Deliberately not part of the `hc<AppType>` surface in any useful sense —
+  // the client opens this with `new WebSocket`, not with the RPC client.
+  .get("/api/realtime", (c) => {
+    const id = c.env.USER_CHANNEL.idFromName(c.get("userId"));
+    return c.env.USER_CHANNEL.get(id).fetch(c.req.raw);
   })
   .get("/api/projects", validate("query", pageQuerySchema), async (c) => {
     const { cursor, limit } = c.req.valid("query");
@@ -357,6 +389,11 @@ const app = new Hono<{
     );
     return c.json({ error: "Internal Server Error" }, 500);
   });
+
+// Re-exported because the runtime resolves `class_name` in wrangler.jsonc
+// against this module's exports. Without it the binding exists but every call
+// fails at runtime, and `wrangler types` cannot type the namespace either.
+export { UserChannel } from "./realtime";
 
 export type AppType = typeof app;
 

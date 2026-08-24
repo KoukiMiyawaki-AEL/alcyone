@@ -19,6 +19,7 @@ Hono + Drizzle ORM + Cloudflare D1 をCloudflare Workers上で動かすバック
 | Lint / Format | `oxlint` + `oxfmt`（[ADR 0006](./docs/adr/0006-oxfmt-formatter.md)） |
 | CI | GitHub Actions（`.github/workflows/ci.yml`で`pnpm run check`。[ADR 0007](./docs/adr/0007-ci-and-codegen.md)） |
 | 認証 | Better Auth（メール+パスワード、D1をdrizzle adapter経由。[ADR 0013](./docs/adr/0013-better-auth.md)） |
+| リアルタイム | Durable Objects + WebSocket hibernation（ユーザー単位。[ADR 0017](./docs/adr/0017-realtime-with-durable-objects.md)） |
 
 D1は現時点でローカル開発のみ（`wrangler dev` + `wrangler d1 migrations apply --local`）。
 `wrangler.jsonc`の`database_id`はプレースホルダで、実際のCloudflareアカウント上のD1は
@@ -234,6 +235,12 @@ mutationは直接`apiClient`を叩かず、feature配下のラッパ（例: `src
 loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catchの外で投げる**。
 どちらもthrowで動くので、catchの中だと握り潰されて汎用エラー表示になる（実際に一度踏んだ）。
 
+**セッションをReactの再レンダリングの条件に使うときは`useAuth()`から読む。**
+`Route.useRouteContext()`はmatchesが再解決されたときにしか更新されないので、
+「セッションが後から届いたら何かを始める」用途では**初回ロードで永久に発火しない**。
+ルートガードが平気なのは、ガードがnavigate時にしか走らないから
+（[ADR 0017](./docs/adr/0017-realtime-with-durable-objects.md)で実際に踏んだ）。
+
 ## API Conventions
 
 リクエストの振り分けは`wrangler.jsonc`の`assets.run_worker_first`で決まる。
@@ -315,6 +322,13 @@ pnpm test --project worker     # APIのみ
 - Base UIのfloating系（DropdownMenu等）は開いてから`findByRole("menu")`で待つ。
 - ルートレベルの`test`オプションはプロジェクトに継承されない。設定は必ずプロジェクト側に書く。
 
+**E2Eを計測するときは他のコマンドを同時に走らせない。** 並行させると実行時間が数十倍になり、
+アプリのバグに見える失敗が出る（このセッションで2回、いずれも誤診の原因になった）。
+
+Durable Objectのテストは`cloudflare:test`の`runInDurableObject`で中を覗く。
+`waitUntil`に載せた処理を検証するときは`createExecutionContext()`を渡し、
+アサーションの前に`waitOnExecutionContext(ctx)`で待つ（待たないと当然まだ走っていない）。
+
 ## Not Yet
 
 以下は初期スコープに含めない。
@@ -327,7 +341,7 @@ pnpm test --project worker     # APIのみ
 - TanStack Query
 - Turborepo
 - Alchemy
-- KV / Queues / Durable Objects
+- KV / Queues
 - Storybook
 - テストカバレッジの計測
 - メール送信（そのためメール検証とパスワード再発行は無効）

@@ -83,6 +83,23 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 （SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。
 経緯は[ADR 0011](../adr/0011-expand-contract-migrations.md)。
 
+## データエクスポート
+
+| Method | Path | 用途 | パラメータ | 成功 | 失敗 |
+|---|---|---|---|---|---|
+| POST | `/api/exports` | エクスポートを開始 | — | `202 { id, status }` | — |
+| GET | `/api/exports/:instanceId` | 状態と（完成していれば）manifest | — | `{ id, status, manifest }` | `404` |
+| GET | `/api/exports/:instanceId/:part` | 1部品をダウンロード | `part`は`manifest`/`projects`/`todos`/`attachments` | `200` JSON | `400` `404` |
+
+`manifest`が非nullなら完成している。**部品はmanifestより先に書かれる**ので、
+manifestに載っているものは必ず存在する。
+
+R2の鍵は**セッションのuser idから組み立てる**ので、`instanceId`を他人のものにしても
+他人のデータは出てこない（`manifest: null` か `404`）。
+
+エクスポートは**論理削除済みの行も含む**（各行の`deletedAt`で判別できる）。
+保持期限は他と同じ30日で、退会時にも消える。理由は[ADR 0020](../adr/0020-data-export-workflow.md)。
+
 ## 検索
 
 | Method | Path | 用途 | パラメータ | 成功 | 失敗 |

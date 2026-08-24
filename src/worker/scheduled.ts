@@ -1,5 +1,5 @@
 import { createMaintenance } from "./db/maintenance";
-import { enqueueObjectCleanup } from "./object-cleanup";
+import { enqueueObjectCleanup, listKeys } from "./object-cleanup";
 
 /**
  * How long a soft-deleted row is kept before it is really gone.
@@ -26,10 +26,27 @@ export async function purgeExpiredDeletions(env: CloudflareBindings, now = new D
     await enqueueObjectCleanup(env.OBJECT_CLEANUP, keys);
   }
 
+  // Exports hold a copy of everything the user had, so keeping them forever
+  // would quietly undo both the retention policy and the soft-delete window
+  // they were exported during. Found by age rather than by rows, because they
+  // have none.
+  const staleExports = await listKeys(
+    env.ATTACHMENTS,
+    "exports/",
+    (object) => object.uploaded.toISOString() < cutoff,
+  );
+  if (staleExports.length > 0) {
+    await enqueueObjectCleanup(env.OBJECT_CLEANUP, staleExports);
+  }
+
   const [, todos, projects] = await maintenance.purgeDeletedBefore(cutoff);
   // Counting the returned rows, not `meta.changes` — see maintenance.ts for
   // why that number cannot be believed once a trigger is in play.
-  const counts = { todos: todos.length, projects: projects.length, objects: keys.length };
+  const counts = {
+    todos: todos.length,
+    projects: projects.length,
+    objects: keys.length + staleExports.length,
+  };
 
   // Structured so the Workers dashboard can filter on it. A scheduled job that
   // logs nothing is indistinguishable from one that never ran.

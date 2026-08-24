@@ -2,9 +2,10 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
 
+import { exportPrefix } from "./data-export";
 import * as authSchema from "./db/auth-schema";
 import { createRepo } from "./db/repo";
-import { deleteObjectsNow } from "./object-cleanup";
+import { deleteObjectsNow, listKeys } from "./object-cleanup";
 
 /**
  * Built per request. `env` does not exist at module scope in Workers, and a
@@ -53,8 +54,15 @@ export function createAuth(env: CloudflareBindings) {
           // because R2 takes at most 1000 keys per call — an account with more
           // attachments than that used to fail to delete at all.
           const keys = (await repo.ownedAttachmentKeys()).map((row) => row.key);
-          if (keys.length > 0) {
-            await deleteObjectsNow(env.ATTACHMENTS, keys);
+
+          // Data exports are the user's own data written back out, so leaving
+          // them behind would make "delete my account" false in the most
+          // literal way. They have no rows, so they are found by prefix.
+          const exports = await listKeys(env.ATTACHMENTS, exportPrefix(user.id));
+
+          const all = [...keys, ...exports];
+          if (all.length > 0) {
+            await deleteObjectsNow(env.ATTACHMENTS, all);
           }
 
           await repo.batch(repo.purgeOwnedData());

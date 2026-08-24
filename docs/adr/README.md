@@ -25,6 +25,7 @@
 | [0017](./0017-realtime-with-durable-objects.md) | リアルタイム更新をDurable Objects + WebSocketで実装する | Accepted |
 | [0018](./0018-fts5-trigram-search.md) | 全文検索をFTS5のtrigramトークナイザで実装する | Accepted |
 | [0019](./0019-object-cleanup-queue.md) | R2オブジェクトの削除をQueuesに逃がす | Accepted |
+| [0020](./0020-data-export-workflow.md) | データエクスポートをWorkflowsで実装する | Accepted |
 
 ## ルール
 

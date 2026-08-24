@@ -4,6 +4,7 @@ import type { RequestIdVariables } from "hono/request-id";
 import { z } from "zod";
 
 import { createAuth } from "./auth";
+import { exportKey, type ExportManifest, type ExportParams } from "./data-export";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todoCursorValue, type Repo } from "./db/repo";
 import { handleObjectCleanup, type CleanupMessage } from "./object-cleanup";
@@ -41,6 +42,14 @@ const updateTodoSchema = z.object({
 const pageQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
+});
+
+const exportParamSchema = z.object({ instanceId: z.string().min(1).max(200) });
+
+// An enum, not a string: `part` becomes part of an R2 key, and a free-form one
+// would let a caller walk out of their own prefix.
+const exportPartParamSchema = exportParamSchema.extend({
+  part: z.enum(["manifest", "projects", "todos", "attachments"]),
 });
 
 const searchQuerySchema = z
@@ -134,6 +143,57 @@ const app = new Hono<{
   .get("/api/realtime", (c) => {
     const id = c.env.USER_CHANNEL.idFromName(c.get("userId"));
     return c.env.USER_CHANNEL.get(id).fetch(c.req.raw);
+  })
+  // Starts a data export and returns immediately with an id to poll. The work
+  // is a Workflow, so "started" is durable — the response is a receipt, not a
+  // promise this Worker has to keep alive.
+  .post("/api/exports", async (c) => {
+    const instance = await c.env.DATA_EXPORT.create({
+      params: { userId: c.get("userId") } satisfies ExportParams,
+    });
+    return c.json({ id: instance.id, status: (await instance.status()).status }, 202);
+  })
+  // Polled by the client. Returns the manifest once there is one, so a caller
+  // never has to guess which parts exist.
+  .get("/api/exports/:instanceId", validate("param", exportParamSchema), async (c) => {
+    const { instanceId } = c.req.valid("param");
+
+    let status;
+    try {
+      status = await c.env.DATA_EXPORT.get(instanceId);
+    } catch {
+      // An unknown id and someone else's id must look the same from here.
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    const state = await status.status();
+    // The instance id alone proves nothing about who owns the export, so
+    // ownership is checked against the object store, where the key carries the
+    // user id. Trusting the workflow's own output would trust the caller.
+    const manifest = await c.env.ATTACHMENTS.get(
+      exportKey(c.get("userId"), instanceId, "manifest"),
+    );
+
+    return c.json({
+      id: instanceId,
+      status: state.status,
+      manifest: manifest ? ((await manifest.json()) as ExportManifest) : null,
+    });
+  })
+  // Streams one part. Scoped by building the key from the session's user id
+  // rather than accepting one, so there is no key to tamper with.
+  .get("/api/exports/:instanceId/:part", validate("param", exportPartParamSchema), async (c) => {
+    const { instanceId, part } = c.req.valid("param");
+    const object = await c.env.ATTACHMENTS.get(exportKey(c.get("userId"), instanceId, part));
+
+    if (!object) return c.json({ error: "Not found" }, 404);
+
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Disposition": `attachment; filename="${part}.json"`,
+      },
+    });
   })
   // Search runs across every project the user owns, so it is not nested under
   // one. `q` is required and non-empty: an empty search is not "everything",
@@ -411,6 +471,7 @@ const app = new Hono<{
 // against this module's exports. Without it the binding exists but every call
 // fails at runtime, and `wrangler types` cannot type the namespace either.
 export { UserChannel } from "./realtime";
+export { DataExportWorkflow } from "./data-export";
 
 export type AppType = typeof app;
 

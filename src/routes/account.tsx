@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { DataExportCard } from "@/features/exports/DataExportCard";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/account")({
@@ -57,6 +58,8 @@ function AccountComponent() {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
       <PageHeader title="Account" description={user?.email ?? ""} />
+
+      <DataExportCard />
 
       <Card className="border-destructive/40">
         <CardHeader>

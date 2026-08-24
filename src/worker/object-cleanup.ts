@@ -23,6 +23,31 @@ const MESSAGES_PER_SEND = 100;
 
 export type CleanupMessage = { keys: string[] };
 
+/**
+ * Every object under a prefix.
+ *
+ * R2 lists in pages, and a caller that ignores `truncated` silently deletes
+ * only the first thousand — which looks like success.
+ */
+export async function listKeys(
+  bucket: R2Bucket,
+  prefix: string,
+  keepIf?: (object: R2Object) => boolean,
+): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const page = await bucket.list({ prefix, cursor });
+    for (const object of page.objects) {
+      if (!keepIf || keepIf(object)) keys.push(object.key);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  return keys;
+}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));

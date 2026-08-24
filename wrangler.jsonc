@@ -38,6 +38,12 @@
   // Deleting R2 objects is the work that must not sit on the cron's critical
   // path: the number of objects is unbounded, and a retention job that times
   // out halfway is worse than one that hands the work off.
+  // Exporting a user's data is several dependent steps against two different
+  // stores. A Workflow makes each step's result durable, so a failure resumes
+  // from the last completed step instead of re-reading the whole database.
+  "workflows": [
+    { "name": "alcyone-data-export", "binding": "DATA_EXPORT", "class_name": "DataExportWorkflow" },
+  ],
   "queues": {
     "producers": [{ "queue": "alcyone-object-cleanup", "binding": "OBJECT_CLEANUP" }],
     "consumers": [

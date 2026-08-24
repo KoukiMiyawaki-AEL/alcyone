@@ -472,6 +472,28 @@ export function createRepo(binding: D1Database, ownerId: string) {
         .from(attachmentsTable)
         .where(inArray(attachmentsTable.todoId, allOwnedTodoIds())),
     /**
+     * Everything this owner has, for the data export.
+     *
+     * Deliberately ignores `deletedAt`, unlike every list method here. A user
+     * asking for their data should get what the service actually holds, and
+     * "we still have it but decided not to show you" is the wrong answer to
+     * that question. Each row carries its own `deletedAt` so the state is
+     * visible rather than hidden.
+     *
+     * Unpaginated on purpose. An export that stops at fifty rows is not an
+     * export; the size limit this creates is handled by writing to R2 rather
+     * than by returning less.
+     */
+    exportable: {
+      projects: () => db.select().from(projectsTable).where(eq(projectsTable.ownerId, ownerId)),
+      todos: () => db.select().from(todosTable).where(inArray(todosTable.id, allOwnedTodoIds())),
+      attachments: () =>
+        db
+          .select()
+          .from(attachmentsTable)
+          .where(inArray(attachmentsTable.todoId, allOwnedTodoIds())),
+    },
+    /**
      * The only way to make more than one statement atomic on D1. Statements run
      * sequentially and non-concurrently; if any fails the whole sequence rolls
      * back. `db` itself is deliberately not exported so query construction

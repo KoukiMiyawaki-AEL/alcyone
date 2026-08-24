@@ -8,11 +8,11 @@ test.describe("list filtering", () => {
     await page.getByRole("link", { name: /Filter project/ }).click();
     await createTodo(page, "still open");
     await createTodo(page, "finished");
-    await page.getByRole("checkbox", { name: /Mark "finished" as done/ }).click();
+    await page.getByRole("checkbox", { name: "「finished」を完了にする" }).click();
   });
 
   test("filtering puts the state in the URL and re-queries", async ({ page }) => {
-    await page.getByRole("button", { name: "Active" }).click();
+    await page.getByRole("button", { name: "未完了" }).click();
 
     await expect(page).toHaveURL(/status=active/);
     await expect(page.getByText("still open")).toBeVisible();
@@ -20,7 +20,7 @@ test.describe("list filtering", () => {
   });
 
   test("a filtered view survives a reload", async ({ page }) => {
-    await page.getByRole("button", { name: "Done" }).click();
+    await page.getByRole("button", { name: "完了", exact: true }).click();
     await expect(page.getByText("finished")).toBeVisible();
 
     await page.reload();
@@ -31,8 +31,8 @@ test.describe("list filtering", () => {
   });
 
   test("changing sort keeps the status filter", async ({ page }) => {
-    await page.getByRole("button", { name: "Active" }).click();
-    await page.getByRole("button", { name: "Priority" }).click();
+    await page.getByRole("button", { name: "未完了" }).click();
+    await page.getByRole("button", { name: "優先度" }).click();
 
     await expect(page).toHaveURL(/status=active/);
     await expect(page).toHaveURL(/sort=priority/);

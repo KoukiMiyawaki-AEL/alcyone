@@ -7,6 +7,7 @@ import {
   gt,
   inArray,
   isNull,
+  ne,
   or,
   sql,
   type SQL,
@@ -16,7 +17,14 @@ import { drizzle } from "drizzle-orm/d1";
 
 import { type Cursor } from "./cursor";
 import { ftsRank, toFtsQuery, toLikePattern, todosFts } from "./fts";
-import { attachmentsTable, projectsTable, sharesTable, todosTable } from "./schema";
+import {
+  TODO_STATUSES,
+  attachmentsTable,
+  projectsTable,
+  sharesTable,
+  todosTable,
+  type TodoStatus,
+} from "./schema";
 
 /**
  * Timestamps are generated here, not by the database.
@@ -27,10 +35,30 @@ import { attachmentsTable, projectsTable, sharesTable, todosTable } from "./sche
  */
 const now = () => new Date().toISOString();
 
-export type TodoStatus = "all" | "active" | "done";
-export type TodoSort = "created" | "due" | "priority";
-export type TodoListOptions = {
+/**
+ * What a list is narrowed to. Distinct from `TodoStatus` in the schema, which
+ * is what a single row *is* — one of these ("active") is not a status at all
+ * but "anything unfinished", and conflating the two is how a filter ends up
+ * silently unable to express a state.
+ */
+export type TodoFilter = "all" | "active" | (typeof TODO_STATUSES)[number];
+/**
+ * The fields a caller may set on a todo. Optional throughout, and `null` where
+ * clearing is meaningful — `undefined` means "leave it", `null` means "empty
+ * it".
+ */
+export type TodoFields = {
+  title?: string;
   status?: TodoStatus;
+  startAt?: string | null;
+  dueAt?: string | null;
+  description?: string | null;
+  priority?: number;
+};
+
+export type TodoSort = "created" | "due" | "priority" | "start";
+export type TodoListOptions = {
+  status?: TodoFilter;
   sort?: TodoSort;
   cursor?: Cursor | null;
   limit?: number;
@@ -40,13 +68,21 @@ export type TodoListOptions = {
 const sortColumn = {
   created: todosTable.id,
   due: todosTable.dueAt,
+  start: todosTable.startAt,
   priority: todosTable.priority,
 } as const;
 
 export const todoCursorValue = (
   sort: TodoSort,
-  row: { id: number; dueAt: string | null; priority: number },
-) => (sort === "due" ? row.dueAt : sort === "priority" ? row.priority : row.id);
+  row: { id: number; startAt: string | null; dueAt: string | null; priority: number },
+) =>
+  sort === "due"
+    ? row.dueAt
+    : sort === "start"
+      ? row.startAt
+      : sort === "priority"
+        ? row.priority
+        : row.id;
 
 /**
  * "Everything after this position", expressed for the active sort.
@@ -67,8 +103,9 @@ function afterCursor(sort: TodoSort, cursor: Cursor): SQL | undefined {
     );
   }
 
-  // Due date ascending with nulls last: a null cursor is already in the
-  // trailing group, so only ids can move it forward.
+  // A date column ascending with nulls last — `due` and `start` behave
+  // identically here. A null cursor is already in the trailing group, so only
+  // ids can move it forward.
   if (cursor.value === null) {
     return and(sql`${column} is null`, gt(todosTable.id, cursor.id));
   }
@@ -79,8 +116,13 @@ function afterCursor(sort: TodoSort, cursor: Cursor): SQL | undefined {
   );
 }
 
-const statusFilter = (status: TodoStatus = "all"): SQL | undefined =>
-  status === "all" ? undefined : eq(todosTable.completed, status === "done");
+const statusFilter = (filter: TodoFilter = "all"): SQL | undefined => {
+  if (filter === "all") return undefined;
+  // "active" is every state except the terminal one, so it keeps meaning the
+  // right thing when another state is added.
+  if (filter === "active") return ne(todosTable.status, "done");
+  return eq(todosTable.status, filter);
+};
 
 const sortOrder = (sort: TodoSort = "created"): SQL[] => {
   switch (sort) {
@@ -89,6 +131,10 @@ const sortOrder = (sort: TodoSort = "created"): SQL[] => {
       // itself SQLite sorts NULL lowest, which would present "no deadline" as
       // the most urgent thing on the list.
       return [sql`${todosTable.dueAt} is null`, asc(todosTable.dueAt)];
+    case "start":
+      // Same nulls-last reasoning as `due`: a task with no start date is not
+      // the one to begin with.
+      return [sql`${todosTable.startAt} is null`, asc(todosTable.startAt)];
     case "priority":
       return [desc(todosTable.priority)];
     case "created":
@@ -274,18 +320,38 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         // the list is shuffling itself.
         .orderBy(...sortOrder(options.sort), asc(todosTable.id)),
 
-    create: (values: { title: string; projectId: number; dueAt?: string; priority?: number }) => {
+    create: (values: TodoFields & { title: string; projectId: number }) => {
       const timestamp = now();
+      const status = values.status ?? "todo";
       return db
         .insert(todosTable)
-        .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
+        .values({
+          ...values,
+          status,
+          // Written alongside `status` until the contract migration drops it.
+          // Two columns saying the same thing is exactly the drift this change
+          // is removing, so nothing reads this one — but a rollback to the
+          // previous deploy would, and that is what the expand step is for.
+          completed: status === "done",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })
         .returning();
     },
 
-    update: (id: number, values: { dueAt?: string | null; priority?: number }) =>
+    /**
+     * Partial update. Only the keys present are written, so clearing a date
+     * (`null`) and leaving it alone (absent) stay distinguishable — collapsing
+     * them would make "remove the due date" impossible to express.
+     */
+    update: (id: number, values: TodoFields) =>
       db
         .update(todosTable)
-        .set({ ...values, updatedAt: now() })
+        .set({
+          ...values,
+          ...(values.status === undefined ? {} : { completed: values.status === "done" }),
+          updatedAt: now(),
+        })
         .where(
           and(
             eq(todosTable.id, id),
@@ -295,10 +361,10 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         )
         .returning(),
 
-    setCompleted: (id: number, completed: boolean) =>
+    setStatus: (id: number, status: TodoStatus) =>
       db
         .update(todosTable)
-        .set({ completed, updatedAt: now() })
+        .set({ status, completed: status === "done", updatedAt: now() })
         .where(
           and(
             eq(todosTable.id, id),

@@ -8,6 +8,7 @@ import { createAuth } from "./auth";
 import { exportKey, type ExportManifest, type ExportParams } from "./data-export";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todoCursorValue, type Repo } from "./db/repo";
+import { TODO_STATUSES } from "./db/schema";
 import { bookmarkCookie, openSession } from "./db/session";
 import {
   DEAD_LETTER_QUEUE,
@@ -25,20 +26,12 @@ const createProjectSchema = z.object({
   name: z.string().trim().min(1).max(100),
 });
 
-const createTodoSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-});
-
 const idParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
 const projectIdParamSchema = z.object({
   projectId: z.coerce.number().int().positive(),
-});
-
-const updateTodoSchema = z.object({
-  completed: z.boolean(),
 });
 
 /**
@@ -70,19 +63,65 @@ const searchQuerySchema = z
 
 const todoQuerySchema = z
   .object({
-    status: z.enum(["all", "active", "done"]).default("all"),
-    sort: z.enum(["created", "due", "priority"]).default("created"),
+    // "all" and "active" are not statuses — they are ways of not naming one.
+    // Keeping them in the same parameter lets one query string express both
+    // kinds of question.
+    status: z.enum(["all", "active", ...TODO_STATUSES]).default("all"),
+    sort: z.enum(["created", "due", "start", "priority"]).default("created"),
   })
   .extend(pageQuerySchema.shape);
 
 /** Small enough to buffer in a Worker's 128MB without thinking about it. */
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
-const patchTodoSchema = z.object({
-  // `null` clears the due date, which is different from omitting the field.
-  dueAt: z.iso.date().nullable().optional(),
-  priority: z.number().int().min(0).max(3).optional(),
-});
+/**
+ * The editable fields of a todo, all optional.
+ *
+ * Every date and text field is `.nullable()`: `null` clears it and omitting it
+ * leaves it alone. Collapsing those two would make "remove the due date"
+ * impossible to say.
+ */
+const todoFieldsSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    status: z.enum(TODO_STATUSES).optional(),
+    startAt: z.iso.date().nullable().optional(),
+    dueAt: z.iso.date().nullable().optional(),
+    // Trimmed to null so that "" and "no description" are one state rather
+    // than two that render identically.
+    // The transform has to pass `undefined` straight through. Folding it into
+    // `null` here would make every partial update blank the description —
+    // "not mentioned" and "cleared" are exactly what this schema exists to
+    // keep apart, and a test caught it doing the opposite.
+    description: z
+      .string()
+      .max(2000)
+      .nullable()
+      .optional()
+      .transform((value) =>
+        value === undefined
+          ? undefined
+          : value === null || value.trim() === ""
+            ? null
+            : value.trim(),
+      ),
+    priority: z.number().int().min(0).max(3).optional(),
+  })
+  // Only catches the case where both arrive together — a request that moves
+  // only one of them is checked against the other by the database. Recorded
+  // here so the gap is visible rather than assumed away.
+  .refine((v) => !(v.startAt && v.dueAt) || v.startAt <= v.dueAt, {
+    message: "startAt must not be after dueAt",
+    path: ["startAt"],
+  });
+
+// A title is the one thing a todo cannot be created without; everything else
+// is optional here for the same reason it is optional on update — a task often
+// starts as a line of text and gains detail later.
+const createTodoSchema = z.intersection(
+  z.object({ title: z.string().trim().min(1).max(200) }),
+  todoFieldsSchema,
+);
 
 const app = new Hono<{
   Bindings: CloudflareBindings;
@@ -411,7 +450,7 @@ const app = new Hono<{
     validate("json", createTodoSchema),
     async (c) => {
       const { projectId } = c.req.valid("param");
-      const { title } = c.req.valid("json");
+      const fields = c.req.valid("json");
       const repo = c.get("repo");
 
       // Checked explicitly so a missing project is a 404 rather than an
@@ -421,18 +460,22 @@ const app = new Hono<{
         return c.json({ error: "Not found" }, 404);
       }
 
-      const [todo] = await repo.todos.create({ title, projectId });
+      const [todo] = await repo.todos.create({ ...fields, projectId });
       return c.json(todo, 201);
     },
   )
+  // One partial update covering every field, replacing the pair of endpoints
+  // that used to split "completed" from everything else. That split existed
+  // because completion was a boolean and the rest were details; now that
+  // completion is a field like any other, two endpoints would only be two
+  // places to forget the ownership scope.
   .patch(
     "/api/todos/:id",
     validate("param", idParamSchema),
-    validate("json", updateTodoSchema),
+    validate("json", todoFieldsSchema),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { completed } = c.req.valid("json");
-      const [todo] = await c.get("repo").todos.setCompleted(id, completed);
+      const [todo] = await c.get("repo").todos.update(id, c.req.valid("json"));
 
       if (!todo) {
         return c.json({ error: "Not found" }, 404);
@@ -451,21 +494,6 @@ const app = new Hono<{
 
     return c.body(null, 204);
   })
-  .patch(
-    "/api/todos/:id/details",
-    validate("param", idParamSchema),
-    validate("json", patchTodoSchema),
-    async (c) => {
-      const { id } = c.req.valid("param");
-      const [todo] = await c.get("repo").todos.update(id, c.req.valid("json"));
-
-      if (!todo) {
-        return c.json({ error: "Not found" }, 404);
-      }
-
-      return c.json(todo);
-    },
-  )
   .get("/api/todos/:id/attachments", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
     return c.json(await c.get("repo").attachments.listByTodo(id));

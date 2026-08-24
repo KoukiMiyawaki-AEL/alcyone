@@ -1,22 +1,29 @@
 import { apiClient } from "@/lib/api-client";
 import { mutate } from "@/lib/mutate";
 
-export const addTodo = (projectId: string, title: string) =>
+import type { TodoFields } from "./types";
+
+export const addTodo = (projectId: string, fields: { title: string } & TodoFields) =>
   mutate(
     () =>
       apiClient.api.projects[":projectId"].todos.$post({
         param: { projectId },
-        json: { title },
+        json: fields,
       }),
     "タスクの追加に失敗しました。",
   );
 
-export const setTodoCompleted = (id: number, completed: boolean) =>
+/**
+ * Partial update. Absent keys are left alone and `null` clears a field, so the
+ * caller passes only what it means to change — a checkbox sends a status and
+ * nothing else, and cannot accidentally blank a description it never showed.
+ */
+export const updateTodo = (id: number, fields: TodoFields) =>
   mutate(
     () =>
       apiClient.api.todos[":id"].$patch({
         param: { id: String(id) },
-        json: { completed },
+        json: fields,
       }),
     "タスクの更新に失敗しました。",
   );

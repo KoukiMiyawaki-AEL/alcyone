@@ -50,6 +50,6 @@ export async function createTodo(page: Page, title: string) {
 
 /** Opens a row's overflow menu and clicks an item in it. */
 export async function rowAction(page: Page, rowLabel: string, item: string) {
-  await page.getByRole("button", { name: `Actions for "${rowLabel}"` }).click();
+  await page.getByRole("button", { name: `「${rowLabel}」の操作` }).click();
   await page.getByRole("menuitem", { name: item }).click();
 }

@@ -1,5 +1,6 @@
 import { Link, createFileRoute, notFound, redirect, useRouter } from "@tanstack/react-router";
 import { FolderXIcon, TriangleAlertIcon } from "lucide-react";
+import { useState } from "react";
 import { z } from "zod";
 
 import { EmptyState } from "@/components/app/empty-state";
@@ -9,11 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Project } from "@/features/projects/types";
 import { ShareCard } from "@/features/share/ShareCard";
-import { addTodo, deleteTodo, restoreTodo, setTodoCompleted } from "@/features/todos/api";
+import { addTodo, deleteTodo, restoreTodo, updateTodo } from "@/features/todos/api";
+import { TodoDetailDialog } from "@/features/todos/components/TodoDetailDialog";
 import { TodoFilters } from "@/features/todos/components/TodoFilters";
 import { TodoForm } from "@/features/todos/components/TodoForm";
 import { TodoList } from "@/features/todos/components/TodoList";
-import type { Todo } from "@/features/todos/types";
+import type { Todo, TodoFields, TodoStatus } from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
 import { toastUndo } from "@/lib/undo-toast";
 
@@ -36,8 +38,11 @@ const searchSchema = z.object({
   // `default` covers the params being absent — so a plain link to the project
   // needs no search at all. `catch` covers them being present but nonsense,
   // which is what a hand-edited URL produces.
-  status: z.enum(["all", "active", "done"]).default("all").catch("all"),
-  sort: z.enum(["created", "due", "priority"]).default("created").catch("created"),
+  status: z
+    .enum(["all", "active", "todo", "in_progress", "blocked", "done"])
+    .default("all")
+    .catch("all"),
+  sort: z.enum(["created", "due", "start", "priority"]).default("created").catch("created"),
 });
 
 export type TodoListSearch = z.infer<typeof searchSchema>;
@@ -148,14 +153,25 @@ function ProjectTodosComponent() {
   const navigate = Route.useNavigate();
   const { project, todos, shareToken, error } = Route.useLoaderData();
 
+  // Which todo the detail dialog is editing. Held as the row itself rather
+  // than an id so the dialog can open with values already in it — looking the
+  // row up again would only be a second chance to look up the wrong one.
+  const [editing, setEditing] = useState<Todo | null>(null);
+
   async function handleAdd(title: string) {
-    const added = await addTodo(projectId, title);
+    const added = await addTodo(projectId, { title });
     if (added) await router.invalidate();
     return added;
   }
 
-  async function handleToggle(id: number, completed: boolean) {
-    if (await setTodoCompleted(id, completed)) await router.invalidate();
+  async function handleStatusChange(id: number, status: TodoStatus) {
+    if (await updateTodo(id, { status })) await router.invalidate();
+  }
+
+  async function handleSaveDetails(id: number, fields: TodoFields) {
+    const saved = await updateTodo(id, fields);
+    if (saved) await router.invalidate();
+    return saved;
   }
 
   async function handleDelete(id: number) {
@@ -190,6 +206,12 @@ function ProjectTodosComponent() {
 
       {project && <ShareCard projectId={project.id} token={shareToken} />}
 
+      <TodoDetailDialog
+        todo={editing}
+        onOpenChange={(open) => setEditing(open ? editing : null)}
+        onSave={handleSaveDetails}
+      />
+
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-medium text-muted-foreground">Tasks</h2>
@@ -213,7 +235,12 @@ function ProjectTodosComponent() {
             }
           />
         ) : (
-          <TodoList todos={todos} onToggle={handleToggle} onDelete={handleDelete} />
+          <TodoList
+            todos={todos}
+            onStatusChange={handleStatusChange}
+            onEdit={setEditing}
+            onDelete={handleDelete}
+          />
         )}
       </div>
     </div>

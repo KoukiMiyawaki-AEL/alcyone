@@ -6,6 +6,16 @@ import { index, int, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-c
 
 import { user } from "./auth-schema";
 
+/**
+ * The states a task can be in.
+ *
+ * Ordered as work moves through them, which is also the order they are offered
+ * in the UI. `blocked` is deliberately not a terminal state — it is a reason
+ * work stopped, not a way it ended.
+ */
+export const TODO_STATUSES = ["todo", "in_progress", "blocked", "done"] as const;
+export type TodoStatus = (typeof TODO_STATUSES)[number];
+
 export const projectsTable = sqliteTable(
   "projects",
   {
@@ -91,8 +101,25 @@ export const todosTable = sqliteTable(
     projectId: int()
       .notNull()
       .references(() => projectsTable.id),
+    /**
+     * Where the task is, not whether it is finished.
+     *
+     * Replaces the `completed` boolean above, which stays only until the
+     * contract migration drops it (ADR 0011). A boolean cannot say "started"
+     * or "blocked", and adding those as separate flags would let a row claim
+     * to be both at once.
+     *
+     * Stored as text rather than an integer so the value is readable in a
+     * query result and in an export; the set is small and fixed, so the space
+     * cost is irrelevant next to being able to read what a row says.
+     */
+    status: text().notNull().default("todo").$type<TodoStatus>(),
+    /** ISO-8601 date (no time). Null means not scheduled to start. */
+    startAt: text(),
     /** ISO-8601 date (no time). Null means no due date. */
     dueAt: text(),
+    /** Free text. Null and empty are the same thing to a reader, so writes normalise to null. */
+    description: text(),
     /** 0 = none, 3 = highest. An integer so SQL can order by it directly. */
     priority: int().notNull().default(0),
     /** Soft delete. Null means live. See `projects.deletedAt`. */
@@ -102,5 +129,9 @@ export const todosTable = sqliteTable(
     // The FK check runs on every projects delete/update, and every todo list
     // query filters on projectId and deletedAt together.
     index("todos_project_id_idx").on(t.projectId, t.deletedAt),
+    // Every list query filters by project and deletion; most now also filter
+    // by status. Without status in the index that last predicate is a scan
+    // over the project's rows, and D1 bills what it scans.
+    index("todos_status_idx").on(t.projectId, t.deletedAt, t.status),
   ],
 );

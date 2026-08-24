@@ -27,7 +27,7 @@ async function addTodo(headers: Headers, projectId: number, title: string, detai
 
   if (details) {
     await app.request(
-      `/api/todos/${created.id}/details`,
+      `/api/todos/${created.id}`,
       { method: "PATCH", headers: jsonHeaders(headers), body: JSON.stringify(details) },
       env,
     );
@@ -120,7 +120,7 @@ describe("pagination", () => {
           {
             method: "PATCH",
             headers: jsonHeaders(headers),
-            body: JSON.stringify({ completed: true }),
+            body: JSON.stringify({ status: "done" }),
           },
           env,
         );

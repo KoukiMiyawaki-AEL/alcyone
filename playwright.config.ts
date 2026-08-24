@@ -10,6 +10,14 @@ export default defineConfig({
   // These drive one shared database, so they cannot run concurrently.
   workers: 1,
   fullyParallel: false,
+  // Five seconds — Playwright's default — turned out to be smaller than a Vite
+  // dev server's first navigation to a route on a busy machine, which made the
+  // first test of each spec file fail while the rest of the file passed in
+  // about a second. The warm-up below removes most of that cost; this covers
+  // what it cannot, and it is a property of the dev server rather than of the
+  // application. A genuine failure now takes longer to report, which is the
+  // price of not reporting failures that are not there.
+  expect: { timeout: 15_000 },
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",

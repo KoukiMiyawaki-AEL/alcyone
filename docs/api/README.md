@@ -29,16 +29,36 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 | POST | `/api/projects` | Project作成 | `{ name: string }`（1〜100文字） | `201` `Project` | `400` |
 | DELETE | `/api/projects/:projectId` | Project削除（**論理削除**。配下のTodoも同時に） | — | `204` (body無し) | `400`, `404` |
 | POST | `/api/projects/:projectId/restore` | Projectの復元（配下のTodoも同時に） | — | `200` `Project` | `400`, `404` |
-| GET | `/api/projects/:projectId/todos` | そのProjectのTodo一覧 | クエリ: `status`=`all`\|`active`\|`done`、`sort`=`created`\|`due`\|`priority` | `{ project, todos }` | `400`, `404` |
-| POST | `/api/projects/:projectId/todos` | Todo作成 | `{ title: string }`（1〜200文字） | `201` `Todo` | `400`, `404` |
-| PATCH | `/api/todos/:id` | 完了状態の更新 | `{ completed: boolean }` | `200` `Todo` | `400`, `404` |
-| PATCH | `/api/todos/:id/details` | 期限・優先度の更新 | `{ dueAt?: string\|null, priority?: 0-3 }` | `200` `Todo` | `400`, `404` |
+| GET | `/api/projects/:projectId/todos` | そのProjectのTodo一覧 | クエリ: `status`（下記）、`sort`=`created`\|`start`\|`due`\|`priority`、`cursor`、`limit` | `{ project, todos, nextCursor }` | `400`, `404` |
+| POST | `/api/projects/:projectId/todos` | Todo作成 | `{ title }` 必須 + 下記の任意フィールド | `201` `Todo` | `400`, `404` |
+| PATCH | `/api/todos/:id` | Todoの部分更新（下記の任意フィールド） | 下記 | `200` `Todo` | `400`, `404` |
 | GET | `/api/todos/:id/attachments` | 添付一覧 | — | `Attachment[]` | `400`, `404` |
 | POST | `/api/todos/:id/attachments` | 添付の追加（multipart、フィールド名`file`、5MBまで） | multipart | `201` `Attachment` | `400`, `404`, `413` |
 | GET | `/api/attachments/:id` | 添付のダウンロード | — | ファイル本体 | `400`, `404` |
 | DELETE | `/api/attachments/:id` | 添付の削除（R2のオブジェクトも消す） | — | `204` (body無し) | `400`, `404` |
 | DELETE | `/api/todos/:id` | Todo削除（**論理削除**） | — | `204` (body無し) | `400`, `404` |
 | POST | `/api/todos/:id/restore` | Todoの復元 | — | `200` `Todo` | `400`, `404` |
+
+### Todoのフィールド
+
+作成と更新で同じ形を受け取る。**すべて任意で、省略は「変えない」、`null` は「空にする」。**
+この2つを同じ扱いにすると「期限を外す」が表現できなくなる。
+
+| フィールド | 値 | 備考 |
+|---|---|---|
+| `title` | 1〜200文字 | 作成時のみ必須 |
+| `status` | `todo` \| `in_progress` \| `blocked` \| `done` | 既定は `todo` |
+| `startAt` | ISO日付 または `null` | `dueAt` より後は `400` |
+| `dueAt` | ISO日付 または `null` | |
+| `description` | 2000文字まで、または `null` | 空白のみは `null` に正規化される |
+| `priority` | 0〜3 | 0 = なし、3 = 最高 |
+
+一覧の `status` クエリは**行のstatusに加えて** `all` と `active` を取る。
+`active` は「`done` 以外」で、どれか1つのstatusでは表せない問い（「まだ残っているもの」）を
+同じパラメータで書けるようにするため。
+
+`PATCH /api/todos/:id` は1本にまとめてある。以前は完了状態とそれ以外で2本に分かれていたが、
+完了が他と同じ1フィールドになった今、2本あることは所有スコープを書き忘れる場所が2つあることでしかない。
 
 Todo一覧が裸の配列ではなく`{ project, todos }`を返すのは、画面のタイトルに使うProject情報を
 2回目のリクエスト無しで得るためと、将来カーソルを足すときに破壊的変更にしないため。
@@ -52,7 +72,9 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 
 `Todo` / `Project` の型は`src/worker/db/schema.ts`から`drizzle-orm`が推論する。
 
-- `Todo`: `{ id, title, completed, createdAt, updatedAt, projectId, dueAt: string|null, priority: 0-3, deletedAt: string|null }`
+- `Todo`: `{ id, title, status, createdAt, updatedAt, projectId, startAt: string|null, dueAt: string|null, description: string|null, priority: 0-3, deletedAt: string|null }`
+  - `completed: boolean` も返るが、**`status` に置き換え済みで読んではいけない**。
+    contractのマイグレーションで列ごと消えるまでの間だけ残っている（[ADR 0011](../adr/0011-expand-contract-migrations.md)）
 - `Project`: `{ id: number, name: string, createdAt: string, ownerId: string, deletedAt: string | null }`
 
 一覧は**キーセットページネーション**。`nextCursor`が非nullなら次のページがあり、そのまま

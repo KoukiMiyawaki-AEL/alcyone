@@ -3,16 +3,17 @@ import { ListTodoIcon } from "lucide-react";
 import { EmptyState } from "@/components/app/empty-state";
 import { Separator } from "@/components/ui/separator";
 
-import type { Todo } from "../types";
+import type { Todo, TodoStatus } from "../types";
 import { TodoRow } from "./TodoRow";
 
 type TodoListProps = {
   todos: Todo[];
-  onToggle: (id: number, completed: boolean) => Promise<void>;
+  onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
+  onEdit: (todo: Todo) => void;
   onDelete: (id: number) => Promise<void>;
 };
 
-export function TodoList({ todos, onToggle, onDelete }: TodoListProps) {
+export function TodoList({ todos, onStatusChange, onEdit, onDelete }: TodoListProps) {
   if (todos.length === 0) {
     return (
       <EmptyState
@@ -28,7 +29,12 @@ export function TodoList({ todos, onToggle, onDelete }: TodoListProps) {
       {todos.map((todo, index) => (
         <div key={todo.id}>
           {index > 0 ? <Separator /> : null}
-          <TodoRow todo={todo} onToggle={onToggle} onDelete={onDelete} />
+          <TodoRow
+            todo={todo}
+            onStatusChange={onStatusChange}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
         </div>
       ))}
     </div>

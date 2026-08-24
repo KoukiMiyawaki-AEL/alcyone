@@ -32,7 +32,7 @@ test.describe("ownership and deletion", () => {
     await page.getByRole("link", { name: /Undo project/ }).click();
     await createTodo(page, "bring me back");
 
-    await rowAction(page, "bring me back", "Delete");
+    await rowAction(page, "bring me back", "削除");
     await expect(page.getByText("bring me back")).toBeHidden();
 
     // Soft delete is only worth anything if the user can reach the undo.

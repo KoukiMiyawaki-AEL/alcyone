@@ -181,16 +181,16 @@ describe("cross-user isolation", () => {
   it("cannot toggle another user's todo by id", async () => {
     const res = await app.request(
       `/api/todos/${aliceTodo.id}`,
-      { method: "PATCH", headers: jsonHeaders(bob), body: JSON.stringify({ completed: true }) },
+      { method: "PATCH", headers: jsonHeaders(bob), body: JSON.stringify({ status: "done" }) },
       env,
     );
     expect(res.status).toBe(404);
 
     // And the row is genuinely untouched, not merely reported as missing.
-    const row = await env.DB.prepare("SELECT completed FROM todos WHERE id = ?")
+    const row = await env.DB.prepare("SELECT status FROM todos WHERE id = ?")
       .bind(aliceTodo.id)
-      .first<{ completed: number }>();
-    expect(row?.completed).toBe(0);
+      .first<{ status: string }>();
+    expect(row?.status).toBe("todo");
   });
 
   it("cannot delete another user's todo by id", async () => {

@@ -189,7 +189,7 @@ describe("the search index tracks its table", () => {
   });
 
   it("survives an update that does not touch the title", async () => {
-    // Toggling completed fires the same trigger, which deletes and reinserts
+    // Changing the status fires the same trigger, which deletes and reinserts
     // the index entry. If either half were wrong, ordinary use would quietly
     // erode the index.
     const todo = await addTodo(alice, projectId, "still findable");
@@ -199,7 +199,7 @@ describe("the search index tracks its table", () => {
       {
         method: "PATCH",
         headers: jsonHeaders(alice),
-        body: JSON.stringify({ completed: true }),
+        body: JSON.stringify({ status: "done" }),
       },
       env,
     );

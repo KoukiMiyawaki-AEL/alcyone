@@ -1,23 +1,28 @@
 import { Button } from "@/components/ui/button";
 
-import type { TodoSort, TodoStatus } from "../types";
+import { STATUS_LABELS, type TodoFilter, type TodoSort } from "../types";
 
 type TodoFiltersProps = {
-  status: TodoStatus;
+  status: TodoFilter;
   sort: TodoSort;
-  onChange: (next: { status?: TodoStatus; sort?: TodoSort }) => void;
+  onChange: (next: { status?: TodoFilter; sort?: TodoSort }) => void;
 };
 
-const STATUSES: { value: TodoStatus; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "done", label: "Done" },
+const STATUSES: { value: TodoFilter; label: string }[] = [
+  { value: "all", label: "すべて" },
+  // "未完了" rather than one of the real statuses: the common question is
+  // "what is still open", which no single status answers.
+  { value: "active", label: "未完了" },
+  { value: "in_progress", label: STATUS_LABELS.in_progress },
+  { value: "blocked", label: STATUS_LABELS.blocked },
+  { value: "done", label: STATUS_LABELS.done },
 ];
 
 const SORTS: { value: TodoSort; label: string }[] = [
-  { value: "created", label: "Created" },
-  { value: "due", label: "Due date" },
-  { value: "priority", label: "Priority" },
+  { value: "created", label: "作成順" },
+  { value: "start", label: "開始日" },
+  { value: "due", label: "期限日" },
+  { value: "priority", label: "優先度" },
 ];
 
 /**
@@ -27,7 +32,7 @@ const SORTS: { value: TodoSort; label: string }[] = [
 export function TodoFilters({ status, sort, onChange }: TodoFiltersProps) {
   return (
     <div className="flex flex-wrap items-center gap-4">
-      <div role="group" aria-label="Filter by status" className="flex gap-1">
+      <div role="group" aria-label="ステータスで絞り込む" className="flex gap-1">
         {STATUSES.map((option) => (
           <Button
             key={option.value}
@@ -41,7 +46,7 @@ export function TodoFilters({ status, sort, onChange }: TodoFiltersProps) {
         ))}
       </div>
 
-      <div role="group" aria-label="Sort by" className="flex gap-1">
+      <div role="group" aria-label="並び替え" className="flex gap-1">
         {SORTS.map((option) => (
           <Button
             key={option.value}

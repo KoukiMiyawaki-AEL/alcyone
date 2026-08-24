@@ -52,7 +52,7 @@ describe("Todos API", () => {
     expect(createRes.status).toBe(201);
     expect((await createRes.json()) as Todo).toMatchObject({
       title: "Write plan",
-      completed: false,
+      status: "todo",
       projectId,
     });
 
@@ -67,7 +67,21 @@ describe("Todos API", () => {
     expect(await res.json()).toMatchObject({ error: "Bad Request" });
   });
 
-  it("toggles completed state", async () => {
+  it("moves a todo between statuses", async () => {
+    const { id } = (await (await addTodo(headers, projectId, "Ship it")).json()) as Todo;
+
+    for (const status of ["in_progress", "blocked", "done", "todo"] as const) {
+      const res = await app.request(
+        `/api/todos/${id}`,
+        { method: "PATCH", headers: jsonHeaders(headers), body: JSON.stringify({ status }) },
+        env,
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json(), status).toMatchObject({ id, status });
+    }
+  });
+
+  it("rejects a status that is not one of the known ones", async () => {
     const { id } = (await (await addTodo(headers, projectId, "Ship it")).json()) as Todo;
 
     const res = await app.request(
@@ -75,12 +89,94 @@ describe("Todos API", () => {
       {
         method: "PATCH",
         headers: jsonHeaders(headers),
-        body: JSON.stringify({ completed: true }),
+        body: JSON.stringify({ status: "almost" }),
       },
       env,
     );
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ id, completed: true });
+    expect(res.status).toBe(400);
+  });
+
+  it("changes only the fields it was given", async () => {
+    // The partial update is what lets the checkbox send a status without
+    // blanking a description it never showed the user.
+    const { id } = (await (await addTodo(headers, projectId, "Detailed")).json()) as Todo;
+
+    await app.request(
+      `/api/todos/${id}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(headers),
+        body: JSON.stringify({ dueAt: "2026-12-01", description: "先に設計を書く", priority: 3 }),
+      },
+      env,
+    );
+
+    const res = await app.request(
+      `/api/todos/${id}`,
+      { method: "PATCH", headers: jsonHeaders(headers), body: JSON.stringify({ status: "done" }) },
+      env,
+    );
+
+    expect(await res.json()).toMatchObject({
+      status: "done",
+      dueAt: "2026-12-01",
+      description: "先に設計を書く",
+      priority: 3,
+    });
+  });
+
+  it("tells clearing a field apart from leaving it alone", async () => {
+    const created = await app.request(
+      `/api/projects/${projectId}/todos`,
+      {
+        method: "POST",
+        headers: jsonHeaders(headers),
+        body: JSON.stringify({ title: "Scheduled", startAt: "2026-11-01", dueAt: "2026-11-30" }),
+      },
+      env,
+    );
+    const { id } = (await created.json()) as Todo;
+
+    const cleared = await app.request(
+      `/api/todos/${id}`,
+      { method: "PATCH", headers: jsonHeaders(headers), body: JSON.stringify({ dueAt: null }) },
+      env,
+    );
+
+    // `null` empties the due date; `startAt` was not mentioned, so it stays.
+    expect(await cleared.json()).toMatchObject({ startAt: "2026-11-01", dueAt: null });
+  });
+
+  it("refuses a start date after the due date", async () => {
+    const { id } = (await (await addTodo(headers, projectId, "Backwards")).json()) as Todo;
+
+    const res = await app.request(
+      `/api/todos/${id}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(headers),
+        body: JSON.stringify({ startAt: "2026-12-02", dueAt: "2026-12-01" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("stores an empty description as nothing at all", async () => {
+    // "" and "no description" render identically, so keeping both would be two
+    // states the user cannot tell apart.
+    const { id } = (await (await addTodo(headers, projectId, "Blank note")).json()) as Todo;
+
+    const res = await app.request(
+      `/api/todos/${id}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(headers),
+        body: JSON.stringify({ description: "   " }),
+      },
+      env,
+    );
+    expect(await res.json()).toMatchObject({ description: null });
   });
 
   it("deletes a todo", async () => {

@@ -32,7 +32,7 @@ async function addTodo(
 
   return (await (
     await app.request(
-      `/api/todos/${created.id}/details`,
+      `/api/todos/${created.id}`,
       { method: "PATCH", headers: jsonHeaders(headers), body: JSON.stringify(details) },
       env,
     )
@@ -67,7 +67,7 @@ describe("todo filtering and sorting", () => {
     await addTodo(headers, projectId, "still open");
     await app.request(
       `/api/todos/${done.id}`,
-      { method: "PATCH", headers: jsonHeaders(headers), body: JSON.stringify({ completed: true }) },
+      { method: "PATCH", headers: jsonHeaders(headers), body: JSON.stringify({ status: "done" }) },
       env,
     );
 
@@ -117,7 +117,7 @@ describe("todo filtering and sorting", () => {
 
     const cleared = (await (
       await app.request(
-        `/api/todos/${todo.id}/details`,
+        `/api/todos/${todo.id}`,
         { method: "PATCH", headers: jsonHeaders(headers), body: JSON.stringify({ dueAt: null }) },
         env,
       )
@@ -133,7 +133,7 @@ describe("todo filtering and sorting", () => {
     const bob = await signUp("bob@example.com");
 
     const res = await app.request(
-      `/api/todos/${todo.id}/details`,
+      `/api/todos/${todo.id}`,
       { method: "PATCH", headers: jsonHeaders(bob), body: JSON.stringify({ priority: 3 }) },
       env,
     );

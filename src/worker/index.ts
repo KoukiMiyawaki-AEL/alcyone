@@ -4,12 +4,20 @@ import { z } from "zod";
 import { createRepo, type Repo } from "./db/repo";
 import { validate } from "./validator";
 
+const createProjectSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+});
+
 const createTodoSchema = z.object({
   title: z.string().trim().min(1).max(200),
 });
 
 const idParamSchema = z.object({
   id: z.coerce.number().int().positive(),
+});
+
+const projectIdParamSchema = z.object({
+  projectId: z.coerce.number().int().positive(),
 });
 
 const updateTodoSchema = z.object({
@@ -27,15 +35,72 @@ const app = new Hono<{ Bindings: CloudflareBindings; Variables: { repo: Repo } }
     await next();
   })
   .get("/api/health", (c) => c.json({ ok: true }))
-  .get("/api/todos", async (c) => {
-    const todos = await c.get("repo").todos.list();
-    return c.json(todos);
+  .get("/api/projects", async (c) => {
+    const projects = await c.get("repo").projects.list();
+    return c.json(projects);
   })
-  .post("/api/todos", validate("json", createTodoSchema), async (c) => {
-    const { title } = c.req.valid("json");
-    const [todo] = await c.get("repo").todos.create({ title });
-    return c.json(todo, 201);
+  .post("/api/projects", validate("json", createProjectSchema), async (c) => {
+    const { name } = c.req.valid("json");
+    const [project] = await c.get("repo").projects.create({ name });
+    return c.json(project, 201);
   })
+  .delete("/api/projects/:projectId", validate("param", projectIdParamSchema), async (c) => {
+    const { projectId } = c.req.valid("param");
+    const repo = c.get("repo");
+
+    // Children before the parent, or the foreign key rejects it. Batched
+    // because D1 has no interactive transactions: statements run sequentially
+    // and the whole sequence rolls back if any one fails. A future audit-log
+    // insert belongs in this same array.
+    const [, deleted] = await repo.batch([
+      repo.todos.removeByProject(projectId),
+      repo.projects.remove(projectId),
+    ]);
+
+    if (deleted.length === 0) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    return c.body(null, 204);
+  })
+  .get("/api/projects/:projectId/todos", validate("param", projectIdParamSchema), async (c) => {
+    const { projectId } = c.req.valid("param");
+    const repo = c.get("repo");
+
+    // One round trip for both. Returning an envelope rather than a bare array
+    // gives the page its title without a second request, and leaves room to
+    // add a cursor later without a breaking change to the response shape.
+    const [[project], todos] = await repo.batch([
+      repo.projects.find(projectId),
+      repo.todos.listByProject(projectId),
+    ]);
+
+    if (!project) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    return c.json({ project, todos });
+  })
+  .post(
+    "/api/projects/:projectId/todos",
+    validate("param", projectIdParamSchema),
+    validate("json", createTodoSchema),
+    async (c) => {
+      const { projectId } = c.req.valid("param");
+      const { title } = c.req.valid("json");
+      const repo = c.get("repo");
+
+      // Checked explicitly so a missing project is a 404 rather than an
+      // opaque 500 from the foreign key.
+      const [project] = await repo.projects.find(projectId);
+      if (!project) {
+        return c.json({ error: "Not found" }, 404);
+      }
+
+      const [todo] = await repo.todos.create({ title, projectId });
+      return c.json(todo, 201);
+    },
+  )
   .patch(
     "/api/todos/:id",
     validate("param", idParamSchema),

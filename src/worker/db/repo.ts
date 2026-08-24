@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/d1";
 
-import { todosTable } from "./schema";
+import { projectsTable, todosTable } from "./schema";
 
 /**
  * The single place `drizzle()` is constructed and the single place a query
@@ -25,18 +25,39 @@ import { todosTable } from "./schema";
 export function createRepo(binding: D1Database) {
   const db = drizzle(binding);
 
-  const todos = {
-    list: () => db.select().from(todosTable).orderBy(asc(todosTable.id)),
+  const projects = {
+    list: () => db.select().from(projectsTable).orderBy(asc(projectsTable.id)),
 
-    create: (values: { title: string }) => db.insert(todosTable).values(values).returning(),
+    find: (id: number) => db.select().from(projectsTable).where(eq(projectsTable.id, id)),
+
+    create: (values: { name: string }) => db.insert(projectsTable).values(values).returning(),
+
+    remove: (id: number) => db.delete(projectsTable).where(eq(projectsTable.id, id)).returning(),
+  };
+
+  const todos = {
+    listByProject: (projectId: number) =>
+      db
+        .select()
+        .from(todosTable)
+        .where(eq(todosTable.projectId, projectId))
+        .orderBy(asc(todosTable.id)),
+
+    create: (values: { title: string; projectId: number }) =>
+      db.insert(todosTable).values(values).returning(),
 
     setCompleted: (id: number, completed: boolean) =>
       db.update(todosTable).set({ completed }).where(eq(todosTable.id, id)).returning(),
 
     remove: (id: number) => db.delete(todosTable).where(eq(todosTable.id, id)).returning(),
+
+    /** Children must go before the parent — see `projects.remove` in index.ts. */
+    removeByProject: (projectId: number) =>
+      db.delete(todosTable).where(eq(todosTable.projectId, projectId)),
   };
 
   return {
+    projects,
     todos,
     /**
      * The only way to make more than one statement atomic on D1. Statements run

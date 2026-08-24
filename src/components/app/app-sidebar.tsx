@@ -1,10 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { ListTodoIcon, PaletteIcon } from "lucide-react";
+import { FolderIcon, PaletteIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { to: "/", label: "Todos", icon: ListTodoIcon },
+  { to: "/", label: "Projects", icon: FolderIcon },
   { to: "/dev/design-system", label: "Design System", icon: PaletteIcon },
 ] as const;
 

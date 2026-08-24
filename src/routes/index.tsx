@@ -6,33 +6,33 @@ import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { addTodo, deleteTodo, setTodoCompleted } from "@/features/todos/api";
-import { TodoForm } from "@/features/todos/components/TodoForm";
-import { TodoList } from "@/features/todos/components/TodoList";
-import type { Todo } from "@/features/todos/types";
+import { addProject, deleteProject } from "@/features/projects/api";
+import { ProjectForm } from "@/features/projects/components/ProjectForm";
+import { ProjectList } from "@/features/projects/components/ProjectList";
+import type { Project } from "@/features/projects/types";
 import { apiClient } from "@/lib/api-client";
 
 export const Route = createFileRoute("/")({
-  loader: async (): Promise<{ todos: Todo[]; error: string | null }> => {
+  loader: async (): Promise<{ projects: Project[]; error: string | null }> => {
     try {
-      const res = await apiClient.api.todos.$get();
+      const res = await apiClient.api.projects.$get();
       if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
-      return { todos: await res.json(), error: null };
+      return { projects: await res.json(), error: null };
     } catch {
-      return { todos: [], error: "タスクの取得に失敗しました。" };
+      return { projects: [], error: "プロジェクトの取得に失敗しました。" };
     }
   },
-  pendingComponent: TodosPending,
+  pendingComponent: ProjectsPending,
   component: IndexComponent,
 });
 
-function TodosPending() {
+function ProjectsPending() {
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Todos" description="Manage your tasks" />
+      <PageHeader title="Projects" description="Group your tasks by project" />
       <Card>
         <CardHeader>
-          <CardTitle>Tasks</CardTitle>
+          <CardTitle>Projects</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <Skeleton className="h-9 w-full" />
@@ -46,37 +46,33 @@ function TodosPending() {
 
 function IndexComponent() {
   const router = useRouter();
-  const { todos, error } = Route.useLoaderData();
+  const { projects, error } = Route.useLoaderData();
 
-  async function handleAdd(title: string) {
-    const added = await addTodo(title);
+  async function handleAdd(name: string) {
+    const added = await addProject(name);
     if (added) await router.invalidate();
     return added;
   }
 
-  async function handleToggle(id: number, completed: boolean) {
-    if (await setTodoCompleted(id, completed)) await router.invalidate();
-  }
-
   async function handleDelete(id: number) {
-    if (await deleteTodo(id)) await router.invalidate();
+    if (await deleteProject(id)) await router.invalidate();
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Todos" description="Manage your tasks" />
+      <PageHeader title="Projects" description="Group your tasks by project" />
 
       <Card>
         <CardHeader>
-          <CardTitle>Add a task</CardTitle>
+          <CardTitle>Add a project</CardTitle>
         </CardHeader>
         <CardContent>
-          <TodoForm onAdd={handleAdd} />
+          <ProjectForm onAdd={handleAdd} />
         </CardContent>
       </Card>
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Tasks</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">Projects</h2>
         {error ? (
           <EmptyState
             icon={TriangleAlertIcon}
@@ -89,7 +85,7 @@ function IndexComponent() {
             }
           />
         ) : (
-          <TodoList todos={todos} onToggle={handleToggle} onDelete={handleDelete} />
+          <ProjectList projects={projects} onDelete={handleDelete} />
         )}
       </div>
     </div>

@@ -59,7 +59,7 @@ function RootNotFoundComponent() {
       description="お探しのページは存在しません。"
       action={
         <Button size="sm" variant="outline" render={<Link to="/" />}>
-          Go to Todos
+          Go to Projects
         </Button>
       }
     />

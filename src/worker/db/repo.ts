@@ -427,7 +427,13 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
               and(
                 inArray(todosTable.projectId, ownedProjectIds()),
                 isNull(todosTable.deletedAt),
-                sql`${todosTable.title} LIKE ${toLikePattern(query)} ESCAPE '\\'`,
+                // Both columns, to match what the FTS path searches. A short
+                // query finding fewer things than a long one would be a strange
+                // rule to explain.
+                or(
+                  sql`${todosTable.title} LIKE ${toLikePattern(query)} ESCAPE '\\'`,
+                  sql`${todosTable.description} LIKE ${toLikePattern(query)} ESCAPE '\\'`,
+                ),
                 options.cursor ? gt(todosTable.id, options.cursor.id) : undefined,
               ),
             )

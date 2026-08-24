@@ -126,6 +126,67 @@ describe("search", () => {
     expect(await search(alice, "temporarily")).toEqual(["temporarily gone"]);
   });
 
+  it("finds a todo by text in its note, not just its title", async () => {
+    // The note holds the detail that did not fit in the title, which makes it
+    // exactly the text worth being able to search.
+    const todo = await addTodo(alice, projectId, "曖昧なタイトル");
+    await app.request(
+      `/api/todos/${todo.id}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(alice),
+        body: JSON.stringify({ description: "認証のリファクタリングが前提" }),
+      },
+      env,
+    );
+
+    expect(await search(alice, "リファクタリング")).toEqual(["曖昧なタイトル"]);
+  });
+
+  it("stops matching a note that was edited away", async () => {
+    // The update trigger has to remove the old text of *every* indexed column,
+    // not just the title.
+    const todo = await addTodo(alice, projectId, "タイトル");
+    await app.request(
+      `/api/todos/${todo.id}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(alice),
+        body: JSON.stringify({ description: "古い内容" }),
+      },
+      env,
+    );
+    await app.request(
+      `/api/todos/${todo.id}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(alice),
+        body: JSON.stringify({ description: "新しい内容" }),
+      },
+      env,
+    );
+
+    expect(await search(alice, "古い内容")).toEqual([]);
+    expect(await search(alice, "新しい内容")).toEqual(["タイトル"]);
+  });
+
+  it("finds a note with a query too short for a trigram", async () => {
+    // The LIKE fallback searches both columns too — a short query finding
+    // fewer things than a long one would be a strange rule to explain.
+    const todo = await addTodo(alice, projectId, "短い検索の対象");
+    await app.request(
+      `/api/todos/${todo.id}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(alice),
+        body: JSON.stringify({ description: "設計" }),
+      },
+      env,
+    );
+
+    expect(await search(alice, "設計")).toEqual(["短い検索の対象"]);
+  });
+
   it("searches across every project the user owns", async () => {
     const other = await createProject(alice, "Other");
     await addTodo(alice, projectId, "shared keyword here");

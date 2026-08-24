@@ -146,6 +146,8 @@ R2の鍵は**セッションのuser idから組み立てる**ので、`instanceI
 |---|---|---|---|---|---|
 | GET | `/api/search` | 所有する全Projectを横断してTodoを検索 | `q`（必須、1〜200字）、`cursor`、`limit` | `{ items, nextCursor }` | `400` |
 
+**タイトルとメモ（`description`）の両方**を検索する。
+
 `items`の各行はTodoに`rank`が付いたもの。**`rank`は小さいほど良い一致**（bm25の符号）で、
 短い検索語の経路では常に`0`。
 

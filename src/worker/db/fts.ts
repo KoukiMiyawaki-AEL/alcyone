@@ -2,7 +2,11 @@ import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
- * Query-side handle on the `todos_fts` virtual table (migration 0009).
+ * Query-side handle on the `todos_fts` virtual table (created in migration
+ * 0009, widened to cover `description` in 0013).
+ *
+ * The columns here have to match the virtual table's, in order: `MATCH`
+ * searches every indexed column, and the triggers name each one explicitly.
  *
  * Deliberately NOT exported from `schema.ts`. drizzle-kit reads only that file,
  * so keeping this out of it means the generator never learns the table exists —
@@ -13,6 +17,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const todosFts = sqliteTable("todos_fts", {
   rowid: integer("rowid").primaryKey(),
   title: text("title"),
+  description: text("description"),
 });
 
 /**

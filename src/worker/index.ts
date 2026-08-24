@@ -3,6 +3,7 @@ import { requestId } from "hono/request-id";
 import type { RequestIdVariables } from "hono/request-id";
 import { z } from "zod";
 
+import { recordServerError, recordShareView } from "./analytics";
 import { createAuth } from "./auth";
 import { exportKey, type ExportManifest, type ExportParams } from "./data-export";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
@@ -153,7 +154,11 @@ const app = new Hono<{
   })
   .get("/api/shared/:token", validate("param", shareTokenParamSchema), async (c) => {
     const { token } = c.req.valid("param");
-    const view = await getSharedView(c.env.SHARE_CACHE, c.get("db"), token);
+    const { view, cached } = await getSharedView(c.env.SHARE_CACHE, c.get("db"), token);
+
+    // Fire-and-forget by design: `writeDataPoint` returns nothing and cannot
+    // fail the request. Counting a read must never cost the read.
+    recordShareView(c.env.ANALYTICS, token, view ? (cached ? "hit" : "miss") : "not_found");
 
     // A revoked link and a token that never existed answer identically. Any
     // difference would let someone probe for tokens that used to work.
@@ -568,6 +573,14 @@ const app = new Hono<{
         path: c.req.path,
       }),
     );
+    // Logged above for reading one failure; recorded here for counting them.
+    // A log tells you what happened, a time series tells you it started.
+    recordServerError(c.env.ANALYTICS, {
+      path: c.req.path,
+      method: c.req.method,
+      requestId: c.get("requestId"),
+    });
+
     return c.json({ error: "Internal Server Error" }, 500);
   });
 

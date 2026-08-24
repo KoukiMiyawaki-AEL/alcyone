@@ -81,20 +81,23 @@ export async function getSharedView(
   cache: KVNamespace,
   db: D1Database | D1DatabaseSession,
   token: string,
-): Promise<SharedView | null> {
+): Promise<{ view: SharedView | null; cached: boolean }> {
   const cached = await cache.get<SharedView>(cacheKey(token), {
     type: "json",
     cacheTtl: SHARE_TTL_SECONDS,
   });
-  if (cached) return cached;
+  // Whether this was a hit is reported back rather than kept private: it is the
+  // only way to tell whether the cache is earning anything, and the caller is
+  // where that gets recorded.
+  if (cached) return { view: cached, cached: true };
 
   const view = await readSharedView(db, token);
-  if (!view) return null;
+  if (!view) return { view: null, cached: false };
 
   await cache.put(cacheKey(token), JSON.stringify(view), {
     expirationTtl: SHARE_TTL_SECONDS,
   });
-  return view;
+  return { view, cached: false };
 }
 
 /**

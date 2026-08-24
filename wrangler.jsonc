@@ -83,6 +83,9 @@
   // Cache for the public share view. Read-heavy, globally distributed, and
   // tolerant of being a little stale — which is exactly KV's shape, and exactly
   // what D1 is not for. D1 stays the authority on whether a link exists.
+  // Write-only event stream. Reads happen through Cloudflare's SQL API, not
+  // from the Worker, so nothing here can be queried back in code.
+  "analytics_engine_datasets": [{ "binding": "ANALYTICS", "dataset": "alcyone_events" }],
   "kv_namespaces": [{ "binding": "SHARE_CACHE", "id": "share-cache" }],
   "r2_buckets": [
     {

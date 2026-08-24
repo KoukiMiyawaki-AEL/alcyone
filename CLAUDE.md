@@ -23,6 +23,7 @@ Hono + Drizzle ORM + Cloudflare D1 をCloudflare Workers上で動かすバック
 | 検索 | D1のFTS5（`tokenize='trigram'`。[ADR 0018](./docs/adr/0018-fts5-trigram-search.md)） |
 | 非同期処理 | Cloudflare Queues（R2削除。[ADR 0019](./docs/adr/0019-object-cleanup-queue.md)）とWorkflows（データエクスポート。[ADR 0020](./docs/adr/0020-data-export-workflow.md)） |
 | キャッシュ | Workers KV（公開共有ページ。[ADR 0022](./docs/adr/0022-share-links-cached-in-kv.md)） |
+| 計測 | Analytics Engine（イベントの形は`src/worker/analytics.ts`で固定。[ADR 0023](./docs/adr/0023-analytics-engine-events.md)） |
 
 D1は現時点でローカル開発のみ（`wrangler dev` + `wrangler d1 migrations apply --local`）。
 `wrangler.jsonc`の`database_id`はプレースホルダで、実際のCloudflareアカウント上のD1は

@@ -228,6 +228,11 @@ mutationは直接`apiClient`を叩かず、feature配下のラッパ（例: `src
 （未知のパスは`index.html`にフォールバックし、TanStack Routerがクライアント側で描画する）。
 APIのパスは必ず`/api/`配下に置くこと。
 
+画面は `/`（Project一覧）、`/projects/$projectId`（そのProjectのTodo一覧）、`/dev/design-system`。
+動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。
+存在しないリソースはloaderで`notFound()`を投げる。**`notFound()`はthrowで動くので、
+fetchのtry/catchの中で投げると握り潰される** —— catchの外で投げること。
+
 `src/worker/index.ts`のルールは以下。
 
 - チェーン形式（`new Hono().get().post()...`）を崩さない。`hc<AppType>`の型推論がこれに依存している。

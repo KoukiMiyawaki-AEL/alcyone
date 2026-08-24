@@ -21,12 +21,32 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 | Method | Path | 概要 | Request body | 200系レスポンス | エラー |
 |---|---|---|---|---|---|
 | GET | `/api/health` | ヘルスチェック | — | `{ ok: true }` | — |
-| GET | `/api/todos` | Todo一覧取得（id昇順） | — | `Todo[]` | — |
-| POST | `/api/todos` | Todo作成 | `{ title: string }`（1〜200文字） | `201` `Todo` | `400` バリデーションエラー |
-| PATCH | `/api/todos/:id` | 完了状態の更新 | `{ completed: boolean }` | `200` `Todo` | `404` 該当IDなし |
-| DELETE | `/api/todos/:id` | Todo削除 | — | `204` (body無し) | `404` 該当IDなし |
+| GET | `/api/projects` | Project一覧（id昇順） | — | `Project[]` | — |
+| POST | `/api/projects` | Project作成 | `{ name: string }`（1〜100文字） | `201` `Project` | `400` |
+| DELETE | `/api/projects/:projectId` | Project削除（配下のTodoも削除） | — | `204` (body無し) | `400`, `404` |
+| GET | `/api/projects/:projectId/todos` | そのProjectのTodo一覧（id昇順） | — | `{ project, todos }` | `400`, `404` |
+| POST | `/api/projects/:projectId/todos` | Todo作成 | `{ title: string }`（1〜200文字） | `201` `Todo` | `400`, `404` |
+| PATCH | `/api/todos/:id` | 完了状態の更新 | `{ completed: boolean }` | `200` `Todo` | `400`, `404` |
+| DELETE | `/api/todos/:id` | Todo削除 | — | `204` (body無し) | `400`, `404` |
 
-`Todo`の型は`src/worker/db/schema.ts`の`todosTable`から`drizzle-orm`が推論する（`id: number, title: string, completed: boolean, createdAt: string`）。
+Todo一覧が裸の配列ではなく`{ project, todos }`を返すのは、画面のタイトルに使うProject情報を
+2回目のリクエスト無しで得るためと、将来カーソルを足すときに破壊的変更にしないため。
+
+`PATCH` / `DELETE /api/todos/:id` にprojectIdを含めていないのは、含めるとサーバ側で
+「そのTodoが本当にそのProjectのものか」を追加クエリで検証するか、黙って無視するかの二択になるため。
+無視されるパスセグメントは、無いより悪い。
+
+Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batch()`で実行している
+（[ADR 0012](../adr/0012-no-on-delete-cascade.md)）。
+
+`Todo` / `Project` の型は`src/worker/db/schema.ts`から`drizzle-orm`が推論する。
+
+- `Todo`: `{ id: number, title: string, completed: boolean, createdAt: string, updatedAt: string, projectId: number }`
+- `Project`: `{ id: number, name: string, createdAt: string }`
+
+**時刻はISO-8601（`2026-08-23T12:44:13.000Z`）でアプリ側が生成する。** DBのデフォルトは使わない
+（SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。
+経緯は[ADR 0011](../adr/0011-expand-contract-migrations.md)。
 
 ## エラーレスポンス
 

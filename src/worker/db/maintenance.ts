@@ -22,15 +22,24 @@ export function createMaintenance(binding: D1Database) {
      * Children first: `projects` is referenced by `todos`, and D1 enforces the
      * foreign key. Batched for the same reason project deletion is — D1 has no
      * interactive transactions, and half a purge is worse than none.
+     *
+     * `.returning()` rather than reading `meta.changes`, because that count
+     * stopped being trustworthy the moment `todos` grew a trigger: measured on
+     * D1, deleting 2 todos and 1 project inside one batch reported 6 and 5.
+     * Trigger writes are counted, and inside a batch they are not even
+     * attributed to the statement that caused them. The returned rows are the
+     * rows, and they cost no extra scan to obtain.
      */
     purgeDeletedBefore: (before: string) =>
       db.batch([
         db
           .delete(todosTable)
-          .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before))),
+          .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before)))
+          .returning({ id: todosTable.id }),
         db
           .delete(projectsTable)
-          .where(and(isNotNull(projectsTable.deletedAt), lt(projectsTable.deletedAt, before))),
+          .where(and(isNotNull(projectsTable.deletedAt), lt(projectsTable.deletedAt, before)))
+          .returning({ id: projectsTable.id }),
       ]),
   };
 }

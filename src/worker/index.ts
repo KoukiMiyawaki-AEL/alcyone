@@ -42,6 +42,10 @@ const pageQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
 });
 
+const searchQuerySchema = z
+  .object({ q: z.string().trim().min(1).max(200) })
+  .extend(pageQuerySchema.shape);
+
 const todoQuerySchema = z
   .object({
     status: z.enum(["all", "active", "done"]).default("all"),
@@ -129,6 +133,18 @@ const app = new Hono<{
   .get("/api/realtime", (c) => {
     const id = c.env.USER_CHANNEL.idFromName(c.get("userId"));
     return c.env.USER_CHANNEL.get(id).fetch(c.req.raw);
+  })
+  // Search runs across every project the user owns, so it is not nested under
+  // one. `q` is required and non-empty: an empty search is not "everything",
+  // it is a mistake, and returning the whole table for it is how a search box
+  // becomes the most expensive query in the application.
+  .get("/api/search", validate("query", searchQuerySchema), async (c) => {
+    const { q, cursor, limit } = c.req.valid("query");
+    const rows = await c
+      .get("repo")
+      .todos.search(q, { cursor: cursor ? decodeCursor(cursor) : null, limit });
+
+    return c.json(paginate(rows, limit, (row) => ({ value: row.rank, id: row.id })));
   })
   .get("/api/projects", validate("query", pageQuerySchema), async (c) => {
     const { cursor, limit } = c.req.valid("query");

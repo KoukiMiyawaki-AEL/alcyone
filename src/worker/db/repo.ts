@@ -1,8 +1,21 @@
-import { and, asc, desc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/d1";
 
 import { type Cursor } from "./cursor";
+import { ftsRank, toFtsQuery, toLikePattern, todosFts } from "./fts";
 import { attachmentsTable, projectsTable, todosTable } from "./schema";
 
 /**
@@ -285,6 +298,69 @@ export function createRepo(binding: D1Database, ownerId: string) {
         .update(todosTable)
         .set({ deletedAt: null })
         .where(inArray(todosTable.projectId, ownedProjectIds(projectId))),
+
+    /**
+     * Full-text search across every project this user owns.
+     *
+     * Two paths, one shape. `toFtsQuery` returns null when nothing the user
+     * typed is long enough to match a trigram, and then this scans with LIKE
+     * instead. That path is the expensive one — D1 bills rows scanned and LIKE
+     * cannot use an index — which is exactly why it is the fallback and not
+     * the implementation.
+     *
+     * Both are scoped through `ownedProjectIds()` like everything else here.
+     * The index itself is not scoped: it holds every user's titles, so
+     * forgetting the join would leak other people's todos. A test covers it.
+     */
+    search: (query: string, options: { cursor?: Cursor | null; limit?: number } = {}) => {
+      const match = toFtsQuery(query);
+      const limit = (options.limit ?? 0) + 1;
+
+      if (match === null) {
+        return (
+          db
+            // A constant rank so both paths hand back the same shape. The LIKE
+            // path has no relevance to report, and pretending otherwise would be
+            // worse than admitting every hit is equally good.
+            .select({ ...getTableColumns(todosTable), rank: sql<number>`0` })
+            .from(todosTable)
+            .where(
+              and(
+                inArray(todosTable.projectId, ownedProjectIds()),
+                isNull(todosTable.deletedAt),
+                sql`${todosTable.title} LIKE ${toLikePattern(query)} ESCAPE '\\'`,
+                options.cursor ? gt(todosTable.id, options.cursor.id) : undefined,
+              ),
+            )
+            .limit(limit)
+            .orderBy(asc(todosTable.id))
+        );
+      }
+
+      return db
+        .select({ ...getTableColumns(todosTable), rank: ftsRank })
+        .from(todosTable)
+        .innerJoin(todosFts, eq(todosFts.rowid, todosTable.id))
+        .where(
+          and(
+            sql`${todosFts} MATCH ${match}`,
+            inArray(todosTable.projectId, ownedProjectIds()),
+            isNull(todosTable.deletedAt),
+            // Keyset on relevance. Possible only because bm25() is usable in
+            // WHERE, which was measured rather than assumed. The id tiebreak
+            // matters more here than elsewhere: with trigrams, equal scores are
+            // the common case, not the exception.
+            options.cursor
+              ? or(
+                  gt(ftsRank, options.cursor.value),
+                  and(eq(ftsRank, options.cursor.value), gt(todosTable.id, options.cursor.id)),
+                )
+              : undefined,
+          ),
+        )
+        .limit(limit)
+        .orderBy(asc(ftsRank), asc(todosTable.id));
+    },
   };
 
   /**

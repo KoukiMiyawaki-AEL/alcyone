@@ -20,6 +20,7 @@ Hono + Drizzle ORM + Cloudflare D1 をCloudflare Workers上で動かすバック
 | CI | GitHub Actions（`.github/workflows/ci.yml`で`pnpm run check`。[ADR 0007](./docs/adr/0007-ci-and-codegen.md)） |
 | 認証 | Better Auth（メール+パスワード、D1をdrizzle adapter経由。[ADR 0013](./docs/adr/0013-better-auth.md)） |
 | リアルタイム | Durable Objects + WebSocket hibernation（ユーザー単位。[ADR 0017](./docs/adr/0017-realtime-with-durable-objects.md)） |
+| 検索 | D1のFTS5（`tokenize='trigram'`。[ADR 0018](./docs/adr/0018-fts5-trigram-search.md)） |
 
 D1は現時点でローカル開発のみ（`wrangler dev` + `wrangler d1 migrations apply --local`）。
 `wrangler.jsonc`の`database_id`はプレースホルダで、実際のCloudflareアカウント上のD1は

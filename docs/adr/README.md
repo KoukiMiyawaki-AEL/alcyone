@@ -23,6 +23,7 @@
 | [0015](./0015-soft-delete-items-hard-delete-accounts.md) | 項目は論理削除、アカウントは物理削除にする | Accepted |
 | [0016](./0016-e2e-with-playwright.md) | E2EテストをPlaywrightで書く（0009のBrowser Mode見送りを覆す） | Accepted |
 | [0017](./0017-realtime-with-durable-objects.md) | リアルタイム更新をDurable Objects + WebSocketで実装する | Accepted |
+| [0018](./0018-fts5-trigram-search.md) | 全文検索をFTS5のtrigramトークナイザで実装する | Accepted |
 
 ## ルール
 

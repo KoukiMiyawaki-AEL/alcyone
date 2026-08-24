@@ -13,6 +13,9 @@ export const RETENTION_DAYS = 30;
 export async function purgeExpiredDeletions(env: CloudflareBindings, now = new Date()) {
   const cutoff = new Date(now.getTime() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const [todos, projects] = await createMaintenance(env.DB).purgeDeletedBefore(cutoff);
+  // Counting the returned rows, not `meta.changes` — see maintenance.ts for
+  // why that number cannot be believed once a trigger is in play.
+  const counts = { todos: todos.length, projects: projects.length };
 
   // Structured so the Workers dashboard can filter on it. A scheduled job that
   // logs nothing is indistinguishable from one that never ran.
@@ -21,10 +24,9 @@ export async function purgeExpiredDeletions(env: CloudflareBindings, now = new D
       level: "info",
       message: "purged expired soft-deleted rows",
       cutoff,
-      todos: todos.meta.changes,
-      projects: projects.meta.changes,
+      ...counts,
     }),
   );
 
-  return { cutoff, todos: todos.meta.changes, projects: projects.meta.changes };
+  return { cutoff, ...counts };
 }

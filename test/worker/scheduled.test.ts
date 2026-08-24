@@ -86,6 +86,25 @@ describe("scheduled purge", () => {
     expect(result).toMatchObject({ projects: 1, todos: 2 });
   });
 
+  it("counts rows, not writes the database happened to make", async () => {
+    // Regression. This used to read `meta.changes`, which on D1 counts trigger
+    // writes too — and inside a batch does not even attribute them to the
+    // statement that caused them. Once `todos` gained the search-index triggers
+    // (migration 0009), deleting 2 todos and 1 project reported 6 and 5. The
+    // job still worked; only its report lied, which is the kind of bug that
+    // survives for a long time.
+    const expired = new Date(Date.now() - (RETENTION_DAYS + 1) * DAY).toISOString();
+    const p = await seedProject(ownerId, "expired", expired);
+    await seedTodo(p, "one", expired);
+    await seedTodo(p, "two", expired);
+    await seedTodo(p, "three", expired);
+
+    const result = await purgeExpiredDeletions(env);
+
+    expect(result).toMatchObject({ projects: 1, todos: 3 });
+    expect(await names("todos")).toEqual([]);
+  });
+
   it("runs from the Worker's scheduled handler", async () => {
     // Exercises the actual entry point, not just the function it calls — the
     // handler wiring is the part that would silently stop running.

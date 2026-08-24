@@ -83,6 +83,21 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 （SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。
 経緯は[ADR 0011](../adr/0011-expand-contract-migrations.md)。
 
+## 検索
+
+| Method | Path | 用途 | パラメータ | 成功 | 失敗 |
+|---|---|---|---|---|---|
+| GET | `/api/search` | 所有する全Projectを横断してTodoを検索 | `q`（必須、1〜200字）、`cursor`、`limit` | `{ items, nextCursor }` | `400` |
+
+`items`の各行はTodoに`rank`が付いたもの。**`rank`は小さいほど良い一致**（bm25の符号）で、
+短い検索語の経路では常に`0`。
+
+**`q`が空だと`400`**。空の検索は「全件」ではなく操作ミスであり、
+全件返すと検索窓がアプリで最も高いクエリになる。
+
+**3文字未満の語はFTSでは引けない**（trigramの制約）。その場合はLIKEの全走査に落ちるので、
+**短い検索語は遅く、D1の課金上も高い**。理由と実測は[ADR 0018](../adr/0018-fts5-trigram-search.md)。
+
 ## リアルタイム更新（WebSocket）
 
 | Method | Path | 用途 |

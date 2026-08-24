@@ -114,6 +114,32 @@ describe("migrations", () => {
     expect(results).toEqual([]);
   });
 
+  it("keeps the search index's triggers, which nothing else would notice losing", async () => {
+    // The one hazard of hand-writing the FTS objects (ADR 0018): drizzle-kit
+    // does not know they exist, and SQLite drops a table's triggers with the
+    // table. So drizzle's rebuild path for `todos` would remove all three
+    // without a word, and the only symptom would be search results going
+    // gradually stale — no error, no failing query.
+    const { results } = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
+    ).all<{ name: string }>();
+    expect(results.map((r) => r.name)).toEqual([
+      "todos_fts_delete",
+      "todos_fts_insert",
+      "todos_fts_update",
+    ]);
+  });
+
+  it("indexes the todos that already existed when the index was created", async () => {
+    // 0009 backfills. A migration that only starts indexing new rows leaves
+    // every older todo permanently unfindable, which no query would report.
+    const todos = await env.DB.prepare("SELECT count(*) AS n FROM todos").first<{ n: number }>();
+    const indexed = await env.DB.prepare("SELECT count(*) AS n FROM todos_fts").first<{
+      n: number;
+    }>();
+    expect(indexed?.n).toBe(todos?.n);
+  });
+
   it("leaves no owner-less projects behind", async () => {
     // 0001 seeded a global "Inbox" project. Once projects require an owner that
     // cannot exist, so 0005 deleted it along with any other pre-auth rows. The

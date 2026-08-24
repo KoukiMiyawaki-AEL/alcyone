@@ -85,6 +85,8 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 | `400` | `{ error: "Bad Request", issues: ZodIssue[] }` | バリデーション失敗。形状は`src/worker/validator.ts`の`validate()`が固定する |
 | `404` | `{ error: "Not found" }` | 該当IDが無い / `/api/*`配下の未定義パス |
 | `401` | `{ error: "Unauthorized" }` | セッションが無い。`/api/health` と `/api/auth/*` 以外の全 `/api/*` |
+| `413` | `{ error: "Payload Too Large" }` | 添付が5MBを超えた |
+| `429` | `{ error: "Too Many Requests" }` | レート制限。`Retry-After` ヘッダに秒数。`/api/auth/*`（IP単位）と添付アップロード（ユーザー単位）のみ |
 | `500` | `{ error: "Internal Server Error" }` | 未捕捉例外。`app.onError`が構造化JSONログを出したうえで返す |
 
 ## 本格的なOpenAPI導入を検討するタイミング

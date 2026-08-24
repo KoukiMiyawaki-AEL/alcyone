@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { createAuth } from "./auth";
 import { createRepo, type Repo } from "./db/repo";
+import { clientIp, enforce } from "./rate-limit";
 import { purgeExpiredDeletions } from "./scheduled";
 import { validate } from "./validator";
 
@@ -52,7 +53,14 @@ const app = new Hono<{
 }>()
   // Better Auth owns everything under /api/auth. Mounted before the guard
   // below, since signing in obviously cannot require being signed in.
-  .on(["GET", "POST"], "/api/auth/*", (c) => createAuth(c.env).handler(c.req.raw))
+  .on(["GET", "POST"], "/api/auth/*", async (c) => {
+    // Keyed by IP because these are the endpoints you can reach without an
+    // account — which is exactly what makes them worth brute-forcing.
+    const limited = await enforce(c.env.AUTH_RATE_LIMITER, clientIp(c), 60);
+    if (limited) return limited;
+
+    return createAuth(c.env).handler(c.req.raw);
+  })
   // Unauthenticated liveness probe. Kept outside the guard on purpose: a health
   // check that needs credentials cannot be used by an uptime monitor.
   .get("/api/health", (c) => c.json({ ok: true }))
@@ -218,6 +226,11 @@ const app = new Hono<{
     if (!todo) {
       return c.json({ error: "Not found" }, 404);
     }
+
+    // Keyed by user, not IP: the caller is authenticated, and one user behind a
+    // shared address should not exhaust everyone else's allowance.
+    const limited = await enforce(c.env.UPLOAD_RATE_LIMITER, c.get("userId"), 60);
+    if (limited) return limited;
 
     const form = await c.req.parseBody();
     const file = form["file"];

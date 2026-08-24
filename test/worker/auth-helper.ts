@@ -10,11 +10,27 @@ import { app } from "../../src/worker";
  */
 const ORIGIN = env.BETTER_AUTH_URL;
 
+let ipCounter = 0;
+
+/**
+ * A distinct client address per caller.
+ *
+ * `/api/auth/*` is rate limited by IP, and the limiter's state is not reset
+ * between tests. Without this, one file's sign-ups would exhaust the budget and
+ * later tests — in other files too — would start failing with 429 for reasons
+ * that have nothing to do with what they assert.
+ */
+export function uniqueIp(): string {
+  ipCounter += 1;
+  return `203.0.113.${ipCounter % 254}`;
+}
+
 /** Request headers for a signed-in user, ready for a JSON body. */
-export function jsonHeaders(session?: Headers): Headers {
+export function jsonHeaders(session?: Headers, ip?: string): Headers {
   const headers = new Headers(session ?? []);
   headers.set("Content-Type", "application/json");
   headers.set("Origin", ORIGIN);
+  if (ip) headers.set("CF-Connecting-IP", ip);
   return headers;
 }
 
@@ -32,7 +48,7 @@ export async function signUp(email: string, name = "Test user"): Promise<Headers
     "/api/auth/sign-up/email",
     {
       method: "POST",
-      headers: jsonHeaders(),
+      headers: jsonHeaders(undefined, uniqueIp()),
       // minPasswordLength is 12 in src/worker/auth.ts.
       body: JSON.stringify({ email, password: PASSWORD, name }),
     },

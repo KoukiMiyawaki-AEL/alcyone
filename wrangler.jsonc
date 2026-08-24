@@ -26,6 +26,23 @@
   },
   // Makes production stack traces map back to TypeScript source.
   "upload_source_maps": true,
+  // Per-Cloudflare-location and eventually consistent — Cloudflare is explicit
+  // that this is "not an accurate accounting system". It raises the cost of
+  // abuse; it is not a quota. `period` accepts only 10 or 60.
+  "ratelimits": [
+    {
+      // Unauthenticated and brute-forceable, so keyed by IP.
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 },
+    },
+    {
+      // Authenticated but expensive: each call writes to R2. Keyed by user.
+      "name": "UPLOAD_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 },
+    },
+  ],
   "r2_buckets": [
     {
       "binding": "ATTACHMENTS",

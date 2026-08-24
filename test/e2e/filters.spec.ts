@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-
+import { expect, test } from "./fixtures";
 import { createProject, createTodo, signUp } from "./helpers";
 
 test.describe("list filtering", () => {

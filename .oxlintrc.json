@@ -7,6 +7,14 @@
   },
   "overrides": [
     {
+      // Playwright fixtures take a callback named `use`, which the react plugin
+      // reads as a hook call outside a component. There is no React here at all.
+      "files": ["test/e2e/**"],
+      "rules": {
+        "react/rules-of-hooks": "off"
+      }
+    },
+    {
       // Structural cases the rule cannot be satisfied for: file-based routes
       // must export `Route` next to their component; shadcn/ui's generated
       // files co-locate variants and managers with theirs; a context provider

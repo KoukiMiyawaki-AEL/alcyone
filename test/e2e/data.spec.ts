@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-
+import { expect, test } from "./fixtures";
 import { PASSWORD, createProject, createTodo, rowAction, signOut, signUp } from "./helpers";
 
 test.describe("ownership and deletion", () => {

@@ -233,6 +233,14 @@ APIのパスは必ず`/api/`配下に置くこと。
 - チェーン形式（`new Hono().get().post()...`）を崩さない。`hc<AppType>`の型推論がこれに依存している。
 - バリデーションは`zValidator`を直接使わず、`src/worker/validator.ts`の`validate()`を使う。
   失敗時のレスポンスが`{ error: "Bad Request", issues }`に固定される。
+- **DBアクセスは`src/worker/db/repo.ts`の`createRepo()`を経由する。** ハンドラ内で
+  `drizzle()`を呼ばない。将来オーナー列を入れるとき、絞り込みの`where`を足す場所が1箇所で済む
+  （散らばっていると付け忘れが型エラーにもテスト失敗にもならず、そのまま越境漏洩になる）。
+- **repoのメソッドを`async`にしない。`.all()` / `.get()`も呼ばない。** 未実行のdrizzleビルダーを
+  返すことで、`await`もできるし`batch()`の要素にもできる。`async`にすると前者だけになり、
+  後者が黙って壊れる。
+- **複数文を原子的に実行したいときは`repo.batch([...])`。** D1に対話的トランザクションは無く、
+  `db.transaction()`は型が通るのに実行時に落ちる。
 - エラーレスポンスは`{ error: string }`で揃える（404は`{ error: "Not found" }`、
   未捕捉例外は`onError`が`{ error: "Internal Server Error" }`を返す）。例外の内容はクライアントに返さない。
 - ログは`console.error(JSON.stringify({ ... }))`のように構造化JSONで出す

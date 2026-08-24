@@ -1,9 +1,7 @@
-import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { todosTable } from "./db/schema";
+import { createRepo, type Repo } from "./db/repo";
 import { validate } from "./validator";
 
 const createTodoSchema = z.object({
@@ -18,17 +16,24 @@ const updateTodoSchema = z.object({
   completed: z.boolean(),
 });
 
-const app = new Hono<{ Bindings: CloudflareBindings }>()
+const app = new Hono<{ Bindings: CloudflareBindings; Variables: { repo: Repo } }>()
+  // Built per request: `env` is not available at module scope, and a shared
+  // instance would leak state across invocations. Constructing it here rather
+  // than in each handler keeps `drizzle()` — and any future owner filter — in
+  // one place. `Variables` does not participate in the RPC schema, so
+  // `hc<AppType>` inference is unaffected.
+  .use("/api/*", async (c, next) => {
+    c.set("repo", createRepo(c.env.DB));
+    await next();
+  })
   .get("/api/health", (c) => c.json({ ok: true }))
   .get("/api/todos", async (c) => {
-    const db = drizzle(c.env.DB);
-    const todos = await db.select().from(todosTable).orderBy(todosTable.id).all();
+    const todos = await c.get("repo").todos.list();
     return c.json(todos);
   })
   .post("/api/todos", validate("json", createTodoSchema), async (c) => {
     const { title } = c.req.valid("json");
-    const db = drizzle(c.env.DB);
-    const [todo] = await db.insert(todosTable).values({ title }).returning();
+    const [todo] = await c.get("repo").todos.create({ title });
     return c.json(todo, 201);
   })
   .patch(
@@ -38,12 +43,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
     async (c) => {
       const { id } = c.req.valid("param");
       const { completed } = c.req.valid("json");
-      const db = drizzle(c.env.DB);
-      const [todo] = await db
-        .update(todosTable)
-        .set({ completed })
-        .where(eq(todosTable.id, id))
-        .returning();
+      const [todo] = await c.get("repo").todos.setCompleted(id, completed);
 
       if (!todo) {
         return c.json({ error: "Not found" }, 404);
@@ -54,8 +54,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
   )
   .delete("/api/todos/:id", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
-    const db = drizzle(c.env.DB);
-    const [todo] = await db.delete(todosTable).where(eq(todosTable.id, id)).returning();
+    const [todo] = await c.get("repo").todos.remove(id);
 
     if (!todo) {
       return c.json({ error: "Not found" }, 404);

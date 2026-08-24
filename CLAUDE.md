@@ -280,6 +280,10 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 |---|---|---|---|
 | `worker` | `test/worker/*.test.ts` | workerd + ローカルD1 | Hono APIを`app.request()`で直接叩く統合テスト |
 | `components` | `test/components/*.test.tsx` | happy-dom + Testing Library | Reactコンポーネント |
+| E2E | `test/e2e/*.spec.ts` | Playwright + 実ブラウザ | 上2つの**隙間**（ログイン→セッション→所有スコープ） |
+
+E2Eは`pnpm run test:e2e`（`check`にも含まれる）。専用DB（`.wrangler/e2e-state`）で毎回空から
+起動するので、**devサーバが5173で動いていると失敗する**（開発用DBを守るための意図的な挙動）。
 
 ```bash
 pnpm test                      # 両方
@@ -306,7 +310,6 @@ pnpm test --project worker     # APIのみ
 [ADR 0010](./docs/adr/0010-alcyone-as-proving-ground.md)。
 
 - TanStack Query
-- Playwright / Vitest Browser Mode（**E2Eの閾値トリガーは発火済み**。経緯は[マップ](./docs/design/service-readiness-map.md)の「発火したトリガーの記録」）
 - Turborepo
 - Alchemy
 - R2 / KV / Queues

@@ -20,6 +20,9 @@ pnpm run codegen
 # ローカルD1にmigrationを適用（初回のみ / schema.tsを変更したら再実行）
 pnpm run db:generate
 pnpm run db:migrate:local
+
+# E2E用のブラウザ（初回のみ）
+pnpm exec playwright install chromium
 ```
 
 ## よく使うコマンド
@@ -27,6 +30,7 @@ pnpm run db:migrate:local
 ```bash
 pnpm dev                  # Vite dev server（SPA + Hono Workerを同時に起動。ポートは5173固定）
 pnpm test                 # Vitest 両プロジェクト（worker: D1込みの統合 / components: happy-dom）
+pnpm run test:e2e         # Playwright（専用DBでdevサーバを起動して実行）
 pnpm run check            # CIと同じ全工程（codegen→format→lint→typecheck→build→test→dry-run）
 pnpm run codegen          # worker-configuration.d.ts と src/routeTree.gen.ts を生成
 pnpm run typecheck        # tsc -b のみ
@@ -48,6 +52,7 @@ CI（`.github/workflows/ci.yml`）はpull requestごとに`pnpm run check`を実
 - `src/worker/` — Hono API（Cloudflare Worker）。`/api/*`のみがWorkerに届く。DBアクセスは`db/repo.ts`の1箇所を通る
 - `test/worker/` — Vitest（`@cloudflare/vitest-plugin`）によるAPI統合テスト
 - `test/components/` — Vitest（happy-dom + Testing Library）によるコンポーネントテスト
+- `test/e2e/` — Playwright。workerテストとcomponentテストの隙間（ログイン→セッション→所有スコープ）を通しで検証
 - `docs/` — ドキュメント規約・design doc（[`docs/design/`](./docs/design/)）・設計判断の記録（ADR）・API仕様（[`docs/README.md`](./docs/README.md)参照）
 
 D1は現時点でローカル開発のみ。本番デプロイ（実際のCloudflareアカウント上のD1作成含む）は未対応。

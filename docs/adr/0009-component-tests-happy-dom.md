@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted（ただし「Vitest Browser Mode / Playwrightを見送る」部分のみ[ADR 0016](./0016-e2e-with-playwright.md)が覆した。happy-dom採用とVitest projectsの分割は有効）
 
 ## Context
 

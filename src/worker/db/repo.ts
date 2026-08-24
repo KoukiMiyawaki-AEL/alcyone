@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/d1";
 
@@ -22,6 +22,10 @@ const now = () => new Date().toISOString();
  * handler cannot forget the filter because it never receives an unscoped query.
  * Getting this wrong produces no type error and no failing test; it produces one
  * user reading another user's rows.
+ *
+ * The same applies to soft deletion: every read also filters `deletedAt IS
+ * NULL`, and that filter lives only here. Two invisible filters on every query
+ * is exactly the situation this module exists to make un-forgettable.
  *
  * Note what that costs for todos. Todos have no owner column of their own —
  * ownership is transitive through their project — so the two flat routes
@@ -47,9 +51,11 @@ export function createRepo(binding: D1Database, ownerId: string) {
       .select({ id: projectsTable.id })
       .from(projectsTable)
       .where(
-        id === undefined
-          ? eq(projectsTable.ownerId, ownerId)
-          : and(eq(projectsTable.id, id), eq(projectsTable.ownerId, ownerId)),
+        and(
+          eq(projectsTable.ownerId, ownerId),
+          isNull(projectsTable.deletedAt),
+          id === undefined ? undefined : eq(projectsTable.id, id),
+        ),
       );
 
   const projects = {
@@ -57,14 +63,20 @@ export function createRepo(binding: D1Database, ownerId: string) {
       db
         .select()
         .from(projectsTable)
-        .where(eq(projectsTable.ownerId, ownerId))
+        .where(and(eq(projectsTable.ownerId, ownerId), isNull(projectsTable.deletedAt)))
         .orderBy(asc(projectsTable.id)),
 
     find: (id: number) =>
       db
         .select()
         .from(projectsTable)
-        .where(and(eq(projectsTable.id, id), eq(projectsTable.ownerId, ownerId))),
+        .where(
+          and(
+            eq(projectsTable.id, id),
+            eq(projectsTable.ownerId, ownerId),
+            isNull(projectsTable.deletedAt),
+          ),
+        ),
 
     create: (values: { name: string }) =>
       db
@@ -72,11 +84,22 @@ export function createRepo(binding: D1Database, ownerId: string) {
         .values({ ...values, ownerId, createdAt: now() })
         .returning(),
 
+    /** Soft delete. The row stays so it can be restored. */
     remove: (id: number) =>
       db
-        .delete(projectsTable)
-        .where(and(eq(projectsTable.id, id), eq(projectsTable.ownerId, ownerId)))
+        .update(projectsTable)
+        .set({ deletedAt: now() })
+        .where(
+          and(
+            eq(projectsTable.id, id),
+            eq(projectsTable.ownerId, ownerId),
+            isNull(projectsTable.deletedAt),
+          ),
+        )
         .returning(),
+
+    restore: (id: number) =>
+      db.update(projectsTable).set({ deletedAt: null }).where(eq(projectsTable.id, id)).returning(),
   };
 
   const todos = {
@@ -84,7 +107,12 @@ export function createRepo(binding: D1Database, ownerId: string) {
       db
         .select()
         .from(todosTable)
-        .where(inArray(todosTable.projectId, ownedProjectIds(projectId)))
+        .where(
+          and(
+            inArray(todosTable.projectId, ownedProjectIds(projectId)),
+            isNull(todosTable.deletedAt),
+          ),
+        )
         .orderBy(asc(todosTable.id)),
 
     create: (values: { title: string; projectId: number }) => {
@@ -99,23 +127,85 @@ export function createRepo(binding: D1Database, ownerId: string) {
       db
         .update(todosTable)
         .set({ completed, updatedAt: now() })
-        .where(and(eq(todosTable.id, id), inArray(todosTable.projectId, ownedProjectIds())))
+        .where(
+          and(
+            eq(todosTable.id, id),
+            isNull(todosTable.deletedAt),
+            inArray(todosTable.projectId, ownedProjectIds()),
+          ),
+        )
         .returning(),
 
+    /** Soft delete. The row stays so it can be restored. */
     remove: (id: number) =>
       db
-        .delete(todosTable)
+        .update(todosTable)
+        .set({ deletedAt: now() })
+        .where(
+          and(
+            eq(todosTable.id, id),
+            isNull(todosTable.deletedAt),
+            inArray(todosTable.projectId, ownedProjectIds()),
+          ),
+        )
+        .returning(),
+
+    restore: (id: number) =>
+      db
+        .update(todosTable)
+        .set({ deletedAt: null })
         .where(and(eq(todosTable.id, id), inArray(todosTable.projectId, ownedProjectIds())))
         .returning(),
 
-    /** Children must go before the parent — see `projects.remove` in index.ts. */
+    /** Soft-deletes a project's todos alongside it. */
     removeByProject: (projectId: number) =>
-      db.delete(todosTable).where(inArray(todosTable.projectId, ownedProjectIds(projectId))),
+      db
+        .update(todosTable)
+        .set({ deletedAt: now() })
+        .where(
+          and(
+            inArray(todosTable.projectId, ownedProjectIds(projectId)),
+            isNull(todosTable.deletedAt),
+          ),
+        ),
+
+    restoreByProject: (projectId: number) =>
+      db
+        .update(todosTable)
+        .set({ deletedAt: null })
+        .where(inArray(todosTable.projectId, ownedProjectIds(projectId))),
   };
+
+  /**
+   * Hard-deletes everything this owner has, soft-deleted rows included.
+   *
+   * This is the one place that ignores `deletedAt` — account deletion has to
+   * mean deletion, or "delete my data" is a lie. Children first: `projects`
+   * is referenced by `todos`, and D1 enforces the foreign key.
+   *
+   * Returns statements rather than running them, so the caller can put the
+   * user row's own deletion in the same batch.
+   */
+  const purgeOwnedData = () =>
+    [
+      db
+        .delete(todosTable)
+        .where(
+          inArray(
+            todosTable.projectId,
+            db
+              .select({ id: projectsTable.id })
+              .from(projectsTable)
+              .where(eq(projectsTable.ownerId, ownerId)),
+          ),
+        ),
+      db.delete(projectsTable).where(eq(projectsTable.ownerId, ownerId)),
+    ] as const;
 
   return {
     projects,
     todos,
+    purgeOwnedData,
     /**
      * The only way to make more than one statement atomic on D1. Statements run
      * sequentially and non-concurrently; if any fails the whole sequence rolls

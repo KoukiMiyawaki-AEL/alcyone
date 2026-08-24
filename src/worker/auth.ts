@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
 
 import * as authSchema from "./db/auth-schema";
+import { createRepo } from "./db/repo";
 
 /**
  * Built per request. `env` does not exist at module scope in Workers, and a
@@ -28,6 +29,22 @@ export function createAuth(env: CloudflareBindings) {
       provider: "sqlite",
       schema: authSchema,
     }),
+    user: {
+      deleteUser: {
+        enabled: true,
+        // Runs before the user row goes. It has to: `projects.ownerId`
+        // references `user.id` with NO ACTION (ADR 0012), so deleting the user
+        // while they still own projects fails the foreign key. Doing it in
+        // `afterDelete` would never be reached.
+        //
+        // Better Auth's own session and account rows cascade from `user`
+        // (ADR 0013), so only the app's tables need handling here.
+        beforeDelete: async (user) => {
+          const repo = createRepo(env.DB, user.id);
+          await repo.batch(repo.purgeOwnedData());
+        },
+      },
+    },
     emailAndPassword: {
       enabled: true,
       // There is no email infrastructure in this project — Cloudflare Email

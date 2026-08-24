@@ -6,11 +6,12 @@ import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { addProject, deleteProject } from "@/features/projects/api";
+import { addProject, deleteProject, restoreProject } from "@/features/projects/api";
 import { ProjectForm } from "@/features/projects/components/ProjectForm";
 import { ProjectList } from "@/features/projects/components/ProjectList";
 import type { Project } from "@/features/projects/types";
 import { apiClient } from "@/lib/api-client";
+import { toastUndo } from "@/lib/undo-toast";
 
 const TRANSIENT = "プロジェクトの取得に失敗しました。";
 
@@ -74,7 +75,12 @@ function IndexComponent() {
   }
 
   async function handleDelete(id: number) {
-    if (await deleteProject(id)) await router.invalidate();
+    if (!(await deleteProject(id))) return;
+    await router.invalidate();
+
+    toastUndo("プロジェクトを削除しました。", async () => {
+      if (await restoreProject(id)) await router.invalidate();
+    });
   }
 
   return (

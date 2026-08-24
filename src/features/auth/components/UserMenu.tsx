@@ -1,5 +1,5 @@
-import { useRouter } from "@tanstack/react-router";
-import { LogOutIcon, UserIcon } from "lucide-react";
+import { Link, useRouter } from "@tanstack/react-router";
+import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,10 @@ export function UserMenu() {
         }
       />
       <DropdownMenuContent align="end">
+        <DropdownMenuItem render={<Link to="/account" />}>
+          <SettingsIcon />
+          Account
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleSignOut}>
           <LogOutIcon />
           Sign out

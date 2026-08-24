@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Project } from "@/features/projects/types";
-import { addTodo, deleteTodo, setTodoCompleted } from "@/features/todos/api";
+import { addTodo, deleteTodo, restoreTodo, setTodoCompleted } from "@/features/todos/api";
 import { TodoForm } from "@/features/todos/components/TodoForm";
 import { TodoList } from "@/features/todos/components/TodoList";
 import type { Todo } from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
+import { toastUndo } from "@/lib/undo-toast";
 
 type LoaderData = { project: Project | null; todos: Todo[]; error: string | null };
 
@@ -110,7 +111,12 @@ function ProjectTodosComponent() {
   }
 
   async function handleDelete(id: number) {
-    if (await deleteTodo(id)) await router.invalidate();
+    if (!(await deleteTodo(id))) return;
+    await router.invalidate();
+
+    toastUndo("タスクを削除しました。", async () => {
+      if (await restoreTodo(id)) await router.invalidate();
+    });
   }
 
   return (

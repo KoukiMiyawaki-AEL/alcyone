@@ -11,6 +11,7 @@ const project = (over: Partial<Project> = {}): Project => ({
   name: "Alcyone",
   createdAt: "2026-08-24T00:00:00.000Z",
   ownerId: "user_1",
+  deletedAt: null,
   ...over,
 });
 

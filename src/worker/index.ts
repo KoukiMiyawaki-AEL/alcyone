@@ -68,10 +68,10 @@ const app = new Hono<{
     const { projectId } = c.req.valid("param");
     const repo = c.get("repo");
 
-    // Children before the parent, or the foreign key rejects it. Batched
-    // because D1 has no interactive transactions: statements run sequentially
-    // and the whole sequence rolls back if any one fails. A future audit-log
-    // insert belongs in this same array.
+    // Soft delete, so this marks rather than removes — but still batched,
+    // because D1 has no interactive transactions and a project whose todos
+    // were marked while it was not is worse than either outcome alone. A
+    // future audit-log insert belongs in this same array.
     const [, deleted] = await repo.batch([
       repo.todos.removeByProject(projectId),
       repo.projects.remove(projectId),
@@ -82,6 +82,21 @@ const app = new Hono<{
     }
 
     return c.body(null, 204);
+  })
+  .post("/api/projects/:projectId/restore", validate("param", projectIdParamSchema), async (c) => {
+    const { projectId } = c.req.valid("param");
+    const repo = c.get("repo");
+
+    // Mirror of the delete: parent first here, since `restore` looks the row
+    // up by id regardless of its deleted state, and the todos' scope check
+    // goes through the project.
+    const [restored] = await repo.projects.restore(projectId);
+    if (!restored) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    await repo.todos.restoreByProject(projectId);
+    return c.json(restored);
   })
   .get("/api/projects/:projectId/todos", validate("param", projectIdParamSchema), async (c) => {
     const { projectId } = c.req.valid("param");
@@ -146,6 +161,16 @@ const app = new Hono<{
     }
 
     return c.body(null, 204);
+  })
+  .post("/api/todos/:id/restore", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const [todo] = await c.get("repo").todos.restore(id);
+
+    if (!todo) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    return c.json(todo);
   })
   .notFound((c) => c.json({ error: "Not found" }, 404))
   .onError((err, c) => {

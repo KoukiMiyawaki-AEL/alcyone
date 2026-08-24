@@ -4,14 +4,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "../../src/features/projects/types";
 import type { Todo } from "../../src/features/todos/types";
 import app from "../../src/worker";
-import { resetAll, signUp } from "./auth-helper";
-
-const json = (headers: Headers) => new Headers([...headers, ["Content-Type", "application/json"]]);
+import { jsonHeaders, resetAll, signUp } from "./auth-helper";
 
 async function createProject(headers: Headers, name: string): Promise<number> {
   const res = await app.request(
     "/api/projects",
-    { method: "POST", headers: json(headers), body: JSON.stringify({ name }) },
+    { method: "POST", headers: jsonHeaders(headers), body: JSON.stringify({ name }) },
     env,
   );
   return ((await res.json()) as Project).id;
@@ -20,13 +18,24 @@ async function createProject(headers: Headers, name: string): Promise<number> {
 async function addTodo(headers: Headers, projectId: number, title: string): Promise<Todo> {
   const res = await app.request(
     `/api/projects/${projectId}/todos`,
-    { method: "POST", headers: json(headers), body: JSON.stringify({ title }) },
+    { method: "POST", headers: jsonHeaders(headers), body: JSON.stringify({ title }) },
     env,
   );
   return (await res.json()) as Todo;
 }
 
+/** Live todos — the ones a user would see. */
 async function countTodos(projectId: number): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT count(*) AS n FROM todos WHERE projectId = ? AND deletedAt IS NULL",
+  )
+    .bind(projectId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Every row, including soft-deleted ones. */
+async function countRows(projectId: number): Promise<number> {
   const row = await env.DB.prepare("SELECT count(*) AS n FROM todos WHERE projectId = ?")
     .bind(projectId)
     .first<{ n: number }>();
@@ -53,7 +62,7 @@ describe("Projects API", () => {
   it("rejects a blank name", async () => {
     const res = await app.request(
       "/api/projects",
-      { method: "POST", headers: json(alice), body: JSON.stringify({ name: "   " }) },
+      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({ name: "   " }) },
       env,
     );
     expect(res.status).toBe(400);
@@ -73,7 +82,7 @@ describe("Projects API", () => {
   it("404s rather than 500 when adding a todo to a missing project", async () => {
     const res = await app.request(
       "/api/projects/999999/todos",
-      { method: "POST", headers: json(alice), body: JSON.stringify({ title: "orphan" }) },
+      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({ title: "orphan" }) },
       env,
     );
     expect(res.status).toBe(404);
@@ -104,6 +113,14 @@ describe("Projects API", () => {
     expect(res.status).toBe(204);
     expect(await countTodos(doomed)).toBe(0);
     expect(await countTodos(keeper)).toBe(1);
+
+    // Soft delete: the rows are still there, just marked. That is the whole
+    // point — a hard delete would make restore impossible.
+    expect(await countRows(doomed)).toBe(1);
+
+    // And the project itself is gone from the list rather than from the table.
+    const list = await app.request("/api/projects", { headers: alice }, env);
+    expect(((await list.json()) as Project[]).map((p) => p.name)).toEqual(["Keeper"]);
   });
 
   it("404s deleting a project that does not exist", async () => {
@@ -159,7 +176,7 @@ describe("cross-user isolation", () => {
   it("cannot toggle another user's todo by id", async () => {
     const res = await app.request(
       `/api/todos/${aliceTodo.id}`,
-      { method: "PATCH", headers: json(bob), body: JSON.stringify({ completed: true }) },
+      { method: "PATCH", headers: jsonHeaders(bob), body: JSON.stringify({ completed: true }) },
       env,
     );
     expect(res.status).toBe(404);
@@ -194,7 +211,7 @@ describe("cross-user isolation", () => {
   it("cannot add a todo to another user's project", async () => {
     const res = await app.request(
       `/api/projects/${aliceProject}/todos`,
-      { method: "POST", headers: json(bob), body: JSON.stringify({ title: "intruder" }) },
+      { method: "POST", headers: jsonHeaders(bob), body: JSON.stringify({ title: "intruder" }) },
       env,
     );
     expect(res.status).toBe(404);

@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Todo } from "../../src/features/todos/types";
 import app from "../../src/worker";
-import { resetAll, signUp } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp } from "./auth-helper";
 
 async function createProject(headers: Headers, name = "Test project"): Promise<number> {
   const res = await app.request(
     "/api/projects",
     {
       method: "POST",
-      headers: new Headers([...headers, ["Content-Type", "application/json"]]),
+      headers: jsonHeaders(headers),
       body: JSON.stringify({ name }),
     },
     env,
@@ -24,7 +24,7 @@ async function addTodo(headers: Headers, projectId: number, title: string) {
     `/api/projects/${projectId}/todos`,
     {
       method: "POST",
-      headers: new Headers([...headers, ["Content-Type", "application/json"]]),
+      headers: jsonHeaders(headers),
       body: JSON.stringify({ title }),
     },
     env,
@@ -74,7 +74,7 @@ describe("Todos API", () => {
       `/api/todos/${id}`,
       {
         method: "PATCH",
-        headers: new Headers([...headers, ["Content-Type", "application/json"]]),
+        headers: jsonHeaders(headers),
         body: JSON.stringify({ completed: true }),
       },
       env,
@@ -98,7 +98,7 @@ describe("Todos API", () => {
       "/api/todos/999999",
       {
         method: "PATCH",
-        headers: new Headers([...headers, ["Content-Type", "application/json"]]),
+        headers: jsonHeaders(headers),
         body: JSON.stringify({ completed: true }),
       },
       env,

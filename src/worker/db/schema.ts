@@ -18,11 +18,16 @@ export const projectsTable = sqliteTable(
     ownerId: text()
       .notNull()
       .references(() => user.id),
+    // Soft delete. Null means live. Every read filters on it, which is exactly
+    // the kind of `where` that gets forgotten — so, like the owner filter, it
+    // lives only in src/worker/db/repo.ts.
+    deletedAt: text(),
   },
   (t) => [
-    // Every project query filters on the owner, so this index is load-bearing
-    // rather than speculative: D1 bills rows scanned, one query at a time.
-    index("projects_owner_id_idx").on(t.ownerId),
+    // Composite because every project query is `ownerId = ? AND deletedAt IS
+    // NULL`. Load-bearing rather than speculative: D1 bills rows scanned, on a
+    // database that runs one query at a time.
+    index("projects_owner_id_idx").on(t.ownerId, t.deletedAt),
   ],
 );
 
@@ -41,11 +46,12 @@ export const todosTable = sqliteTable(
     projectId: int()
       .notNull()
       .references(() => projectsTable.id),
+    /** Soft delete. Null means live. See `projects.deletedAt`. */
+    deletedAt: text(),
   },
   (t) => [
     // The FK check runs on every projects delete/update, and every todo list
-    // query filters on this. Unindexed, both become full scans — and D1 bills
-    // rows *scanned*, on a database that processes queries one at a time.
-    index("todos_project_id_idx").on(t.projectId),
+    // query filters on projectId and deletedAt together.
+    index("todos_project_id_idx").on(t.projectId, t.deletedAt),
   ],
 );

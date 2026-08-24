@@ -26,3 +26,9 @@ export const deleteTodo = (id: number) =>
     () => apiClient.api.todos[":id"].$delete({ param: { id: String(id) } }),
     "タスクの削除に失敗しました。",
   );
+
+export const restoreTodo = (id: number) =>
+  mutate(
+    () => apiClient.api.todos[":id"].restore.$post({ param: { id: String(id) } }),
+    "タスクの復元に失敗しました。",
+  );

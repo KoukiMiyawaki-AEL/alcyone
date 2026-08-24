@@ -3,6 +3,22 @@ import { env } from "cloudflare:test";
 import app from "../../src/worker";
 
 /**
+ * Better Auth validates the Origin header, so every request these tests make
+ * carries one — the same thing a browser sends. Without it some endpoints
+ * (delete-user among them) reject with MISSING_OR_NULL_ORIGIN, which would
+ * mean the suite exercised a path no real client takes.
+ */
+const ORIGIN = env.BETTER_AUTH_URL;
+
+/** Request headers for a signed-in user, ready for a JSON body. */
+export function jsonHeaders(session?: Headers): Headers {
+  const headers = new Headers(session ?? []);
+  headers.set("Content-Type", "application/json");
+  headers.set("Origin", ORIGIN);
+  return headers;
+}
+
+/**
  * Signs a user up through the real Better Auth endpoint and returns the headers
  * needed to act as them.
  *
@@ -16,9 +32,9 @@ export async function signUp(email: string, name = "Test user"): Promise<Headers
     "/api/auth/sign-up/email",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jsonHeaders(),
       // minPasswordLength is 12 in src/worker/auth.ts.
-      body: JSON.stringify({ email, password: "correct horse battery", name }),
+      body: JSON.stringify({ email, password: PASSWORD, name }),
     },
     env,
   );
@@ -31,8 +47,12 @@ export async function signUp(email: string, name = "Test user"): Promise<Headers
   if (!cookie) throw new Error("sign-up returned no session cookie");
 
   // Only the name=value pair matters when replaying it as a request cookie.
-  return new Headers({ cookie: cookie.split(";")[0]! });
+  const headers = new Headers({ cookie: cookie.split(";")[0]! });
+  headers.set("Origin", ORIGIN);
+  return headers;
 }
+
+export const PASSWORD = "correct horse battery";
 
 /** Clears every table these tests touch, children before parents. */
 export async function resetAll() {

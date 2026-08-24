@@ -15,3 +15,12 @@ export const deleteProject = (id: number) =>
       }),
     "プロジェクトの削除に失敗しました。",
   );
+
+export const restoreProject = (id: number) =>
+  mutate(
+    () =>
+      apiClient.api.projects[":projectId"].restore.$post({
+        param: { projectId: String(id) },
+      }),
+    "プロジェクトの復元に失敗しました。",
+  );

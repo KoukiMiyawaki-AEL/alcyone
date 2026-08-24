@@ -266,7 +266,12 @@ pnpm test --project worker     # APIのみ
 
 ## Not Yet
 
-以下は初期スコープに含めない（将来必要になったら追加する）。
+以下は初期スコープに含めない。
+
+**各項目をなぜ後回しにしているか、いつ着手すべきか（トリガー）は
+[`docs/design/service-readiness-map.md`](./docs/design/service-readiness-map.md)にある。**
+ここは一覧だけを持ち、理由は二重管理しない。alcyoneの位置づけそのものは
+[ADR 0010](./docs/adr/0010-alcyone-as-proving-ground.md)。
 
 - TanStack Query
 - Authentication

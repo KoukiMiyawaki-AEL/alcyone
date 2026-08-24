@@ -19,4 +19,11 @@ design docの中で「これは後から覆されると困る、明確な決定�
 
 ファイル名は`docs/adr/`のような連番ではなく、対象（機能・サブシステム名）が分かるkebab-caseにする（例: `initial-architecture.md`）。
 
-実例: [`initial-architecture.md`](./initial-architecture.md)
+網羅を目的とするdoc（対象を列挙して抜けを防ぐもの）はこの分量に収まらない。その場合は分量ではなく、
+**1行の追加・削除が数分で終わること**を守る（表を主体にし、howや代替案を書かない）。1時間ルールが
+本当に守ろうとしているのは初稿の執筆時間ではなく、保守の編集コストの低さである。
+
+実例:
+
+- [`initial-architecture.md`](./initial-architecture.md) — 標準的な分量のdesign doc
+- [`service-readiness-map.md`](./service-readiness-map.md) — 網羅型（実サービス化に必要なもののマップ）

@@ -15,6 +15,7 @@
 | [0007](./0007-ci-and-codegen.md) | CIをGitHub Actionsで回し、生成物はコミットせずcodegenスクリプトで再生成する | Accepted |
 | [0008](./0008-typescript-7.md) | TypeScript 7（ネイティブ実装）へ更新する | Accepted |
 | [0009](./0009-component-tests-happy-dom.md) | コンポーネントテストをVitest projectsで分離し、happy-dom + Testing Libraryで書く | Accepted |
+| [0010](./0010-alcyone-as-proving-ground.md) | alcyoneを技術検証の台と位置づけ、プロダクト機能より基盤の完全性を優先する | Accepted |
 
 ## ルール
 

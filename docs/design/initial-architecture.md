@@ -24,6 +24,9 @@ React + TanStack Router + shadcn/uiのフロントエンドと、Hono + Drizzle 
 - TanStack Query、認証、Turborepo、Alchemy、R2/KV/Queues、Playwright、Storybookの導入
 - OpenAPI仕様書の生成（[ADR 0005](../adr/0005-defer-openapi.md)）
 
+これらを含め、実サービスとして公開・運営するなら何が必要になるかの網羅的な整理は
+[`service-readiness-map.md`](./service-readiness-map.md)にある（位置づけは[ADR 0010](../adr/0010-alcyone-as-proving-ground.md)）。
+
 ## Proposal
 
 レイヤー構成とリクエストフローの全体像は [Alcyone Runtime Map](https://claude.ai/code/artifact/d09c4c3c-fa8c-42bb-8573-2cc8c8bf458c)（アーキテクチャ図Artifact、EN/日本語切替対応）を参照。要点:

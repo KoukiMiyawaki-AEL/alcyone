@@ -1,3 +1,8 @@
 allowBuilds:
   esbuild: true
   workerd: true
+  # better-auth hard-depends on its Prisma and Kysely adapters, which pull these
+  # in. This project uses D1 through the drizzle adapter and never loads either,
+  # so their native build steps are pointless — deny rather than approve.
+  "@prisma/client": false
+  better-sqlite3: false

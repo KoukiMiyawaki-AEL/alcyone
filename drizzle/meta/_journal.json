@@ -22,6 +22,27 @@
       "when": 1787536450495,
       "tag": "0002_mysterious_the_hood",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787544981435,
+      "tag": "0003_parallel_enchantress",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1787545147188,
+      "tag": "0004_fast_mac_gargan",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1787545386603,
+      "tag": "0005_cute_fantastic_four",
+      "breakpoints": true
     }
   ]
 }

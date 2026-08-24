@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { createAuth } from "./auth";
 import { createRepo, type Repo } from "./db/repo";
 import { validate } from "./validator";
 
@@ -24,17 +25,36 @@ const updateTodoSchema = z.object({
   completed: z.boolean(),
 });
 
-const app = new Hono<{ Bindings: CloudflareBindings; Variables: { repo: Repo } }>()
+const app = new Hono<{
+  Bindings: CloudflareBindings;
+  Variables: { repo: Repo; userId: string };
+}>()
+  // Better Auth owns everything under /api/auth. Mounted before the guard
+  // below, since signing in obviously cannot require being signed in.
+  .on(["GET", "POST"], "/api/auth/*", (c) => createAuth(c.env).handler(c.req.raw))
+  // Unauthenticated liveness probe. Kept outside the guard on purpose: a health
+  // check that needs credentials cannot be used by an uptime monitor.
+  .get("/api/health", (c) => c.json({ ok: true }))
+  // Everything past here requires a session, and every query is scoped to the
+  // signed-in user. Both are established in one place so that no handler can
+  // forget either.
+  //
   // Built per request: `env` is not available at module scope, and a shared
-  // instance would leak state across invocations. Constructing it here rather
-  // than in each handler keeps `drizzle()` — and any future owner filter — in
-  // one place. `Variables` does not participate in the RPC schema, so
-  // `hc<AppType>` inference is unaffected.
+  // instance would leak state across invocations. `Variables` does not
+  // participate in the RPC schema, so `hc<AppType>` inference is unaffected.
   .use("/api/*", async (c, next) => {
-    c.set("repo", createRepo(c.env.DB));
+    const session = await createAuth(c.env).api.getSession({
+      headers: c.req.raw.headers,
+    });
+
+    if (!session) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    c.set("userId", session.user.id);
+    c.set("repo", createRepo(c.env.DB, session.user.id));
     await next();
   })
-  .get("/api/health", (c) => c.json({ ok: true }))
   .get("/api/projects", async (c) => {
     const projects = await c.get("repo").projects.list();
     return c.json(projects);

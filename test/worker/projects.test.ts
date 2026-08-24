@@ -4,36 +4,26 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "../../src/features/projects/types";
 import type { Todo } from "../../src/features/todos/types";
 import app from "../../src/worker";
+import { resetAll, signUp } from "./auth-helper";
 
-async function reset() {
-  await env.DB.prepare("DELETE FROM todos").run();
-  await env.DB.prepare("DELETE FROM projects").run();
-}
+const json = (headers: Headers) => new Headers([...headers, ["Content-Type", "application/json"]]);
 
-async function createProject(name: string): Promise<number> {
+async function createProject(headers: Headers, name: string): Promise<number> {
   const res = await app.request(
     "/api/projects",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    },
+    { method: "POST", headers: json(headers), body: JSON.stringify({ name }) },
     env,
   );
-  const { id } = (await res.json()) as Project;
-  return id;
+  return ((await res.json()) as Project).id;
 }
 
-async function addTodo(projectId: number, title: string) {
-  return app.request(
+async function addTodo(headers: Headers, projectId: number, title: string): Promise<Todo> {
+  const res = await app.request(
     `/api/projects/${projectId}/todos`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title }),
-    },
+    { method: "POST", headers: json(headers), body: JSON.stringify({ title }) },
     env,
   );
+  return (await res.json()) as Todo;
 }
 
 async function countTodos(projectId: number): Promise<number> {
@@ -44,26 +34,26 @@ async function countTodos(projectId: number): Promise<number> {
 }
 
 describe("Projects API", () => {
-  beforeEach(reset);
+  let alice: Headers;
+
+  beforeEach(async () => {
+    await resetAll();
+    alice = await signUp("alice@example.com", "Alice");
+  });
 
   it("creates and lists projects in id order", async () => {
-    await createProject("First");
-    await createProject("Second");
+    await createProject(alice, "First");
+    await createProject(alice, "Second");
 
-    const res = await app.request("/api/projects", {}, env);
+    const res = await app.request("/api/projects", { headers: alice }, env);
     expect(res.status).toBe(200);
-    const projects = (await res.json()) as Project[];
-    expect(projects.map((p) => p.name)).toEqual(["First", "Second"]);
+    expect(((await res.json()) as Project[]).map((p) => p.name)).toEqual(["First", "Second"]);
   });
 
   it("rejects a blank name", async () => {
     const res = await app.request(
       "/api/projects",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "   " }),
-      },
+      { method: "POST", headers: json(alice), body: JSON.stringify({ name: "   " }) },
       env,
     );
     expect(res.status).toBe(400);
@@ -71,59 +61,143 @@ describe("Projects API", () => {
   });
 
   it("404s listing todos of a project that does not exist", async () => {
-    const res = await app.request("/api/projects/999999/todos", {}, env);
+    const res = await app.request("/api/projects/999999/todos", { headers: alice }, env);
     expect(res.status).toBe(404);
   });
 
   it("400s on a non-numeric project id", async () => {
-    const res = await app.request("/api/projects/abc/todos", {}, env);
+    const res = await app.request("/api/projects/abc/todos", { headers: alice }, env);
     expect(res.status).toBe(400);
   });
 
   it("404s rather than 500 when adding a todo to a missing project", async () => {
-    const res = await addTodo(999999, "orphan");
+    const res = await app.request(
+      "/api/projects/999999/todos",
+      { method: "POST", headers: json(alice), body: JSON.stringify({ title: "orphan" }) },
+      env,
+    );
     expect(res.status).toBe(404);
   });
 
-  // The test that fails if anyone forgets a `where`.
   it("scopes todos to their own project", async () => {
-    const a = await createProject("A");
-    const b = await createProject("B");
-    await addTodo(a, "belongs to A");
-    await addTodo(b, "belongs to B");
+    const a = await createProject(alice, "A");
+    const b = await createProject(alice, "B");
+    await addTodo(alice, a, "belongs to A");
+    await addTodo(alice, b, "belongs to B");
 
-    const resA = await app.request(`/api/projects/${a}/todos`, {}, env);
-    const { todos: todosA } = (await resA.json()) as { todos: Todo[] };
-    expect(todosA.map((t) => t.title)).toEqual(["belongs to A"]);
-
-    const resB = await app.request(`/api/projects/${b}/todos`, {}, env);
-    const { todos: todosB } = (await resB.json()) as { todos: Todo[] };
-    expect(todosB.map((t) => t.title)).toEqual(["belongs to B"]);
+    const res = await app.request(`/api/projects/${a}/todos`, { headers: alice }, env);
+    const { todos } = (await res.json()) as { todos: Todo[] };
+    expect(todos.map((t) => t.title)).toEqual(["belongs to A"]);
   });
 
   it("deletes a project and only its own todos", async () => {
-    const doomed = await createProject("Doomed");
-    const keeper = await createProject("Keeper");
-    await addTodo(doomed, "goes away");
-    await addTodo(keeper, "stays");
+    const doomed = await createProject(alice, "Doomed");
+    const keeper = await createProject(alice, "Keeper");
+    await addTodo(alice, doomed, "goes away");
+    await addTodo(alice, keeper, "stays");
 
-    const res = await app.request(`/api/projects/${doomed}`, { method: "DELETE" }, env);
+    const res = await app.request(
+      `/api/projects/${doomed}`,
+      { method: "DELETE", headers: alice },
+      env,
+    );
     expect(res.status).toBe(204);
-
     expect(await countTodos(doomed)).toBe(0);
     expect(await countTodos(keeper)).toBe(1);
   });
 
   it("404s deleting a project that does not exist", async () => {
-    const res = await app.request("/api/projects/999999", { method: "DELETE" }, env);
+    const res = await app.request(
+      "/api/projects/999999",
+      { method: "DELETE", headers: alice },
+      env,
+    );
     expect(res.status).toBe(404);
   });
 
   it("enforces the foreign key at the database level", async () => {
-    // Pins "D1 enforces foreign keys" as a fact rather than an assumption. If a
-    // migration ever drops the constraint, this is what notices.
     await expect(
       env.DB.prepare("INSERT INTO todos (title, projectId) VALUES ('x', 999999)").run(),
     ).rejects.toThrow();
+  });
+});
+
+/**
+ * The reason this whole change exists. Before auth, `PATCH`/`DELETE
+ * /api/todos/:id` matched on the todo id alone, so any signed-in user could
+ * walk the (sequential, guessable) id space and edit anyone's rows. These are
+ * the regression tests for that; they fail if the ownership subquery in
+ * src/worker/db/repo.ts is ever dropped.
+ */
+describe("cross-user isolation", () => {
+  let alice: Headers;
+  let bob: Headers;
+  let aliceProject: number;
+  let aliceTodo: Todo;
+
+  beforeEach(async () => {
+    await resetAll();
+    alice = await signUp("alice@example.com", "Alice");
+    bob = await signUp("bob@example.com", "Bob");
+    aliceProject = await createProject(alice, "Alice's project");
+    aliceTodo = await addTodo(alice, aliceProject, "Alice's todo");
+  });
+
+  it("does not list another user's projects", async () => {
+    await createProject(bob, "Bob's project");
+
+    const res = await app.request("/api/projects", { headers: bob }, env);
+    const names = ((await res.json()) as Project[]).map((p) => p.name);
+    expect(names).toEqual(["Bob's project"]);
+  });
+
+  it("does not expose another user's project by id", async () => {
+    const res = await app.request(`/api/projects/${aliceProject}/todos`, { headers: bob }, env);
+    expect(res.status).toBe(404);
+  });
+
+  it("cannot toggle another user's todo by id", async () => {
+    const res = await app.request(
+      `/api/todos/${aliceTodo.id}`,
+      { method: "PATCH", headers: json(bob), body: JSON.stringify({ completed: true }) },
+      env,
+    );
+    expect(res.status).toBe(404);
+
+    // And the row is genuinely untouched, not merely reported as missing.
+    const row = await env.DB.prepare("SELECT completed FROM todos WHERE id = ?")
+      .bind(aliceTodo.id)
+      .first<{ completed: number }>();
+    expect(row?.completed).toBe(0);
+  });
+
+  it("cannot delete another user's todo by id", async () => {
+    const res = await app.request(
+      `/api/todos/${aliceTodo.id}`,
+      { method: "DELETE", headers: bob },
+      env,
+    );
+    expect(res.status).toBe(404);
+    expect(await countTodos(aliceProject)).toBe(1);
+  });
+
+  it("cannot delete another user's project by id", async () => {
+    const res = await app.request(
+      `/api/projects/${aliceProject}`,
+      { method: "DELETE", headers: bob },
+      env,
+    );
+    expect(res.status).toBe(404);
+    expect(await countTodos(aliceProject)).toBe(1);
+  });
+
+  it("cannot add a todo to another user's project", async () => {
+    const res = await app.request(
+      `/api/projects/${aliceProject}/todos`,
+      { method: "POST", headers: json(bob), body: JSON.stringify({ title: "intruder" }) },
+      env,
+    );
+    expect(res.status).toBe(404);
+    expect(await countTodos(aliceProject)).toBe(1);
   });
 });

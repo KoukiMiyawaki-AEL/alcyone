@@ -1,27 +1,9 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/d1";
 
 import { projectsTable, todosTable } from "./schema";
 
-/**
- * The single place `drizzle()` is constructed and the single place a query
- * against a table is written.
- *
- * Two reasons it exists rather than calling `drizzle(c.env.DB)` per handler:
- *
- * 1. When rows eventually gain an owner/tenant column, the `where` that scopes
- *    them belongs in exactly one file. Spread across handlers, forgetting one
- *    is a cross-tenant leak that no type error and no test would catch.
- * 2. D1 has no interactive transactions — `db.transaction()` type-checks and
- *    then throws at runtime. The only atomicity primitive is `batch()`.
- *
- * IMPORTANT: these methods must never be `async`, and must not call `.all()` /
- * `.get()`. They return the *unexecuted* drizzle builder, which is both
- * awaitable (it extends QueryPromise) and usable as a `batch()` item. An
- * `async` wrapper would auto-await the builder and silently destroy the second
- * property.
- */
 /**
  * Timestamps are generated here, not by the database.
  *
@@ -31,21 +13,70 @@ import { projectsTable, todosTable } from "./schema";
  */
 const now = () => new Date().toISOString();
 
-export function createRepo(binding: D1Database) {
+/**
+ * The single place `drizzle()` is constructed, the single place a query against
+ * a table is written, and — since auth landed — the single place ownership is
+ * enforced.
+ *
+ * **Every method here is already scoped to `ownerId`.** That is the point: a
+ * handler cannot forget the filter because it never receives an unscoped query.
+ * Getting this wrong produces no type error and no failing test; it produces one
+ * user reading another user's rows.
+ *
+ * Note what that costs for todos. Todos have no owner column of their own —
+ * ownership is transitive through their project — so the two flat routes
+ * (`PATCH`/`DELETE /api/todos/:id`) must constrain through a subquery on
+ * `projects`. Before auth those two matched on `todos.id` alone, which would
+ * have let anyone walk the integer id space and edit other people's rows.
+ *
+ * D1 has no interactive transactions — `db.transaction()` type-checks and then
+ * throws at runtime. The only atomicity primitive is `batch()`.
+ *
+ * IMPORTANT: these methods must never be `async`, and must not call `.all()` /
+ * `.get()`. They return the *unexecuted* drizzle builder, which is both
+ * awaitable (it extends QueryPromise) and usable as a `batch()` item. An
+ * `async` wrapper would auto-await the builder and silently destroy the second
+ * property.
+ */
+export function createRepo(binding: D1Database, ownerId: string) {
   const db = drizzle(binding);
 
-  const projects = {
-    list: () => db.select().from(projectsTable).orderBy(asc(projectsTable.id)),
+  /** This owner's project ids, as a subquery. Optionally narrowed to one id. */
+  const ownedProjectIds = (id?: number) =>
+    db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(
+        id === undefined
+          ? eq(projectsTable.ownerId, ownerId)
+          : and(eq(projectsTable.id, id), eq(projectsTable.ownerId, ownerId)),
+      );
 
-    find: (id: number) => db.select().from(projectsTable).where(eq(projectsTable.id, id)),
+  const projects = {
+    list: () =>
+      db
+        .select()
+        .from(projectsTable)
+        .where(eq(projectsTable.ownerId, ownerId))
+        .orderBy(asc(projectsTable.id)),
+
+    find: (id: number) =>
+      db
+        .select()
+        .from(projectsTable)
+        .where(and(eq(projectsTable.id, id), eq(projectsTable.ownerId, ownerId))),
 
     create: (values: { name: string }) =>
       db
         .insert(projectsTable)
-        .values({ ...values, createdAt: now() })
+        .values({ ...values, ownerId, createdAt: now() })
         .returning(),
 
-    remove: (id: number) => db.delete(projectsTable).where(eq(projectsTable.id, id)).returning(),
+    remove: (id: number) =>
+      db
+        .delete(projectsTable)
+        .where(and(eq(projectsTable.id, id), eq(projectsTable.ownerId, ownerId)))
+        .returning(),
   };
 
   const todos = {
@@ -53,7 +84,7 @@ export function createRepo(binding: D1Database) {
       db
         .select()
         .from(todosTable)
-        .where(eq(todosTable.projectId, projectId))
+        .where(inArray(todosTable.projectId, ownedProjectIds(projectId)))
         .orderBy(asc(todosTable.id)),
 
     create: (values: { title: string; projectId: number }) => {
@@ -68,14 +99,18 @@ export function createRepo(binding: D1Database) {
       db
         .update(todosTable)
         .set({ completed, updatedAt: now() })
-        .where(eq(todosTable.id, id))
+        .where(and(eq(todosTable.id, id), inArray(todosTable.projectId, ownedProjectIds())))
         .returning(),
 
-    remove: (id: number) => db.delete(todosTable).where(eq(todosTable.id, id)).returning(),
+    remove: (id: number) =>
+      db
+        .delete(todosTable)
+        .where(and(eq(todosTable.id, id), inArray(todosTable.projectId, ownedProjectIds())))
+        .returning(),
 
     /** Children must go before the parent — see `projects.remove` in index.ts. */
     removeByProject: (projectId: number) =>
-      db.delete(todosTable).where(eq(todosTable.projectId, projectId)),
+      db.delete(todosTable).where(inArray(todosTable.projectId, ownedProjectIds(projectId))),
   };
 
   return {

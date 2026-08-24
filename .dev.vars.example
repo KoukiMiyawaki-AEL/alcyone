@@ -1,0 +1,8 @@
+# Copy to `.dev.vars` (gitignored) before running `pnpm dev`.
+#
+# Generate a value with:
+#   openssl rand -base64 32
+#
+# In production this is set with `wrangler secret put BETTER_AUTH_SECRET`,
+# never committed and never placed in wrangler.jsonc.
+BETTER_AUTH_SECRET=

@@ -1,10 +1,30 @@
+// Better Auth's tables live in ./auth-schema.ts and are re-exported so that
+// drizzle-kit — which is pointed at this file alone — sees the whole schema.
+export * from "./auth-schema";
+
 import { index, int, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const projectsTable = sqliteTable("projects", {
-  id: int().primaryKey({ autoIncrement: true }),
-  name: text().notNull(),
-  createdAt: text().notNull(),
-});
+import { user } from "./auth-schema";
+
+export const projectsTable = sqliteTable(
+  "projects",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    name: text().notNull(),
+    createdAt: text().notNull(),
+    // No `onDelete`: `projects` is referenced by `todos`, and D1 cannot disable
+    // foreign key enforcement, so a cascade from `user` would silently delete
+    // rows two levels down. See ADR 0012.
+    ownerId: text()
+      .notNull()
+      .references(() => user.id),
+  },
+  (t) => [
+    // Every project query filters on the owner, so this index is load-bearing
+    // rather than speculative: D1 bills rows scanned, one query at a time.
+    index("projects_owner_id_idx").on(t.ownerId),
+  ],
+);
 
 export const todosTable = sqliteTable(
   "todos",

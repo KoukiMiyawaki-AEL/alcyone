@@ -16,6 +16,9 @@ dist-ssr
 .wrangler
 .dev.vars
 .dev.vars.*
+# ...but the template must be committable, or a fresh clone has no way to know
+# which secrets are required. `.dev.vars.*` above would otherwise swallow it.
+!.dev.vars.example
 worker-configuration.d.ts
 
 # TanStack Router (generated)

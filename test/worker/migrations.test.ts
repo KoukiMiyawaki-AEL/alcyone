@@ -64,6 +64,48 @@ describe("migrations", () => {
     expect((await tableInfo("projects")).get("createdAt")?.dflt_value).toBeNull();
   });
 
+  it("makes projects.ownerId NOT NULL and points it at user", async () => {
+    expect((await tableInfo("projects")).get("ownerId")?.notnull).toBe(1);
+
+    const { results } = await env.DB.prepare(
+      "SELECT * FROM pragma_foreign_key_list('projects')",
+    ).all<{ table: string; from: string; to: string; on_delete: string }>();
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      table: "user",
+      from: "ownerId",
+      to: "id",
+      on_delete: "NO ACTION",
+    });
+  });
+
+  it("keeps todos' foreign key and index through the parent rebuild", async () => {
+    // The 0005 detach/reattach dropped and recreated `todos` to get at
+    // `projects`. This is what notices if the reattach half is ever botched.
+    const { results } = await env.DB.prepare("SELECT * FROM pragma_foreign_key_list('todos')").all<{
+      table: string;
+    }>();
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ table: "projects" });
+
+    const idx = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type='index' AND name='todos_project_id_idx'",
+    ).first();
+    expect(idx).not.toBeNull();
+  });
+
+  it("enforces the unique constraints Better Auth relies on, as indexes", async () => {
+    // ADR 0011: table-level UNIQUE is silently dropped by drizzle's rebuild
+    // path, so these must exist as indexes to survive one.
+    for (const name of ["user_email_uidx", "session_token_uidx"]) {
+      const row = await env.DB.prepare('SELECT "unique" FROM pragma_index_list(?) WHERE name = ?')
+        .bind(name.startsWith("user") ? "user" : "session", name)
+        .first<{ unique: number }>();
+      expect(row?.unique, name).toBe(1);
+    }
+  });
+
   it("drops the temporary rebuild tables", async () => {
     // `_` is a LIKE wildcard, hence the ESCAPE.
     const { results } = await env.DB.prepare(
@@ -72,15 +114,13 @@ describe("migrations", () => {
     expect(results).toEqual([]);
   });
 
-  it("seeds the Inbox project with an ISO-8601 timestamp", async () => {
-    const row = await env.DB.prepare("SELECT name, createdAt FROM projects WHERE id = 1").first<{
-      name: string;
-      createdAt: string;
-    }>();
-
-    expect(row?.name).toBe("Inbox");
-    // Round-tripping through Date is the actual property we care about: the
-    // old `current_timestamp` format parsed as local time and was 9 hours out.
-    expect(new Date(row!.createdAt).toISOString()).toBe(row!.createdAt);
+  it("leaves no owner-less projects behind", async () => {
+    // 0001 seeded a global "Inbox" project. Once projects require an owner that
+    // cannot exist, so 0005 deleted it along with any other pre-auth rows. The
+    // invariant worth pinning is the absence, not the seed.
+    const row = await env.DB.prepare(
+      "SELECT count(*) AS n FROM projects WHERE ownerId IS NULL",
+    ).first<{ n: number }>();
+    expect(row?.n).toBe(0);
   });
 });

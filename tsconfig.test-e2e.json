@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test-e2e.tsbuildinfo",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "moduleResolution": "bundler"
+  },
+  // Playwright drives a real browser from Node, so this project needs neither
+  // the Workers types nor the happy-dom setup the other two test projects use.
+  "include": ["test/e2e"]
+}

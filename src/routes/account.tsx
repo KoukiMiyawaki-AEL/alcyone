@@ -39,8 +39,16 @@ function AccountComponent() {
         setError(deleteError.message ?? "アカウントの削除に失敗しました。");
         return;
       }
-      // The session is gone, so the guards take it from here.
-      await router.invalidate();
+      // Navigating explicitly, unlike sign-out. Route guards only run on
+      // navigation, and deleting your account leaves you standing on /account
+      // with nothing to trigger one — so there is no guard to defer to here.
+      // This cannot loop the way the login screen once did: /login has no
+      // guard of its own to push back.
+      //
+      // signOut() first because deleteUser ends the session server-side but
+      // leaves the client's store holding the now-deleted user.
+      await authClient.signOut();
+      await router.navigate({ to: "/login" });
     } finally {
       setSubmitting(false);
     }

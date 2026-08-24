@@ -21,6 +21,11 @@ dist-ssr
 !.dev.vars.example
 worker-configuration.d.ts
 
+# Playwright
+/test-results
+/playwright-report
+.wrangler/e2e-state
+
 # TanStack Router (generated)
 src/routeTree.gen.ts
 .tanstack

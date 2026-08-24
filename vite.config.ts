@@ -29,7 +29,11 @@ export default defineConfig({
     tanstackRouter(),
     react(),
     tailwindcss(),
-    cloudflare(),
+    cloudflare({
+      // E2E runs against a throwaway database so a test never clobbers local
+      // development data, and every run starts from an empty one.
+      ...(process.env.E2E ? { persistState: { path: ".wrangler/e2e-state" } } : {}),
+    }),
     workerSourcemaps,
   ],
   server: {

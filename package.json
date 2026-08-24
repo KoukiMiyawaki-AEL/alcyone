@@ -13,10 +13,11 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "test": "vitest run",
-    "check": "pnpm run codegen && pnpm run format:check && pnpm run lint && tsc -b && vite build && vitest run && wrangler deploy --dry-run",
+    "check": "pnpm run codegen && pnpm run format:check && pnpm run lint && tsc -b && vite build && vitest run && pnpm run test:e2e && wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply DB --local"
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "test:e2e": "rm -rf .wrangler/e2e-state && wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e-state && playwright test"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -37,6 +38,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.53.1",
     "@cloudflare/vitest-plugin": "^1.0.0",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/router-cli": "^1.167.32",
     "@tanstack/router-plugin": "^1.168.34",

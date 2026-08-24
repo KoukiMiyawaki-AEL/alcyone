@@ -21,6 +21,7 @@ Hono + Drizzle ORM + Cloudflare D1 をCloudflare Workers上で動かすバック
 | 認証 | Better Auth（メール+パスワード、D1をdrizzle adapter経由。[ADR 0013](./docs/adr/0013-better-auth.md)） |
 | リアルタイム | Durable Objects + WebSocket hibernation（ユーザー単位。[ADR 0017](./docs/adr/0017-realtime-with-durable-objects.md)） |
 | 検索 | D1のFTS5（`tokenize='trigram'`。[ADR 0018](./docs/adr/0018-fts5-trigram-search.md)） |
+| 非同期処理 | Cloudflare Queues（R2オブジェクト削除。[ADR 0019](./docs/adr/0019-object-cleanup-queue.md)） |
 
 D1は現時点でローカル開発のみ（`wrangler dev` + `wrangler d1 migrations apply --local`）。
 `wrangler.jsonc`の`database_id`はプレースホルダで、実際のCloudflareアカウント上のD1は
@@ -342,7 +343,7 @@ Durable Objectのテストは`cloudflare:test`の`runInDurableObject`で中を�
 - TanStack Query
 - Turborepo
 - Alchemy
-- KV / Queues
+- KV
 - Storybook
 - テストカバレッジの計測
 - メール送信（そのためメール検証とパスワード再発行は無効）

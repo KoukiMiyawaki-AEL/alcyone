@@ -35,6 +35,24 @@
     "bindings": [{ "name": "USER_CHANNEL", "class_name": "UserChannel" }],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserChannel"] }],
+  // Deleting R2 objects is the work that must not sit on the cron's critical
+  // path: the number of objects is unbounded, and a retention job that times
+  // out halfway is worse than one that hands the work off.
+  "queues": {
+    "producers": [{ "queue": "alcyone-object-cleanup", "binding": "OBJECT_CLEANUP" }],
+    "consumers": [
+      {
+        "queue": "alcyone-object-cleanup",
+        "max_batch_size": 100,
+        "max_batch_timeout": 30,
+        // Deleting an object that is already gone is not an error, so retries
+        // are safe. Three, then the dead letter queue — a message that cannot
+        // be processed must stop costing retries and start being visible.
+        "max_retries": 3,
+        "dead_letter_queue": "alcyone-object-cleanup-dlq",
+      },
+    ],
+  },
   "ratelimits": [
     {
       // Unauthenticated and brute-forceable, so keyed by IP.

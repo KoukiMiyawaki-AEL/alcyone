@@ -1,7 +1,7 @@
-import { and, isNotNull, lt } from "drizzle-orm";
+import { and, inArray, isNotNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { projectsTable, todosTable } from "./schema";
+import { attachmentsTable, projectsTable, todosTable } from "./schema";
 
 /**
  * Queries that run without a user.
@@ -30,8 +30,37 @@ export function createMaintenance(binding: D1Database) {
      * attributed to the statement that caused them. The returned rows are the
      * rows, and they cost no extra scan to obtain.
      */
+    /** The R2 keys about to lose their rows, read before anything is deleted. */
+    expiredAttachmentKeys: (before: string) =>
+      db
+        .select({ key: attachmentsTable.key })
+        .from(attachmentsTable)
+        .where(
+          inArray(
+            attachmentsTable.todoId,
+            db
+              .select({ id: todosTable.id })
+              .from(todosTable)
+              .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before))),
+          ),
+        ),
+
     purgeDeletedBefore: (before: string) =>
       db.batch([
+        // Attachments first. `attachments.todoId` references `todos.id` with NO
+        // ACTION (ADR 0012), so deleting a todo that still has one fails the
+        // foreign key — and because this is a single batch, one such row made
+        // the entire nightly purge fail for every user. It did exactly that
+        // until a test was written for it.
+        db.delete(attachmentsTable).where(
+          inArray(
+            attachmentsTable.todoId,
+            db
+              .select({ id: todosTable.id })
+              .from(todosTable)
+              .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before))),
+          ),
+        ),
         db
           .delete(todosTable)
           .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before)))

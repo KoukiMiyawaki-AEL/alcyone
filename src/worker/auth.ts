@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 
 import * as authSchema from "./db/auth-schema";
 import { createRepo } from "./db/repo";
+import { deleteObjectsNow } from "./object-cleanup";
 
 /**
  * Built per request. `env` does not exist at module scope in Workers, and a
@@ -46,9 +47,14 @@ export function createAuth(env: CloudflareBindings) {
           // so deleting rows would strand the files with nothing pointing at
           // them. Objects go first — a leftover row is recoverable, a leftover
           // object is invisible.
+          //
+          // Deleted here and now rather than queued: "your data is deleted"
+          // has to be true when the response is sent, not eventually. Chunked
+          // because R2 takes at most 1000 keys per call — an account with more
+          // attachments than that used to fail to delete at all.
           const keys = (await repo.ownedAttachmentKeys()).map((row) => row.key);
           if (keys.length > 0) {
-            await env.ATTACHMENTS.delete(keys);
+            await deleteObjectsNow(env.ATTACHMENTS, keys);
           }
 
           await repo.batch(repo.purgeOwnedData());

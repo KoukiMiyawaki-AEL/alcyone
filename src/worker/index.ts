@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createAuth } from "./auth";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todoCursorValue, type Repo } from "./db/repo";
+import { handleObjectCleanup, type CleanupMessage } from "./object-cleanup";
 import { clientIp, enforce } from "./rate-limit";
 import { notifyUser } from "./realtime";
 import { purgeExpiredDeletions } from "./scheduled";
@@ -420,9 +421,15 @@ export { app };
 
 export default {
   fetch: app.fetch,
+  // Deletes the R2 objects whose rows the purge already removed. Separate from
+  // `scheduled` on purpose: the cron decides *what* is expired, this does the
+  // unbounded I/O, and neither has to fit in the other's time budget.
+  queue: async (batch, env) => {
+    await handleObjectCleanup(batch, env);
+  },
   scheduled: async (_controller, env, ctx) => {
     // waitUntil so a slow purge cannot hold the scheduled invocation open, and
     // so a failure surfaces in the invocation rather than being swallowed.
     ctx.waitUntil(purgeExpiredDeletions(env));
   },
-} satisfies ExportedHandler<CloudflareBindings>;
+} satisfies ExportedHandler<CloudflareBindings, CleanupMessage>;

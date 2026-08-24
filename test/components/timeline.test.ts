@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTimeline, dayNumber, isoFromDayNumber, monthSpans } from "@/features/todos/timeline";
+import {
+  applyDrag,
+  buildTimeline,
+  dayNumber,
+  isoFromDayNumber,
+  monthSpans,
+} from "@/features/todos/timeline";
 import type { Todo } from "@/features/todos/types";
 
 const todo = (over: Partial<Todo> = {}): Todo => ({
@@ -147,5 +153,71 @@ describe("monthSpans", () => {
       { label: "2026/01", span: 2 },
       { label: "2026/02", span: 3 },
     ]);
+  });
+});
+
+describe("dragging a bar", () => {
+  it("shifts both ends and keeps the duration", () => {
+    expect(applyDrag({ startAt: "2026-11-02", dueAt: "2026-11-06" }, "move", 3)).toEqual({
+      startAt: "2026-11-05",
+      dueAt: "2026-11-09",
+    });
+  });
+
+  it("shifts backwards across a month boundary", () => {
+    expect(applyDrag({ startAt: "2026-03-02", dueAt: "2026-03-03" }, "move", -3)).toEqual({
+      startAt: "2026-02-27",
+      dueAt: "2026-02-28",
+    });
+  });
+
+  it("moves only the date a one-ended task has", () => {
+    // Inventing the other end would set a date nobody chose.
+    expect(applyDrag({ startAt: null, dueAt: "2026-11-10" }, "move", 2)).toEqual({
+      startAt: null,
+      dueAt: "2026-11-12",
+    });
+  });
+
+  it("moves one edge when an edge is dragged", () => {
+    expect(applyDrag({ startAt: "2026-11-02", dueAt: "2026-11-06" }, "start", 2)).toEqual({
+      startAt: "2026-11-04",
+      dueAt: "2026-11-06",
+    });
+    expect(applyDrag({ startAt: "2026-11-02", dueAt: "2026-11-06" }, "end", -2)).toEqual({
+      startAt: "2026-11-02",
+      dueAt: "2026-11-04",
+    });
+  });
+
+  it("will not let a bar invert", () => {
+    // The database refuses it with a CHECK, and finding out after the drop is
+    // a worse way to learn it than not being able to do it.
+    expect(applyDrag({ startAt: "2026-11-02", dueAt: "2026-11-06" }, "start", 10)).toEqual({
+      startAt: "2026-11-06",
+      dueAt: "2026-11-06",
+    });
+    expect(applyDrag({ startAt: "2026-11-02", dueAt: "2026-11-06" }, "end", -10)).toEqual({
+      startAt: "2026-11-02",
+      dueAt: "2026-11-02",
+    });
+  });
+
+  it("leaves an edge alone when the task has no date for it", () => {
+    expect(applyDrag({ startAt: null, dueAt: "2026-11-06" }, "start", 3)).toEqual({
+      startAt: null,
+      dueAt: "2026-11-06",
+    });
+    expect(applyDrag({ startAt: "2026-11-06", dueAt: null }, "end", 3)).toEqual({
+      startAt: "2026-11-06",
+      dueAt: null,
+    });
+  });
+
+  it("changes nothing for a drag of zero columns", () => {
+    // A click that does not move must not be a write: it would churn
+    // `updatedAt` and tell every other tab to refetch for nothing.
+    const dates = { startAt: "2026-11-02", dueAt: "2026-11-06" };
+    expect(applyDrag(dates, "move", 0)).toEqual(dates);
   });
 });

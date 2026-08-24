@@ -34,6 +34,7 @@
 | [0026](./0026-timeline-not-a-gantt-chart.md) | 日付軸のタイムラインを作り、本格的なガントチャートは作らない | Accepted |
 | [0027](./0027-comments-and-append-only-history.md) | Todoにコメントと、書き換えられない変更履歴を持たせる | Accepted |
 | [0028](./0028-display-names-and-assignees.md) | 表示名を変更可能にし、Todoに担当者を持たせる | Accepted |
+| [0029](./0029-task-links-and-an-editable-gantt.md) | タスク間の関係を持たせ、ガントチャート上で日程を編集できるようにする（0026の一部を覆す） | Accepted |
 
 ## ルール
 

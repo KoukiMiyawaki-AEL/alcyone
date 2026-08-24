@@ -225,6 +225,15 @@ function ProjectTodosComponent() {
     return saved;
   }
 
+  async function handleReschedule(
+    id: number,
+    dates: { startAt: string | null; dueAt: string | null },
+  ) {
+    const saved = await updateTodo(id, dates);
+    if (saved) await router.invalidate();
+    return saved;
+  }
+
   async function handleStatusChange(id: number, status: TodoStatus) {
     if (await updateTodo(id, { status })) await router.invalidate();
   }
@@ -312,6 +321,7 @@ function ProjectTodosComponent() {
             today={today}
             truncated={todos.length >= WHOLE_VIEW_LIMIT}
             onEdit={(todo) => setEditor({ mode: "edit", todo })}
+            onReschedule={handleReschedule}
           />
         ) : view === "board" ? (
           <TodoBoard

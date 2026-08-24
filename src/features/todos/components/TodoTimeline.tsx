@@ -1,10 +1,18 @@
 import { CalendarRangeIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/app/empty-state";
 import { cn } from "@/lib/utils";
 
 import { assigneeName } from "../assignee";
-import { buildTimeline, isoFromDayNumber, monthSpans } from "../timeline";
+import {
+  applyDrag,
+  buildTimeline,
+  isoFromDayNumber,
+  monthSpans,
+  type DragMode,
+  type DragResult,
+} from "../timeline";
 import { STATUS_LABELS, type Assignee, type Todo } from "../types";
 
 type TodoTimelineProps = {
@@ -15,6 +23,8 @@ type TodoTimelineProps = {
   /** True when the fetch was capped, so this is not the whole project. */
   truncated: boolean;
   onEdit: (todo: Todo) => void;
+  /** Commits a drag. Resolves to whether the write happened. */
+  onReschedule: (id: number, dates: DragResult) => Promise<boolean>;
 };
 
 /** One column per day. Narrow enough that a couple of months fit on a laptop. */
@@ -36,12 +46,86 @@ const BAR_CLASS: Record<Todo["status"], string> = {
  * the data. What it does show is the thing start and due dates were added
  * for — how the work sits against the calendar and against each other.
  *
- * Read-only. Dragging a bar to reschedule would mean turning pixels back into
- * dates, and getting that wrong moves a deadline the user did not touch; the
- * detail form edits the same dates with no ambiguity.
+ * Bars can be dragged to reschedule, which ADR 0026 originally refused on the
+ * grounds that turning pixels into dates risks moving a deadline nobody
+ * touched. What answers that objection is the grid: a column is exactly one
+ * day, so the conversion is integer division with nothing to round wrong. The
+ * arithmetic lives in `applyDrag`, tested on its own, and the pending dates are
+ * shown while dragging so the write is never a surprise.
+ *
+ * Dragging is not the only way: the detail form edits the same dates, which is
+ * what keeps this reachable without a pointer.
  */
-export function TodoTimeline({ todos, assignees, today, truncated, onEdit }: TodoTimelineProps) {
+export function TodoTimeline({
+  todos,
+  assignees,
+  today,
+  truncated,
+  onEdit,
+  onReschedule,
+}: TodoTimelineProps) {
+  // What is being dragged, and how far it has moved so far. Held here rather
+  // than per-bar so the whole grid can show the pending dates while it happens.
+  const [drag, setDrag] = useState<{
+    id: number;
+    mode: DragMode;
+    fromX: number;
+    deltaDays: number;
+  } | null>(null);
   const { from, days, bars, unscheduled, todayOffset, clipped } = buildTimeline(todos, today);
+
+  /** The dates a bar would get if the drag ended now. */
+  const pending = (todo: Todo): DragResult =>
+    drag?.id === todo.id
+      ? applyDrag(todo, drag.mode, drag.deltaDays)
+      : { startAt: todo.startAt, dueAt: todo.dueAt };
+
+  function startDrag(event: React.PointerEvent, todo: Todo, mode: DragMode) {
+    // The bar's own handler would otherwise also fire for an edge and turn a
+    // resize into a move.
+    event.stopPropagation();
+    event.preventDefault();
+    setDrag({ id: todo.id, mode, fromX: event.clientX, deltaDays: 0 });
+  }
+
+  async function endDrag() {
+    if (!drag) return;
+    const todo = todos.find((t) => t.id === drag.id);
+    setDrag(null);
+
+    // A drag that moved no columns is not a write. Sending one would churn
+    // `updatedAt` and tell every other tab to refetch for nothing.
+    if (!todo || drag.deltaDays === 0) return;
+
+    await onReschedule(todo.id, applyDrag(todo, drag.mode, drag.deltaDays));
+  }
+
+  // Tracked on the window so a fast drag that leaves the bar keeps working,
+  // and so releasing anywhere commits rather than stranding the drag.
+  useEffect(() => {
+    if (!drag) return;
+
+    const onMove = (event: PointerEvent) =>
+      setDrag((current) =>
+        current === null
+          ? null
+          : // A column is exactly one day, so this is integer division with
+            // nothing to round wrong — the property that makes editing here
+            // safe at all.
+            (console.log("[drag] move", event.clientX - current.fromX),
+            { ...current, deltaDays: Math.round((event.clientX - current.fromX) / DAY_WIDTH) }),
+      );
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
+
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
+    };
+  });
 
   if (todos.length === 0) {
     return (
@@ -126,11 +210,33 @@ export function TodoTimeline({ todos, assignees, today, truncated, onEdit }: Tod
                     className="border-b border-border px-0.5 py-1.5"
                   >
                     <div
-                      className={cn("h-4 rounded-sm", BAR_CLASS[bar.todo.status])}
+                      className={cn(
+                        "group/bar relative flex h-4 items-stretch rounded-sm",
+                        BAR_CLASS[bar.todo.status],
+                        drag?.id === bar.todo.id && "ring-2 ring-primary",
+                      )}
                       // The bar is decoration; the row's name and this label
                       // are what a screen reader gets.
-                      title={`${STATUS_LABELS[bar.todo.status]}: ${bar.todo.startAt ?? "—"} 〜 ${bar.todo.dueAt ?? "—"}`}
-                    />
+                      title={`${STATUS_LABELS[bar.todo.status]}: ${pending(bar.todo).startAt ?? "—"} 〜 ${pending(bar.todo).dueAt ?? "—"}`}
+                      onPointerDown={(event) => startDrag(event, bar.todo, "move")}
+                    >
+                      {/*
+                        Edges resize; the middle moves. Wide enough to hit
+                        without being wide enough to swallow a short bar — a
+                        one-day bar is DAY_WIDTH across in total.
+                      */}
+                      <span
+                        role="presentation"
+                        className="w-1.5 shrink-0 cursor-ew-resize"
+                        onPointerDown={(event) => startDrag(event, bar.todo, "start")}
+                      />
+                      <span className="flex-1 cursor-grab" />
+                      <span
+                        role="presentation"
+                        className="w-1.5 shrink-0 cursor-ew-resize"
+                        onPointerDown={(event) => startDrag(event, bar.todo, "end")}
+                      />
+                    </div>
                   </div>
                   {days - bar.offset - bar.length > 0 ? (
                     <div

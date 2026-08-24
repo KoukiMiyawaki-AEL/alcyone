@@ -97,3 +97,50 @@ export function monthSpans(from: number, days: number): { label: string; span: n
 
   return out;
 }
+
+/** What a drag is doing to a bar. */
+export type DragMode = "move" | "start" | "end";
+
+export type DragResult = { startAt: string | null; dueAt: string | null };
+
+/**
+ * Turns a drag of `deltaDays` columns into the dates it produces.
+ *
+ * The objection ADR 0026 raised against editing here was that turning pixels
+ * back into dates puts a deadline the user never touched at risk. The answer is
+ * that the axis is a fixed grid: a column is exactly one day, so the conversion
+ * is integer division with no rounding to be wrong about. What remains is
+ * making the rules explicit, which is what this function is.
+ *
+ * - `move` shifts both ends, keeping the duration. A task with one date shifts
+ *   that one; inventing the other would set a date nobody chose.
+ * - `start` and `end` move one edge and are clamped so the bar cannot invert —
+ *   a CHECK constraint would reject it anyway, and failing after the drop is a
+ *   worse way to learn it than not being able to do it.
+ */
+export function applyDrag(
+  todo: { startAt: string | null; dueAt: string | null },
+  mode: DragMode,
+  deltaDays: number,
+): DragResult {
+  const shift = (iso: string | null) =>
+    iso === null ? null : isoFromDayNumber(dayNumber(iso) + deltaDays);
+
+  if (mode === "move") {
+    return { startAt: shift(todo.startAt), dueAt: shift(todo.dueAt) };
+  }
+
+  if (mode === "start") {
+    // Nothing to drag when there is no start date; the bar is a single-day
+    // mark and its one edge is the other one.
+    if (todo.startAt === null) return { startAt: null, dueAt: todo.dueAt };
+    const moved = dayNumber(todo.startAt) + deltaDays;
+    const limit = todo.dueAt === null ? Infinity : dayNumber(todo.dueAt);
+    return { startAt: isoFromDayNumber(Math.min(moved, limit)), dueAt: todo.dueAt };
+  }
+
+  if (todo.dueAt === null) return { startAt: todo.startAt, dueAt: null };
+  const moved = dayNumber(todo.dueAt) + deltaDays;
+  const limit = todo.startAt === null ? -Infinity : dayNumber(todo.startAt);
+  return { startAt: todo.startAt, dueAt: isoFromDayNumber(Math.max(moved, limit)) };
+}

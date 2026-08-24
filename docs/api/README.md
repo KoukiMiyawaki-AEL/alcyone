@@ -105,6 +105,20 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 （SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。
 経緯は[ADR 0011](../adr/0011-expand-contract-migrations.md)。
 
+## タスク間の関係
+
+| Method | Path | 用途 | 成功 | 失敗 |
+|---|---|---|---|---|
+| GET | `/api/todos/:id/links` | このタスクの関係（両方向） | `Link[]` | `400` `404` |
+| POST | `/api/todos/:id/links` | 関係を追加 | `201 { id }` | `400` `404` |
+| DELETE | `/api/links/:id` | 関係を解除 | `204` | `400` `404` |
+
+`kind` は `blocks`（有向。`fromTodoId` が `toTodoId` をブロックする）か `related`（対称）。
+**`related` は1行しか保存しない**ので、両端から見えるが行は1つ。
+
+親子は関係ではなく `PATCH /api/todos/:id` の `parentId`。**循環は `400`**、
+自分のものでないタスクを親に指定すると **`404`**（存在を漏らさないため）。
+
 ## 担当者
 
 | Method | Path | 用途 | 成功 | 失敗 |

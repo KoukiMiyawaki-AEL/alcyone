@@ -1,4 +1,4 @@
-import { Link, Outlet, createRootRoute, useRouter } from "@tanstack/react-router";
+import { Link, Outlet, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
 import { FileQuestionIcon, TriangleAlertIcon } from "lucide-react";
 
 import { AppHeader } from "@/components/app/app-header";
@@ -8,8 +8,9 @@ import { ThemeProvider } from "@/components/app/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { AuthState } from "@/features/auth/types";
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{ auth: AuthState }>()({
   component: RootComponent,
   errorComponent: RootErrorComponent,
   notFoundComponent: RootNotFoundComponent,

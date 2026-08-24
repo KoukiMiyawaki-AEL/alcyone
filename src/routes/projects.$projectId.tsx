@@ -1,4 +1,4 @@
-import { Link, createFileRoute, notFound, useRouter } from "@tanstack/react-router";
+import { Link, createFileRoute, notFound, redirect, useRouter } from "@tanstack/react-router";
 import { FolderXIcon, TriangleAlertIcon } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
@@ -16,6 +16,16 @@ import { apiClient } from "@/lib/api-client";
 type LoaderData = { project: Project | null; todos: Todo[]; error: string | null };
 
 export const Route = createFileRoute("/projects/$projectId")({
+  // The guard lives here rather than on the root route so that /login itself
+  // stays reachable. `isPending` must not count as signed-out, or a hard reload
+  // would bounce a signed-in user to the login screen before the session
+  // request has even come back.
+  beforeLoad: ({ context, location }) => {
+    if (context.auth.isPending) return;
+    if (!context.auth.user) {
+      throw redirect({ to: "/login", search: { redirect: location.href } });
+    }
+  },
   loader: async ({ params }): Promise<LoaderData> => {
     let res;
     try {
@@ -28,11 +38,15 @@ export const Route = createFileRoute("/projects/$projectId")({
       return { project: null, todos: [], error: TRANSIENT };
     }
 
-    // Thrown outside the catch on purpose. `notFound()` works by throwing, so
-    // raising it inside the try above would be swallowed and turned into the
-    // generic error card.
-    // 400 is included because a non-numeric :projectId fails param validation,
+    // Everything below is outside the catch on purpose: both `redirect()` and
+    // `notFound()` work by throwing, so raising either inside the try above
+    // would be swallowed and turned into the generic error card.
+    //
+    // 400 joins 404 because a non-numeric :projectId fails param validation,
     // which for the user is the same thing as the project not existing.
+    if (res.status === 401) {
+      throw redirect({ to: "/login", search: { redirect: `/projects/${params.projectId}` } });
+    }
     if (res.status === 404 || res.status === 400) throw notFound();
 
     if (!res.ok) return { project: null, todos: [], error: TRANSIENT };

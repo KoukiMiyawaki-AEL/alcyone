@@ -11,13 +11,23 @@ import { toast } from "@/components/ui/toast";
 export async function mutate(
   // The Hono RPC client returns `ClientResponse`, not the platform `Response`,
   // and each endpoint has its own union of status codes — `ok` is all we need.
-  request: () => Promise<{ ok: boolean }>,
+  request: () => Promise<{ ok: boolean; status?: number }>,
   errorMessage: string,
 ): Promise<boolean> {
   try {
     const res = await request();
     if (!res.ok) {
-      toast.add({ type: "error", title: errorMessage });
+      // A 401 here means the session lapsed mid-session. Saying "failed to add"
+      // would send the user hunting for a bug that is not there; the route
+      // guards will redirect on the next navigation.
+      toast.add(
+        "status" in res && res.status === 401
+          ? {
+              type: "error",
+              title: "サインインの有効期限が切れました。再度サインインしてください。",
+            }
+          : { type: "error", title: errorMessage },
+      );
       return false;
     }
     return true;

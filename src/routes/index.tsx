@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { TriangleAlertIcon } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
@@ -12,15 +12,34 @@ import { ProjectList } from "@/features/projects/components/ProjectList";
 import type { Project } from "@/features/projects/types";
 import { apiClient } from "@/lib/api-client";
 
+const TRANSIENT = "プロジェクトの取得に失敗しました。";
+
 export const Route = createFileRoute("/")({
-  loader: async (): Promise<{ projects: Project[]; error: string | null }> => {
-    try {
-      const res = await apiClient.api.projects.$get();
-      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
-      return { projects: await res.json(), error: null };
-    } catch {
-      return { projects: [], error: "プロジェクトの取得に失敗しました。" };
+  // The guard lives here rather than on the root route so that /login itself
+  // stays reachable. `isPending` must not count as signed-out, or a hard reload
+  // would bounce a signed-in user to the login screen before the session
+  // request has even come back.
+  beforeLoad: ({ context, location }) => {
+    if (context.auth.isPending) return;
+    if (!context.auth.user) {
+      throw redirect({ to: "/login", search: { redirect: location.href } });
     }
+  },
+  loader: async (): Promise<{ projects: Project[]; error: string | null }> => {
+    let res;
+    try {
+      res = await apiClient.api.projects.$get();
+    } catch {
+      // Network failure only. Anything status-shaped is handled below, outside
+      // the catch — `redirect()` works by throwing, so raising it in here would
+      // be swallowed and rendered as the generic error card.
+      return { projects: [], error: TRANSIENT };
+    }
+
+    if (res.status === 401) throw redirect({ to: "/login", search: { redirect: "/" } });
+    if (!res.ok) return { projects: [], error: TRANSIENT };
+
+    return { projects: await res.json(), error: null };
   },
   pendingComponent: ProjectsPending,
   component: IndexComponent,

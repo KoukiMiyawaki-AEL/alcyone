@@ -7,10 +7,18 @@
   },
   "overrides": [
     {
-      // File-based routes must export `Route` alongside their component, and
-      // the shadcn/ui generated files co-locate variants/managers with theirs.
-      // Neither is something we can restructure, so the rule is pure noise here.
-      "files": ["src/routes/**", "src/components/ui/**", "src/components/app/theme-provider.tsx"],
+      // Structural cases the rule cannot be satisfied for: file-based routes
+      // must export `Route` next to their component; shadcn/ui's generated
+      // files co-locate variants and managers with theirs; a context provider
+      // paired with its own hook is the idiomatic shape; and src/main.tsx is
+      // the entry point, not a refresh boundary at all.
+      "files": [
+        "src/routes/**",
+        "src/components/ui/**",
+        "src/components/app/theme-provider.tsx",
+        "src/features/auth/AuthProvider.tsx",
+        "src/main.tsx"
+      ],
       "rules": {
         "react/only-export-components": "off"
       }

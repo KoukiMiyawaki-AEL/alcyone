@@ -20,6 +20,7 @@ import { ftsRank, toFtsQuery, toLikePattern, todosFts } from "./fts";
 import {
   TODO_STATUSES,
   attachmentsTable,
+  user,
   todoCommentsTable,
   todoEventsTable,
   projectsTable,
@@ -288,10 +289,28 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
     );
 
   const comments = {
+    /**
+     * Joined to `user` so a comment arrives with a name on it.
+     *
+     * Resolved here rather than by the client looking up the session's own
+     * name: today every author is the signed-in user, so the two agree — and
+     * a rule that holds by coincidence is the one that breaks silently the
+     * day a project has two people on it.
+     */
     listByTodo: (todoId: number) =>
       db
-        .select()
+        .select({
+          id: todoCommentsTable.id,
+          todoId: todoCommentsTable.todoId,
+          authorId: todoCommentsTable.authorId,
+          authorName: user.name,
+          body: todoCommentsTable.body,
+          revisionId: todoCommentsTable.revisionId,
+          createdAt: todoCommentsTable.createdAt,
+          updatedAt: todoCommentsTable.updatedAt,
+        })
         .from(todoCommentsTable)
+        .innerJoin(user, eq(user.id, todoCommentsTable.authorId))
         .where(
           and(
             eq(todoCommentsTable.todoId, todoId),
@@ -389,8 +408,19 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
   const events = {
     listByTodo: (todoId: number) =>
       db
-        .select()
+        .select({
+          id: todoEventsTable.id,
+          todoId: todoEventsTable.todoId,
+          actorId: todoEventsTable.actorId,
+          actorName: user.name,
+          revisionId: todoEventsTable.revisionId,
+          field: todoEventsTable.field,
+          fromValue: todoEventsTable.fromValue,
+          toValue: todoEventsTable.toValue,
+          createdAt: todoEventsTable.createdAt,
+        })
         .from(todoEventsTable)
+        .innerJoin(user, eq(user.id, todoEventsTable.actorId))
         .where(
           and(
             eq(todoEventsTable.todoId, todoId),

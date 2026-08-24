@@ -6,7 +6,7 @@ test.describe("data export", () => {
     await signUp(page);
     await createProject(page, "Exported");
 
-    await page.getByRole("button", { name: /Account:/ }).click();
+    await page.getByRole("button", { name: /アカウント:/ }).click();
     await page.getByRole("menuitem", { name: "Account" }).click();
 
     await page.getByRole("button", { name: "エクスポートを開始" }).click();

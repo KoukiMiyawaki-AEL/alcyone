@@ -32,7 +32,7 @@ export async function signIn(page: Page, email: string) {
 }
 
 export async function signOut(page: Page) {
-  await page.getByRole("button", { name: /^Account:/ }).click();
+  await page.getByRole("button", { name: /^アカウント:/ }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
 }
 

@@ -29,9 +29,14 @@ export function UserMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="sm" aria-label={`Account: ${user.email}`}>
+          <Button variant="ghost" size="sm" aria-label={`アカウント: ${user.name || user.email}`}>
             <UserIcon />
-            <span className="hidden sm:inline">{user.email}</span>
+            {/*
+              The name, because that is what everyone else sees on this user's
+              comments. The email is the fallback for an account whose name is
+              somehow empty, so the button is never blank.
+            */}
+            <span className="hidden sm:inline">{user.name || user.email}</span>
           </Button>
         }
       />

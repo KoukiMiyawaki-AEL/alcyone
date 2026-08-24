@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { ProfileCard } from "@/features/auth/components/ProfileCard";
 import { DataExportCard } from "@/features/exports/DataExportCard";
 import { authClient } from "@/lib/auth-client";
 
@@ -58,6 +59,8 @@ function AccountComponent() {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
       <PageHeader title="Account" description={user?.email ?? ""} />
+
+      {user ? <ProfileCard name={user.name} email={user.email} /> : null}
 
       <DataExportCard />
 

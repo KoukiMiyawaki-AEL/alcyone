@@ -6,8 +6,15 @@ import type {
 } from "@/worker/db/schema";
 
 export type Todo = typeof todosTable.$inferSelect;
-export type TodoComment = typeof todoCommentsTable.$inferSelect;
-export type TodoEvent = typeof todoEventsTable.$inferSelect;
+/**
+ * As the activity endpoint returns them: the stored row plus the person's name,
+ * resolved by a join rather than looked up on the client. `deletedAt` is not
+ * part of the shape — a deleted comment is simply not returned.
+ */
+export type TodoComment = Omit<typeof todoCommentsTable.$inferSelect, "deletedAt"> & {
+  authorName: string;
+};
+export type TodoEvent = typeof todoEventsTable.$inferSelect & { actorName: string };
 
 export type { TodoStatus };
 

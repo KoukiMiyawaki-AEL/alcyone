@@ -44,7 +44,7 @@ test.describe("ownership and deletion", () => {
     await signUp(page);
     await createProject(page, "Doomed project");
 
-    await page.getByRole("button", { name: /^Account:/ }).click();
+    await page.getByRole("button", { name: /^アカウント:/ }).click();
     await page.getByRole("menuitem", { name: "Account" }).click();
     await page.getByRole("button", { name: "アカウントを削除", exact: true }).click();
     await page.getByLabel("確認のためパスワードを入力").fill(PASSWORD);

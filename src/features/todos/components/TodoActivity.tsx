@@ -169,6 +169,10 @@ export function TodoActivity({
                       </div>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">
+                        {entry.comment.authorName}
+                      </span>
+                      {" · "}
                       <time dateTime={entry.comment.createdAt}>
                         {entry.comment.createdAt.slice(0, 16).replace("T", " ")}
                       </time>
@@ -189,9 +193,20 @@ export function TodoActivity({
                       <li key={event.id}>{describe(event)}</li>
                     ))}
                   </ul>
-                  <time dateTime={entry.at} className="ml-auto shrink-0 tabular-nums">
-                    {entry.at.slice(0, 16).replace("T", " ")}
-                  </time>
+                  {/*
+                    Every row in a revision was written by the same person in
+                    the same save, so the name belongs to the entry rather than
+                    to each line inside it.
+                  */}
+                  <span className="ml-auto shrink-0">
+                    <span className="font-medium text-foreground">
+                      {entry.group.events[0]!.actorName}
+                    </span>
+                    {" · "}
+                    <time dateTime={entry.at} className="tabular-nums">
+                      {entry.at.slice(0, 16).replace("T", " ")}
+                    </time>
+                  </span>
                 </div>
 
                 {/*

@@ -10,10 +10,10 @@ const comment = (over: Partial<TodoComment> = {}): TodoComment => ({
   todoId: 1,
   authorId: "u1",
   body: "コメント本文",
+  authorName: "Alice",
   revisionId: null,
   createdAt: "2026-08-24T10:00:00.000Z",
   updatedAt: "2026-08-24T10:00:00.000Z",
-  deletedAt: null,
   ...over,
 });
 
@@ -21,6 +21,7 @@ const event = (over: Partial<TodoEvent> = {}): TodoEvent => ({
   id: 1,
   todoId: 1,
   actorId: "u1",
+  actorName: "Alice",
   revisionId: "r1",
   field: "created",
   fromValue: null,

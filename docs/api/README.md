@@ -25,7 +25,7 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 |---|---|---|---|---|---|
 | GET | `/api/health` | ヘルスチェック（**認証不要**） | — | `{ ok: true }` | — |
 | * | `/api/auth/*` | Better Auth（サインアップ/イン/アウト等） | — | — | `403` Origin不正 |
-| GET | `/api/projects` | Project一覧（id昇順） | — | `Project[]` | — |
+| GET | `/api/projects` | Project一覧（id昇順） | クエリ: `cursor`、`limit`（1〜100、既定50） | `{ items: Project[], nextCursor }` | `400` |
 | POST | `/api/projects` | Project作成 | `{ name: string }`（1〜100文字） | `201` `Project` | `400` |
 | DELETE | `/api/projects/:projectId` | Project削除（**論理削除**。配下のTodoも同時に） | — | `204` (body無し) | `400`, `404` |
 | POST | `/api/projects/:projectId/restore` | Projectの復元（配下のTodoも同時に） | — | `200` `Project` | `400`, `404` |
@@ -54,6 +54,13 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 
 - `Todo`: `{ id, title, completed, createdAt, updatedAt, projectId, dueAt: string|null, priority: 0-3, deletedAt: string|null }`
 - `Project`: `{ id: number, name: string, createdAt: string, ownerId: string, deletedAt: string | null }`
+
+一覧は**キーセットページネーション**。`nextCursor`が非nullなら次のページがあり、そのまま
+`cursor`に渡す。カーソルは不透明な文字列で、中身に依存しないこと。壊れた・古いカーソルは
+エラーにせず先頭から返す（カーソルは位置であって命令ではない）。
+
+オフセットではなくキーセットなのは、`OFFSET`が読み飛ばす行もスキャン対象になり、
+**D1がスキャン行数で課金する**ため —— オフセットだと後ろのページほど高くなる。
 
 並び順は常に`id`をタイブレークに含める。含めないと同じ期限・同じ優先度の項目が
 リクエストごとに入れ替わり、一覧が勝手にシャッフルしているように見える。

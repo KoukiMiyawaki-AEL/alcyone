@@ -29,7 +29,7 @@ export const Route = createFileRoute("/")({
   loader: async (): Promise<{ projects: Project[]; error: string | null }> => {
     let res;
     try {
-      res = await apiClient.api.projects.$get();
+      res = await apiClient.api.projects.$get({ query: {} });
     } catch {
       // Network failure only. Anything status-shaped is handled below, outside
       // the catch — `redirect()` works by throwing, so raising it in here would
@@ -40,7 +40,10 @@ export const Route = createFileRoute("/")({
     if (res.status === 401) throw redirect({ to: "/login", search: { redirect: "/" } });
     if (!res.ok) return { projects: [], error: TRANSIENT };
 
-    return { projects: await res.json(), error: null };
+    // Only the first page is shown. There is no "load more" yet, so a user
+    // with more projects than the default page size would not see them all —
+    // recorded rather than hidden. See the readiness map, 3-4.
+    return { projects: (await res.json()).items, error: null };
   },
   pendingComponent: ProjectsPending,
   component: IndexComponent,

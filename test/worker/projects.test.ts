@@ -56,7 +56,10 @@ describe("Projects API", () => {
 
     const res = await app.request("/api/projects", { headers: alice }, env);
     expect(res.status).toBe(200);
-    expect(((await res.json()) as Project[]).map((p) => p.name)).toEqual(["First", "Second"]);
+    expect(((await res.json()) as { items: Project[] }).items.map((p) => p.name)).toEqual([
+      "First",
+      "Second",
+    ]);
   });
 
   it("rejects a blank name", async () => {
@@ -120,7 +123,9 @@ describe("Projects API", () => {
 
     // And the project itself is gone from the list rather than from the table.
     const list = await app.request("/api/projects", { headers: alice }, env);
-    expect(((await list.json()) as Project[]).map((p) => p.name)).toEqual(["Keeper"]);
+    expect(((await list.json()) as { items: Project[] }).items.map((p) => p.name)).toEqual([
+      "Keeper",
+    ]);
   });
 
   it("404s deleting a project that does not exist", async () => {
@@ -164,7 +169,7 @@ describe("cross-user isolation", () => {
     await createProject(bob, "Bob's project");
 
     const res = await app.request("/api/projects", { headers: bob }, env);
-    const names = ((await res.json()) as Project[]).map((p) => p.name);
+    const names = ((await res.json()) as { items: Project[] }).items.map((p) => p.name);
     expect(names).toEqual(["Bob's project"]);
   });
 

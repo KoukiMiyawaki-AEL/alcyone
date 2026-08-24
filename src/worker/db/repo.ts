@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/d1";
 
+import { type Cursor } from "./cursor";
 import { attachmentsTable, projectsTable, todosTable } from "./schema";
 
 /**
@@ -15,7 +16,55 @@ const now = () => new Date().toISOString();
 
 export type TodoStatus = "all" | "active" | "done";
 export type TodoSort = "created" | "due" | "priority";
-export type TodoListOptions = { status?: TodoStatus; sort?: TodoSort };
+export type TodoListOptions = {
+  status?: TodoStatus;
+  sort?: TodoSort;
+  cursor?: Cursor | null;
+  limit?: number;
+};
+
+/** The column a given sort orders by, and how to read it off a row. */
+const sortColumn = {
+  created: todosTable.id,
+  due: todosTable.dueAt,
+  priority: todosTable.priority,
+} as const;
+
+export const todoCursorValue = (
+  sort: TodoSort,
+  row: { id: number; dueAt: string | null; priority: number },
+) => (sort === "due" ? row.dueAt : sort === "priority" ? row.priority : row.id);
+
+/**
+ * "Everything after this position", expressed for the active sort.
+ *
+ * The `or` is the part that matters: rows sharing a sort value are separated by
+ * id, so a page boundary that lands in the middle of a group neither repeats
+ * nor skips them.
+ */
+function afterCursor(sort: TodoSort, cursor: Cursor): SQL | undefined {
+  if (sort === "created") return gt(todosTable.id, cursor.id);
+
+  const column = sortColumn[sort];
+  if (sort === "priority") {
+    // Descending, so "after" means a lower priority.
+    return or(
+      sql`${column} < ${cursor.value}`,
+      and(eq(column, cursor.value as number), gt(todosTable.id, cursor.id)),
+    );
+  }
+
+  // Due date ascending with nulls last: a null cursor is already in the
+  // trailing group, so only ids can move it forward.
+  if (cursor.value === null) {
+    return and(sql`${column} is null`, gt(todosTable.id, cursor.id));
+  }
+  return or(
+    sql`${column} is null`,
+    sql`${column} > ${cursor.value}`,
+    and(eq(column, cursor.value as string), gt(todosTable.id, cursor.id)),
+  );
+}
 
 const statusFilter = (status: TodoStatus = "all"): SQL | undefined =>
   status === "all" ? undefined : eq(todosTable.completed, status === "done");
@@ -80,12 +129,19 @@ export function createRepo(binding: D1Database, ownerId: string) {
       );
 
   const projects = {
-    list: () =>
+    list: (options: { cursor?: Cursor | null; limit?: number } = {}) =>
       db
         .select()
         .from(projectsTable)
-        .where(and(eq(projectsTable.ownerId, ownerId), isNull(projectsTable.deletedAt)))
-        .orderBy(asc(projectsTable.id)),
+        .where(
+          and(
+            eq(projectsTable.ownerId, ownerId),
+            isNull(projectsTable.deletedAt),
+            options.cursor ? gt(projectsTable.id, options.cursor.id) : undefined,
+          ),
+        )
+        .orderBy(asc(projectsTable.id))
+        .limit((options.limit ?? 0) + 1),
 
     find: (id: number) =>
       db
@@ -145,8 +201,13 @@ export function createRepo(binding: D1Database, ownerId: string) {
             inArray(todosTable.projectId, ownedProjectIds(projectId)),
             isNull(todosTable.deletedAt),
             statusFilter(options.status),
+            options.cursor ? afterCursor(options.sort ?? "created", options.cursor) : undefined,
           ),
         )
+        // One more than asked for: the extra row is how the caller learns
+        // whether another page exists without a second count query, which on
+        // D1 would double the rows read.
+        .limit((options.limit ?? 0) + 1)
         // Always a tiebreaker on id: without one, two todos with the same due
         // date or priority can swap places between requests, which looks like
         // the list is shuffling itself.

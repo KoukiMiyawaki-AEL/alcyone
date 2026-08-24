@@ -4,7 +4,8 @@ import type { RequestIdVariables } from "hono/request-id";
 import { z } from "zod";
 
 import { createAuth } from "./auth";
-import { createRepo, type Repo } from "./db/repo";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
+import { createRepo, todoCursorValue, type Repo } from "./db/repo";
 import { clientIp, enforce } from "./rate-limit";
 import { purgeExpiredDeletions } from "./scheduled";
 import { validate } from "./validator";
@@ -35,10 +36,17 @@ const updateTodoSchema = z.object({
  * Defaults live here rather than in the client so that hitting the endpoint
  * directly behaves the same as the UI does.
  */
-const todoQuerySchema = z.object({
-  status: z.enum(["all", "active", "done"]).default("all"),
-  sort: z.enum(["created", "due", "priority"]).default("created"),
+const pageQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
 });
+
+const todoQuerySchema = z
+  .object({
+    status: z.enum(["all", "active", "done"]).default("all"),
+    sort: z.enum(["created", "due", "priority"]).default("created"),
+  })
+  .extend(pageQuerySchema.shape);
 
 /** Small enough to buffer in a Worker's 128MB without thinking about it. */
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -90,9 +98,16 @@ const app = new Hono<{
     c.set("repo", createRepo(c.env.DB, session.user.id));
     await next();
   })
-  .get("/api/projects", async (c) => {
-    const projects = await c.get("repo").projects.list();
-    return c.json(projects);
+  .get("/api/projects", validate("query", pageQuerySchema), async (c) => {
+    const { cursor, limit } = c.req.valid("query");
+    const rows = await c
+      .get("repo")
+      .projects.list({ cursor: cursor ? decodeCursor(cursor) : null, limit });
+
+    // An envelope rather than a bare array. It was one before, and changing
+    // that later would have broken every caller — the exact one-way door the
+    // readiness map recorded as D8.
+    return c.json(paginate(rows, limit, (row) => ({ value: row.id, id: row.id })));
   })
   .post("/api/projects", validate("json", createProjectSchema), async (c) => {
     const { name } = c.req.valid("json");
@@ -139,22 +154,32 @@ const app = new Hono<{
     validate("query", todoQuerySchema),
     async (c) => {
       const { projectId } = c.req.valid("param");
-      const { status, sort } = c.req.valid("query");
+      const { status, sort, cursor, limit } = c.req.valid("query");
       const repo = c.get("repo");
 
       // One round trip for both. Returning an envelope rather than a bare array
       // gives the page its title without a second request, and leaves room to
       // add a cursor later without a breaking change to the response shape.
-      const [[project], todos] = await repo.batch([
+      const [[project], rows] = await repo.batch([
         repo.projects.find(projectId),
-        repo.todos.listByProject(projectId, { status, sort }),
+        repo.todos.listByProject(projectId, {
+          status,
+          sort,
+          cursor: cursor ? decodeCursor(cursor) : null,
+          limit,
+        }),
       ]);
 
       if (!project) {
         return c.json({ error: "Not found" }, 404);
       }
 
-      return c.json({ project, todos });
+      const page = paginate(rows, limit, (row) => ({
+        value: todoCursorValue(sort, row),
+        id: row.id,
+      }));
+
+      return c.json({ project, todos: page.items, nextCursor: page.nextCursor });
     },
   )
   .post(

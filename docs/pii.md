@@ -5,6 +5,8 @@
 挙げていた項目。
 
 **この表は`src/worker/db/schema.ts`と`src/worker/db/auth-schema.ts`が変わったら更新すること。**
+**データベース以外の置き場所（R2 / KV / Cookie / Analytics Engine）も同じ表に入れる。**
+削除請求に答えるとき、「テーブルには無いがR2には残っている」は答えとして成立しない。
 
 ## 保持しているもの
 
@@ -18,6 +20,18 @@
 | `session` | `userAgent` | User-Agent | **リクエストから自動取得** |
 | `projects` | `name` | ユーザーが付けた名前。**自由入力なので個人情報が入りうる** | 本人が入力 |
 | `todos` | `title` | 同上 | 本人が入力 |
+| `attachments` | `filename` | 添付ファイル名。**自由入力なので個人情報が入りうる** | 本人が入力 |
+| `shares` | `token` | 公開リンクのトークン。それ自体は個人情報ではないが、**projectの中身を誰でも読める状態にする** | サーバが生成 |
+
+### データベースの外
+
+| 置き場所 | 何が | 消え方 |
+|---|---|---|
+| R2 `attachments/*` | 添付ファイルの中身 | 退会時に即時削除。個別削除は保持期間経過後にキュー経由（[ADR 0019](./adr/0019-object-cleanup-queue.md)） |
+| R2 `exports/{userId}/*` | **その時点の全データの複製**（論理削除済みの行を含む） | 30日で自動削除。退会時はprefixごと即時削除（[ADR 0020](./adr/0020-data-export-workflow.md)） |
+| KV `share:{token}` | 公開共有ビュー（project名とtodoのtitle） | 60秒のTTL。共有解除時にも削除するが、**KVは結果整合なので最大1分残りうる**（[ADR 0022](./adr/0022-share-links-cached-in-kv.md)） |
+| Analytics Engine | 共有リンクの閲覧イベントとエラーイベント | **閲覧者を識別する情報を書いていない**（IP・UA・user idを含めない）。ただし**個別に消す手段が無い**（[ADR 0023](./adr/0023-analytics-engine-events.md)） |
+| Cookie `d1-bookmark` | D1のbookmark。個人データではない | 1日で失効（[ADR 0021](./adr/0021-d1-sessions-for-read-replicas.md)） |
 
 `session.ipAddress` と `session.userAgent` は Better Auth が既定で記録する。**本人が入力したもの
 ではないのに個人データである**点に注意。
@@ -27,7 +41,8 @@
 - 平文のパスワード
 - 決済情報（課金なし）
 - 位置情報、電話番号、生年月日
-- サードパーティのトラッキング（アナリティクスを入れていない）
+- サードパーティのトラッキング（外部のアナリティクスSDKは入れていない）
+- **閲覧者の識別情報** — Analytics Engineに書くのはイベント種別・共有トークン・件数のみで、IP・User-Agent・user idを含めない。テストで不在を固定してある（`test/worker/analytics.test.ts`）
 - **アクセスログ中の個人データ** — `app.onError` が出すのは requestId / userId / stack / method /
   path のみで、**リクエストボディもヘッダも出さない**。テストで固定してある
   （`test/worker/request-id.test.ts`）
@@ -37,13 +52,17 @@
 `/account` からの退会で、上記すべてが物理削除される（[ADR 0015](./adr/0015-soft-delete-items-hard-delete-accounts.md)）。
 
 - `user` / `session` / `account`: Better Auth が削除。session と account は `user` からcascade
-- `projects` / `todos`: `beforeDelete` フックが**論理削除済みの行も含めて**物理削除
+- `projects` / `todos` / `attachments` / `shares`: `beforeDelete` フックが**論理削除済みの行も含めて**物理削除
+- R2の添付とエクスポート: 同フックが**行より先に**削除する（行を先に消すと、オブジェクトを指すものが無くなって永久に残る）
 
 検証は `test/worker/account-deletion.test.ts`。
 
 ## 未対応
 
 - 論理削除された `projects` / `todos` は**30日で自動削除**される（`src/worker/scheduled.ts`）。それ以外の保持期間は未定義
-- **エクスポート（データポータビリティ）が無い**
+- **Analytics Engineのイベントを個別に消せない。** データセットは追記専用で、
+  「このユーザーの分だけ削除」ができない。だから**識別情報を最初から書いていない**という
+  設計で対応しており、これは事後の削除では取り返せない性質の判断である（[ADR 0023](./adr/0023-analytics-engine-events.md)）
+- **共有リンクの解除は即座ではない**（最大1分。[ADR 0022](./adr/0022-share-links-cached-in-kv.md)）
 - Workers Logs の保持は Paid 7日 / Free 3日
 - 削除請求・開示請求を受け付ける窓口が無い（利用規約もプライバシーポリシーも未作成）

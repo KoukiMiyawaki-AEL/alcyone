@@ -14,10 +14,11 @@
     "format:check": "oxfmt --check",
     "test": "vitest run",
     "check": "pnpm run codegen && pnpm run format:check && pnpm run lint && tsc -b && vite build && vitest run && pnpm run test:e2e && wrangler deploy --dry-run",
-    "deploy": "wrangler deploy",
+    "deploy": "pnpm run preflight && pnpm run check && wrangler d1 migrations apply DB --remote && wrangler deploy",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "test:e2e": "rm -rf .wrangler/e2e-state && wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e-state && playwright test"
+    "test:e2e": "rm -rf .wrangler/e2e-state && wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e-state && playwright test",
+    "preflight": "node scripts/preflight.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -41,6 +41,8 @@ pnpm run lint             # oxlint（警告0が必須）
 pnpm run format           # oxfmt（書き換え）。検証だけなら format:check
 pnpm run db:generate      # drizzle-kit generate（schema.tsの差分からmigration生成）
 pnpm run db:migrate:local # ローカルD1へmigration適用
+pnpm run preflight        # wrangler.jsoncが実リソースを指しているか（deployの前段）
+pnpm run deploy           # preflight → check → リモートmigration → deploy（未実施。docs/deploy.md）
 ```
 
 `check`は `codegen → format:check → lint → tsc -b → vite build → vitest → wrangler deploy --dry-run` の順に走る。
@@ -350,4 +352,4 @@ Durable Objectのテストは`cloudflare:test`の`runInDurableObject`で中を�
 - メール送信（そのためメール検証とパスワード再発行は無効）
 - 組織単位のテナンシー（Projectはユーザー所有）
 - ゴミ箱UI（復元できるのは削除直後のtoastからだけ。30日で自動削除される）
-- 実際のCloudflareアカウントへのD1作成・本番デプロイ
+- 実際のCloudflareアカウントへのD1作成・本番デプロイ（手順は[docs/deploy.md](./docs/deploy.md)。**未実施**）

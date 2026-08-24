@@ -13,7 +13,8 @@ Node / pnpmのバージョンは`mise.toml`で固定している（[mise](https:
 pnpm install
 
 # 生成物（worker-configuration.d.ts / src/routeTree.gen.ts）はコミットしていないので、
-# clone直後は必ず実行する。これが無いと型チェックが通らない
+# clone直後は必ず実行する。これが無いと型チェックが通らない。
+# .dev.vars が無ければ .dev.vars.example から作られるので、BETTER_AUTH_SECRET を設定する
 pnpm run codegen
 
 # ローカルD1にmigrationを適用（初回のみ / schema.tsを変更したら再実行）
@@ -39,11 +40,12 @@ CI（`.github/workflows/ci.yml`）はpull requestごとに`pnpm run check`を実
 
 ## 構成
 
-- `src/routes/` — TanStack Routerのファイルベースルート（`/`がTodos、`/dev/design-system`がコンポーネントギャラリー）
+- `src/routes/` — TanStack Routerのファイルベースルート（`/`がProject一覧、`/projects/$projectId`がそのProjectのTodo一覧、`/login`、`/dev/design-system`がコンポーネントギャラリー）
 - `src/components/ui/` — shadcn/ui primitives
 - `src/components/app/` — アプリ共通のcomposed components（AppHeader, ThemeProviderなど）
-- `src/features/todos/` — Todos機能のコンポーネント・型
-- `src/worker/` — Hono API（Cloudflare Worker）+ Drizzleスキーマ。`/api/*`のみがWorkerに届く
+- `src/features/` — ドメインごとのコンポーネント・型・APIラッパ（`todos/` `projects/` `auth/`）
+- `src/lib/` — `api-client.ts`（Hono RPC）、`auth-client.ts`、`mutate.ts`（全mutationが通るラッパ）、`utils.ts`
+- `src/worker/` — Hono API（Cloudflare Worker）。`/api/*`のみがWorkerに届く。DBアクセスは`db/repo.ts`の1箇所を通る
 - `test/worker/` — Vitest（`@cloudflare/vitest-plugin`）によるAPI統合テスト
 - `test/components/` — Vitest（happy-dom + Testing Library）によるコンポーネントテスト
 - `docs/` — ドキュメント規約・design doc（[`docs/design/`](./docs/design/)）・設計判断の記録（ADR）・API仕様（[`docs/README.md`](./docs/README.md)参照）

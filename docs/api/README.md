@@ -9,6 +9,9 @@ OpenAPI仕様書は現時点では生成していない（経緯は[ADR 0005](..
 TanStack Routerがクライアント側で描画する（存在しない画面は`__root.tsx`の`notFoundComponent`）。
 新しいエンドポイントは必ず`/api/`配下に置くこと。
 
+**`/api/health` と `/api/auth/*` を除く全エンドポイントはセッションを要求する**（無ければ401）。
+また Better Auth が Origin ヘッダを検証するので、**curlで叩くときは `-H "Origin: <origin>"` が必要**。
+
 課金・上限の観点で1つ注意がある。**`/api/*`に一致したリクエストはWorker invocationとして数えられる**
 （静的アセットへのリクエストは無料・無制限で、invocationに数えられない）。無料プランでは日次上限を
 超えるとアセットへフォールバックせず**429を返す**。エンドポイントを`/api/`配下に置くという規約は、
@@ -20,7 +23,8 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 
 | Method | Path | 概要 | Request body | 200系レスポンス | エラー |
 |---|---|---|---|---|---|
-| GET | `/api/health` | ヘルスチェック | — | `{ ok: true }` | — |
+| GET | `/api/health` | ヘルスチェック（**認証不要**） | — | `{ ok: true }` | — |
+| * | `/api/auth/*` | Better Auth（サインアップ/イン/アウト等） | — | — | `403` Origin不正 |
 | GET | `/api/projects` | Project一覧（id昇順） | — | `Project[]` | — |
 | POST | `/api/projects` | Project作成 | `{ name: string }`（1〜100文字） | `201` `Project` | `400` |
 | DELETE | `/api/projects/:projectId` | Project削除（配下のTodoも削除） | — | `204` (body無し) | `400`, `404` |
@@ -56,6 +60,7 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 |---|---|---|
 | `400` | `{ error: "Bad Request", issues: ZodIssue[] }` | バリデーション失敗。形状は`src/worker/validator.ts`の`validate()`が固定する |
 | `404` | `{ error: "Not found" }` | 該当IDが無い / `/api/*`配下の未定義パス |
+| `401` | `{ error: "Unauthorized" }` | セッションが無い。`/api/health` と `/api/auth/*` 以外の全 `/api/*` |
 | `500` | `{ error: "Internal Server Error" }` | 未捕捉例外。`app.onError`が構造化JSONログを出したうえで返す |
 
 ## 本格的なOpenAPI導入を検討するタイミング

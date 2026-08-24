@@ -16,6 +16,8 @@ React + TanStack Router + shadcn/uiのフロントエンドと、Hono + Drizzle 
 - 単一のVite devサーバーでSPAとAPIを同時に動かす
 - shadcn/uiを最初からUI基盤として組み込み、Design Tokens・Light/Dark・レスポンシブ・状態表現（empty/loading/error）の基準を用意する
 - Todos CRUDを、上記の基準を満たす形で実装する（機能面とデザイン面の両立）
+
+**この文書は初期スコープの記録である。** その後の変更（Project、認証、リポジトリ層）は下記の追記と各ADRを参照。
 - ローカルD1 + Drizzleでデータ層を検証する
 - Vitestで統合テストを書く
 
@@ -40,10 +42,13 @@ Browser
 Vite Dev Server（@cloudflare/vite-plugin、単一プロセス）
  ├─ Worker environment（Hono app: src/worker/index.ts）
  │    ← assets.run_worker_first: ["/api/*"] に一致するリクエストのみ
+ │    ├─ /api/auth/*  → Better Auth
+ │    └─ /api/*       → セッション検証 → createRepo(DB, ownerId)
  └─ Client environment（SPAビルド、assets.not_found_handling: spa）
-        │ drizzle(c.env.DB)
+        │ 全DBアクセスは src/worker/db/repo.ts の1箇所を通る
         ▼
 Drizzle ORM（drizzle-orm/d1） → Cloudflare D1（ローカルのみ）
+  projects / todos / user / session / account / verification
 ```
 
 `assets.run_worker_first`で`/api/*`だけをWorkerに向けているのが、この構成の要になっている。
@@ -63,6 +68,10 @@ Vitestは`test.projects`で2つに分かれている（[ADR 0009](../adr/0009-co
 - [0007](../adr/0007-ci-and-codegen.md) CIをGitHub Actionsで回し、生成物はコミットせずcodegenスクリプトで再生成する
 - [0008](../adr/0008-typescript-7.md) TypeScript 7（ネイティブ実装）へ更新する
 - [0009](../adr/0009-component-tests-happy-dom.md) コンポーネントテストをVitest projectsで分離し、happy-dom + Testing Libraryで書く
+- [0011](../adr/0011-expand-contract-migrations.md) スキーマ変更はexpand/contractで行い、D1固有の制約を前提にする
+- [0012](../adr/0012-no-on-delete-cascade.md) `ON DELETE CASCADE`を使わず、子の削除は`batch()`で明示する
+- [0013](../adr/0013-better-auth.md) 認証にBetter Authを採用し、メール+パスワードで始める
+- [0014](../adr/0014-user-owned-projects.md) Projectはユーザーが所有し、Todoの所有はProject経由の推移的関係にする
 
 ## Alternatives
 
@@ -71,7 +80,9 @@ Vitestは`test.projects`で2つに分かれている（[ADR 0009](../adr/0009-co
 ## Definition of Success
 
 - `pnpm run check`（codegen → format:check → lint → 型チェック → build → Vitest → `wrangler deploy --dry-run`）が通る
-- `pnpm dev`でTodoの追加・完了トグル・削除がローカルD1に反映される
+- `pnpm dev`でサインアップ→サインイン→Project作成→Todoの追加・完了トグル・削除がローカルD1に反映される
+- 2人目のユーザーを作り、1人目のProjectが見えないこと・1人目のtodoのidを直接叩けないことを確認できる
+- 未認証で `/` を開くとログインへリダイレクトされる
 - `/dev/design-system`でLight/Dark・レスポンシブ・empty/loading/error stateを目視確認できる
 
 初期スコープ時点で一度検証済み（Playwrightによるスクリーンショット確認込み）。

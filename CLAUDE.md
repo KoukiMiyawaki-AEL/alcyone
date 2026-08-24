@@ -18,6 +18,7 @@ Hono + Drizzle ORM + Cloudflare D1 をCloudflare Workers上で動かすバック
 | テスト | Vitest（`test.projects`で2分割）。`worker`= `@cloudflare/vitest-plugin`（D1込みの統合テスト）、`components`= happy-dom + Testing Library（[ADR 0009](./docs/adr/0009-component-tests-happy-dom.md)） |
 | Lint / Format | `oxlint` + `oxfmt`（[ADR 0006](./docs/adr/0006-oxfmt-formatter.md)） |
 | CI | GitHub Actions（`.github/workflows/ci.yml`で`pnpm run check`。[ADR 0007](./docs/adr/0007-ci-and-codegen.md)） |
+| 認証 | Better Auth（メール+パスワード、D1をdrizzle adapter経由。[ADR 0013](./docs/adr/0013-better-auth.md)） |
 
 D1は現時点でローカル開発のみ（`wrangler dev` + `wrangler d1 migrations apply --local`）。
 `wrangler.jsonc`の`database_id`はプレースホルダで、実際のCloudflareアカウント上のD1は
@@ -27,7 +28,7 @@ D1は現時点でローカル開発のみ（`wrangler dev` + `wrangler d1 migrat
 
 ```bash
 pnpm dev                  # Vite dev server（SPA + Hono Workerを同時に起動）
-pnpm test                 # Vitest（D1込みの統合テスト）
+pnpm test                 # Vitest 両プロジェクト（worker / components）
 pnpm run check            # CIと同じ全工程。コミット前にこれを通す
 pnpm run codegen          # worker-configuration.d.ts と src/routeTree.gen.ts を生成
 pnpm run typecheck        # tsc -b のみ
@@ -102,6 +103,9 @@ dlxだとCLIとCSSのバージョンがズレる。
 以下の責務を分ける。
 
 ```
+src/lib
+→ ドメインに依存しない共通処理（api-client, auth-client, mutate, utils）
+
 src/components/ui
 → shadcn/ui primitives（生成物。極力そのまま使う）
 
@@ -218,8 +222,12 @@ TanStack Queryはまだ導入していない。データ取得はTanStack Router
 mutation後は`router.invalidate()`で再取得する（`src/routes/index.tsx`参照）。
 
 mutationは直接`apiClient`を叩かず、feature配下のラッパ（例: `src/features/todos/api.ts`）を
-経由する。ラッパが`res.ok`を検査し、失敗時は`toast`でユーザーに通知して`false`を返すので、
-呼び出し側は成功したときだけ`router.invalidate()`する。エラーを握り潰さないこと。
+経由する。**そのラッパは必ず`src/lib/mutate.ts`の`mutate()`を通す。** `res.ok`の検査と失敗時の
+`toast`はそこに1箇所だけあり、成功可否が`boolean`で返るので、呼び出し側は成功したときだけ
+`router.invalidate()`する。エラーを握り潰さないこと。featureの中で`toast`を直接呼ばない。
+
+loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catchの外で投げる**。
+どちらもthrowで動くので、catchの中だと握り潰されて汎用エラー表示になる（実際に一度踏んだ）。
 
 ## API Conventions
 
@@ -251,6 +259,12 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 - ログは`console.error(JSON.stringify({ ... }))`のように構造化JSONで出す
   （Workersのobservabilityでフィールド検索できるようにするため）。
 - ルートを追加・変更したら[`docs/api/README.md`](./docs/api/)の表も更新する。
+- **`/api/*` はすべて認証が必要**（例外は `/api/health` と `/api/auth/*`）。未認証は401。
+  セッション検証とリポジトリ生成は`src/worker/index.ts`の1つのミドルウェアがやる。
+- **DBアクセスは`createRepo(binding, ownerId)`経由で、返るメソッドは全て所有者でスコープ済み。**
+  ハンドラがスコープされていないクエリを受け取ることがないので、絞り込みを忘れられない。
+  ここに新しいメソッドを足すときは、必ず`ownerId`で絞ること（[ADR 0014](./docs/adr/0014-user-owned-projects.md)）。
+- Better AuthはOriginヘッダを検証する。**curlでAPIを叩くときは`Origin`ヘッダが必要**（無いと403）。
 
 ## Testing
 
@@ -287,11 +301,12 @@ pnpm test --project worker     # APIのみ
 [ADR 0010](./docs/adr/0010-alcyone-as-proving-ground.md)。
 
 - TanStack Query
-- Authentication
-- Playwright / Vitest Browser Mode（コンポーネントテストはhappy-domで書く）
+- Playwright / Vitest Browser Mode（**E2Eの閾値トリガーは発火済み**。経緯は[マップ](./docs/design/service-readiness-map.md)の「発火したトリガーの記録」）
 - Turborepo
 - Alchemy
 - R2 / KV / Queues
 - Storybook
 - テストカバレッジの計測
+- メール送信（そのためメール検証とパスワード再発行は無効）
+- 組織単位のテナンシー（Projectはユーザー所有）
 - 実際のCloudflareアカウントへのD1作成・本番デプロイ

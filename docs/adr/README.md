@@ -18,6 +18,8 @@
 | [0010](./0010-alcyone-as-proving-ground.md) | alcyoneを技術検証の台と位置づけ、プロダクト機能より基盤の完全性を優先する | Accepted |
 | [0011](./0011-expand-contract-migrations.md) | スキーマ変更はexpand/contractで行い、D1固有の制約を前提にする | Accepted |
 | [0012](./0012-no-on-delete-cascade.md) | `ON DELETE CASCADE`を使わず、子の削除は`batch()`で明示する | Accepted |
+| [0013](./0013-better-auth.md) | 認証にBetter Authを採用し、メール+パスワードで始める | Accepted |
+| [0014](./0014-user-owned-projects.md) | Projectはユーザーが所有し、Todoの所有はProject経由の推移的関係にする | Accepted |
 
 ## ルール
 

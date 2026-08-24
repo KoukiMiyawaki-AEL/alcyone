@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/d1";
 
@@ -12,6 +12,27 @@ import { projectsTable, todosTable } from "./schema";
  * app code keeps one format that both SQL and JS agree on.
  */
 const now = () => new Date().toISOString();
+
+export type TodoStatus = "all" | "active" | "done";
+export type TodoSort = "created" | "due" | "priority";
+export type TodoListOptions = { status?: TodoStatus; sort?: TodoSort };
+
+const statusFilter = (status: TodoStatus = "all"): SQL | undefined =>
+  status === "all" ? undefined : eq(todosTable.completed, status === "done");
+
+const sortOrder = (sort: TodoSort = "created"): SQL[] => {
+  switch (sort) {
+    case "due":
+      // The first term is what pushes undated todos to the end. Left to
+      // itself SQLite sorts NULL lowest, which would present "no deadline" as
+      // the most urgent thing on the list.
+      return [sql`${todosTable.dueAt} is null`, asc(todosTable.dueAt)];
+    case "priority":
+      return [desc(todosTable.priority)];
+    case "created":
+      return [];
+  }
+};
 
 /**
  * The single place `drizzle()` is constructed, the single place a query against
@@ -103,7 +124,7 @@ export function createRepo(binding: D1Database, ownerId: string) {
   };
 
   const todos = {
-    listByProject: (projectId: number) =>
+    listByProject: (projectId: number, options: TodoListOptions = {}) =>
       db
         .select()
         .from(todosTable)
@@ -111,17 +132,34 @@ export function createRepo(binding: D1Database, ownerId: string) {
           and(
             inArray(todosTable.projectId, ownedProjectIds(projectId)),
             isNull(todosTable.deletedAt),
+            statusFilter(options.status),
           ),
         )
-        .orderBy(asc(todosTable.id)),
+        // Always a tiebreaker on id: without one, two todos with the same due
+        // date or priority can swap places between requests, which looks like
+        // the list is shuffling itself.
+        .orderBy(...sortOrder(options.sort), asc(todosTable.id)),
 
-    create: (values: { title: string; projectId: number }) => {
+    create: (values: { title: string; projectId: number; dueAt?: string; priority?: number }) => {
       const timestamp = now();
       return db
         .insert(todosTable)
         .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
         .returning();
     },
+
+    update: (id: number, values: { dueAt?: string | null; priority?: number }) =>
+      db
+        .update(todosTable)
+        .set({ ...values, updatedAt: now() })
+        .where(
+          and(
+            eq(todosTable.id, id),
+            isNull(todosTable.deletedAt),
+            inArray(todosTable.projectId, ownedProjectIds()),
+          ),
+        )
+        .returning(),
 
     setCompleted: (id: number, completed: boolean) =>
       db

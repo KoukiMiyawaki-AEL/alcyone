@@ -46,6 +46,10 @@ export const todosTable = sqliteTable(
     projectId: int()
       .notNull()
       .references(() => projectsTable.id),
+    /** ISO-8601 date (no time). Null means no due date. */
+    dueAt: text(),
+    /** 0 = none, 3 = highest. An integer so SQL can order by it directly. */
+    priority: int().notNull().default(0),
     /** Soft delete. Null means live. See `projects.deletedAt`. */
     deletedAt: text(),
   },

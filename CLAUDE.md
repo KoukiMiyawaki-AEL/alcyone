@@ -221,6 +221,11 @@ shadcn/uiコンポーネントを追加・変更したら、ここに使用例�
 TanStack Queryはまだ導入していない。データ取得はTanStack Routerの`loader`を使い、
 mutation後は`router.invalidate()`で再取得する（`src/routes/index.tsx`参照）。
 
+**一覧の状態（絞り込み・並び替え）はURLのsearch paramsに置く。** コンポーネントのstateにしない。
+リンクで共有でき、リロードでも残り、`loaderDeps`経由でloaderが再実行されるのでSQL側で絞れる
+（クライアントが取得済みの行を隠すのではなく）。スキーマは`.default()`で「無い場合」を、
+`.catch()`で「あるが不正な場合」を吸収する —— 後者は手でURLを書き換えたときに出る。
+
 mutationは直接`apiClient`を叩かず、feature配下のラッパ（例: `src/features/todos/api.ts`）を
 経由する。**そのラッパは必ず`src/lib/mutate.ts`の`mutate()`を通す。** `res.ok`の検査と失敗時の
 `toast`はそこに1箇所だけあり、成功可否が`boolean`で返るので、呼び出し側は成功したときだけ

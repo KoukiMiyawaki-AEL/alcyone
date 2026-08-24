@@ -1,4 +1,4 @@
-import { EllipsisVerticalIcon, TrashIcon } from "lucide-react";
+import { CalendarIcon, EllipsisVerticalIcon, FlagIcon, TrashIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-import type { Todo } from "../types";
+import { PRIORITY_LABELS, type Todo } from "../types";
 
 type TodoRowProps = {
   todo: Todo;
@@ -26,11 +26,33 @@ export function TodoRow({ todo, onToggle, onDelete }: TodoRowProps) {
         onCheckedChange={(checked) => onToggle(todo.id, checked === true)}
         aria-label={`Mark "${todo.title}" as ${todo.completed ? "not done" : "done"}`}
       />
-      <span
-        className={cn("flex-1 text-sm", todo.completed && "text-muted-foreground line-through")}
-      >
-        {todo.title}
-      </span>
+      <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+        <span className={cn("text-sm", todo.completed && "text-muted-foreground line-through")}>
+          {todo.title}
+        </span>
+
+        {todo.dueAt ? (
+          <span
+            className="flex items-center gap-1 text-xs text-muted-foreground"
+            // The raw value is the accessible one: an icon plus a bare date
+            // does not say what the date means.
+            aria-label={`Due ${todo.dueAt}`}
+          >
+            <CalendarIcon className="size-3" />
+            {todo.dueAt}
+          </span>
+        ) : null}
+
+        {todo.priority > 0 ? (
+          <span
+            className="flex items-center gap-1 text-xs text-muted-foreground"
+            aria-label={`Priority: ${PRIORITY_LABELS[todo.priority]}`}
+          >
+            <FlagIcon className="size-3" />
+            {PRIORITY_LABELS[todo.priority]}
+          </span>
+        ) : null}
+      </div>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={

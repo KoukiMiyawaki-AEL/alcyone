@@ -26,6 +26,23 @@ const updateTodoSchema = z.object({
   completed: z.boolean(),
 });
 
+/**
+ * List options, read from the query string.
+ *
+ * Defaults live here rather than in the client so that hitting the endpoint
+ * directly behaves the same as the UI does.
+ */
+const todoQuerySchema = z.object({
+  status: z.enum(["all", "active", "done"]).default("all"),
+  sort: z.enum(["created", "due", "priority"]).default("created"),
+});
+
+const patchTodoSchema = z.object({
+  // `null` clears the due date, which is different from omitting the field.
+  dueAt: z.iso.date().nullable().optional(),
+  priority: z.number().int().min(0).max(3).optional(),
+});
+
 const app = new Hono<{
   Bindings: CloudflareBindings;
   Variables: { repo: Repo; userId: string };
@@ -99,24 +116,30 @@ const app = new Hono<{
     await repo.todos.restoreByProject(projectId);
     return c.json(restored);
   })
-  .get("/api/projects/:projectId/todos", validate("param", projectIdParamSchema), async (c) => {
-    const { projectId } = c.req.valid("param");
-    const repo = c.get("repo");
+  .get(
+    "/api/projects/:projectId/todos",
+    validate("param", projectIdParamSchema),
+    validate("query", todoQuerySchema),
+    async (c) => {
+      const { projectId } = c.req.valid("param");
+      const { status, sort } = c.req.valid("query");
+      const repo = c.get("repo");
 
-    // One round trip for both. Returning an envelope rather than a bare array
-    // gives the page its title without a second request, and leaves room to
-    // add a cursor later without a breaking change to the response shape.
-    const [[project], todos] = await repo.batch([
-      repo.projects.find(projectId),
-      repo.todos.listByProject(projectId),
-    ]);
+      // One round trip for both. Returning an envelope rather than a bare array
+      // gives the page its title without a second request, and leaves room to
+      // add a cursor later without a breaking change to the response shape.
+      const [[project], todos] = await repo.batch([
+        repo.projects.find(projectId),
+        repo.todos.listByProject(projectId, { status, sort }),
+      ]);
 
-    if (!project) {
-      return c.json({ error: "Not found" }, 404);
-    }
+      if (!project) {
+        return c.json({ error: "Not found" }, 404);
+      }
 
-    return c.json({ project, todos });
-  })
+      return c.json({ project, todos });
+    },
+  )
   .post(
     "/api/projects/:projectId/todos",
     validate("param", projectIdParamSchema),
@@ -163,6 +186,21 @@ const app = new Hono<{
 
     return c.body(null, 204);
   })
+  .patch(
+    "/api/todos/:id/details",
+    validate("param", idParamSchema),
+    validate("json", patchTodoSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const [todo] = await c.get("repo").todos.update(id, c.req.valid("json"));
+
+      if (!todo) {
+        return c.json({ error: "Not found" }, 404);
+      }
+
+      return c.json(todo);
+    },
+  )
   .post("/api/todos/:id/restore", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
     const [todo] = await c.get("repo").todos.restore(id);

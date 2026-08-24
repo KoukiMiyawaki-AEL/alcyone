@@ -29,9 +29,10 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 | POST | `/api/projects` | Project作成 | `{ name: string }`（1〜100文字） | `201` `Project` | `400` |
 | DELETE | `/api/projects/:projectId` | Project削除（**論理削除**。配下のTodoも同時に） | — | `204` (body無し) | `400`, `404` |
 | POST | `/api/projects/:projectId/restore` | Projectの復元（配下のTodoも同時に） | — | `200` `Project` | `400`, `404` |
-| GET | `/api/projects/:projectId/todos` | そのProjectのTodo一覧（id昇順） | — | `{ project, todos }` | `400`, `404` |
+| GET | `/api/projects/:projectId/todos` | そのProjectのTodo一覧 | クエリ: `status`=`all`\|`active`\|`done`、`sort`=`created`\|`due`\|`priority` | `{ project, todos }` | `400`, `404` |
 | POST | `/api/projects/:projectId/todos` | Todo作成 | `{ title: string }`（1〜200文字） | `201` `Todo` | `400`, `404` |
 | PATCH | `/api/todos/:id` | 完了状態の更新 | `{ completed: boolean }` | `200` `Todo` | `400`, `404` |
+| PATCH | `/api/todos/:id/details` | 期限・優先度の更新 | `{ dueAt?: string\|null, priority?: 0-3 }` | `200` `Todo` | `400`, `404` |
 | DELETE | `/api/todos/:id` | Todo削除（**論理削除**） | — | `204` (body無し) | `400`, `404` |
 | POST | `/api/todos/:id/restore` | Todoの復元 | — | `200` `Todo` | `400`, `404` |
 
@@ -47,8 +48,14 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 
 `Todo` / `Project` の型は`src/worker/db/schema.ts`から`drizzle-orm`が推論する。
 
-- `Todo`: `{ id: number, title: string, completed: boolean, createdAt: string, updatedAt: string, projectId: number }`
+- `Todo`: `{ id, title, completed, createdAt, updatedAt, projectId, dueAt: string|null, priority: 0-3, deletedAt: string|null }`
 - `Project`: `{ id: number, name: string, createdAt: string, ownerId: string, deletedAt: string | null }`
+
+並び順は常に`id`をタイブレークに含める。含めないと同じ期限・同じ優先度の項目が
+リクエストごとに入れ替わり、一覧が勝手にシャッフルしているように見える。
+`sort=due`では**期限なしを末尾**に置く（SQLiteに任せるとNULLが最小＝最優先として扱われる）。
+
+`dueAt`に`null`を送ると期限を消す。フィールドを省略した場合は変更しない —— この2つは別物。
 
 `deletedAt` が非nullの行は論理削除済みで、一覧にも取得にも現れない
 （[ADR 0015](../adr/0015-soft-delete-items-hard-delete-accounts.md)）。アカウント削除

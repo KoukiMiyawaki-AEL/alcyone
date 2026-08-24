@@ -1,5 +1,6 @@
 import { Link, createFileRoute, notFound, redirect, useRouter } from "@tanstack/react-router";
 import { FolderXIcon, TriangleAlertIcon } from "lucide-react";
+import { z } from "zod";
 
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
@@ -8,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Project } from "@/features/projects/types";
 import { addTodo, deleteTodo, restoreTodo, setTodoCompleted } from "@/features/todos/api";
+import { TodoFilters } from "@/features/todos/components/TodoFilters";
 import { TodoForm } from "@/features/todos/components/TodoForm";
 import { TodoList } from "@/features/todos/components/TodoList";
 import type { Todo } from "@/features/todos/types";
@@ -16,7 +18,29 @@ import { toastUndo } from "@/lib/undo-toast";
 
 type LoaderData = { project: Project | null; todos: Todo[]; error: string | null };
 
+/**
+ * List state lives in the URL, not in component state.
+ *
+ * That makes a filtered view linkable and survivable across a reload, and it
+ * means the loader re-runs when it changes — the filtering happens in SQL, not
+ * by hiding rows the client already fetched. `catch` keeps a hand-edited URL
+ * from throwing instead of falling back to the defaults.
+ */
+const searchSchema = z.object({
+  // `default` covers the params being absent — so a plain link to the project
+  // needs no search at all. `catch` covers them being present but nonsense,
+  // which is what a hand-edited URL produces.
+  status: z.enum(["all", "active", "done"]).default("all").catch("all"),
+  sort: z.enum(["created", "due", "priority"]).default("created").catch("created"),
+});
+
+export type TodoListSearch = z.infer<typeof searchSchema>;
+
 export const Route = createFileRoute("/projects/$projectId")({
+  validateSearch: searchSchema,
+  // Without this the loader would not re-run when only the search params
+  // change, and the filter would appear to do nothing.
+  loaderDeps: ({ search }) => search,
   // The guard lives here rather than on the root route so that /login itself
   // stays reachable. `isPending` must not count as signed-out, or a hard reload
   // would bounce a signed-in user to the login screen before the session
@@ -27,11 +51,12 @@ export const Route = createFileRoute("/projects/$projectId")({
       throw redirect({ to: "/login", search: { redirect: location.href } });
     }
   },
-  loader: async ({ params }): Promise<LoaderData> => {
+  loader: async ({ params, deps }): Promise<LoaderData> => {
     let res;
     try {
       res = await apiClient.api.projects[":projectId"].todos.$get({
         param: { projectId: params.projectId },
+        query: { status: deps.status, sort: deps.sort },
       });
     } catch {
       // Network failure is transient — show the inline Retry card, not a
@@ -98,6 +123,8 @@ function ProjectNotFound() {
 function ProjectTodosComponent() {
   const router = useRouter();
   const { projectId } = Route.useParams();
+  const { status, sort } = Route.useSearch();
+  const navigate = Route.useNavigate();
   const { project, todos, error } = Route.useLoaderData();
 
   async function handleAdd(title: string) {
@@ -141,7 +168,16 @@ function ProjectTodosComponent() {
       </Card>
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Tasks</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-medium text-muted-foreground">Tasks</h2>
+          <TodoFilters
+            status={status}
+            sort={sort}
+            // Merging into the existing search keeps the other control's value
+            // when one of them changes.
+            onChange={(next) => navigate({ search: (prev) => ({ ...prev, ...next }) })}
+          />
+        </div>
         {error ? (
           <EmptyState
             icon={TriangleAlertIcon}

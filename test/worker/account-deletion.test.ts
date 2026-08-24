@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import app from "../../src/worker";
+import { app } from "../../src/worker";
 import { jsonHeaders, PASSWORD, resetAll, signUp } from "./auth-helper";
 
 async function createProject(headers: Headers, name: string): Promise<number> {

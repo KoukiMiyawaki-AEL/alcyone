@@ -254,6 +254,8 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
   後者が黙って壊れる。
 - **複数文を原子的に実行したいときは`repo.batch([...])`。** D1に対話的トランザクションは無く、
   `db.transaction()`は型が通るのに実行時に落ちる。
+- **ユーザーのいない処理（cron等）は`createRepo`を使わない。** あれは`ownerId`で必ず絞るためのもの。
+  ユーザーを持たないクエリは`src/worker/db/maintenance.ts`に置く（名前で区別が付くようにしてある）。
 - エラーレスポンスは`{ error: string }`で揃える（404は`{ error: "Not found" }`、
   未捕捉例外は`onError`が`{ error: "Internal Server Error" }`を返す）。例外の内容はクライアントに返さない。
 - ログは`console.error(JSON.stringify({ ... }))`のように構造化JSONで出す
@@ -317,5 +319,5 @@ pnpm test --project worker     # APIのみ
 - テストカバレッジの計測
 - メール送信（そのためメール検証とパスワード再発行は無効）
 - 組織単位のテナンシー（Projectはユーザー所有）
-- ゴミ箱UI・論理削除された行のパージ（復元できるのは削除直後のtoastからだけ）
+- ゴミ箱UI（復元できるのは削除直後のtoastからだけ。30日で自動削除される）
 - 実際のCloudflareアカウントへのD1作成・本番デプロイ

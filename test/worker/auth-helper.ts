@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 
-import app from "../../src/worker";
+import { app } from "../../src/worker";
 
 /**
  * Better Auth validates the Origin header, so every request these tests make

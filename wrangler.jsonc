@@ -13,6 +13,11 @@
     "run_worker_first": ["/api/*"],
     "not_found_handling": "single-page-application",
   },
+  // Daily at 03:00 UTC. Purges soft-deleted rows past the retention window —
+  // see src/worker/scheduled.ts.
+  "triggers": {
+    "crons": ["0 3 * * *"],
+  },
   "observability": {
     "enabled": true,
     "logs": {

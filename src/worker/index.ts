@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { createAuth } from "./auth";
 import { createRepo, type Repo } from "./db/repo";
+import { purgeExpiredDeletions } from "./scheduled";
 import { validate } from "./validator";
 
 const createProjectSchema = z.object({
@@ -189,4 +190,17 @@ const app = new Hono<{
   });
 
 export type AppType = typeof app;
-export default app;
+
+// Named so tests can drive the Hono app directly with `app.request()`. The
+// default export has to be the handler object now that there is more than one
+// entry point into this Worker.
+export { app };
+
+export default {
+  fetch: app.fetch,
+  scheduled: async (_controller, env, ctx) => {
+    // waitUntil so a slow purge cannot hold the scheduled invocation open, and
+    // so a failure surfaces in the invocation rather than being swallowed.
+    ctx.waitUntil(purgeExpiredDeletions(env));
+  },
+} satisfies ExportedHandler<CloudflareBindings>;

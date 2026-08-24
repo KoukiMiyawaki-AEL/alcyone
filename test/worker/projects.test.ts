@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Project } from "../../src/features/projects/types";
 import type { Todo } from "../../src/features/todos/types";
-import app from "../../src/worker";
+import { app } from "../../src/worker";
 import { jsonHeaders, resetAll, signUp } from "./auth-helper";
 
 async function createProject(headers: Headers, name: string): Promise<number> {

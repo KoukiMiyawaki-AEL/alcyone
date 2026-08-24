@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Todo } from "../../src/features/todos/types";
-import app from "../../src/worker";
+import { app } from "../../src/worker";
 import { jsonHeaders, resetAll, signUp } from "./auth-helper";
 
 async function createProject(headers: Headers, name = "Test project"): Promise<number> {

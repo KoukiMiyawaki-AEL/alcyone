@@ -18,13 +18,14 @@ import { TodoForm } from "@/features/todos/components/TodoForm";
 import { TodoList } from "@/features/todos/components/TodoList";
 import { TodoTimeline } from "@/features/todos/components/TodoTimeline";
 import { ViewSwitch } from "@/features/todos/components/ViewSwitch";
-import type { Todo, TodoFields, TodoStatus } from "@/features/todos/types";
+import type { Assignee, Todo, TodoFields, TodoStatus } from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
 import { toastUndo } from "@/lib/undo-toast";
 
 type LoaderData = {
   project: Project | null;
   todos: Todo[];
+  assignees: Assignee[];
   shareToken: string | null;
   error: string | null;
 };
@@ -94,7 +95,7 @@ export const Route = createFileRoute("/projects/$projectId")({
     } catch {
       // Network failure is transient — show the inline Retry card, not a
       // hard "not found". The project may well exist.
-      return { project: null, todos: [], shareToken: null, error: TRANSIENT };
+      return { project: null, todos: [], assignees: [], shareToken: null, error: TRANSIENT };
     }
 
     // Everything below is outside the catch on purpose: both `redirect()` and
@@ -108,9 +109,23 @@ export const Route = createFileRoute("/projects/$projectId")({
     }
     if (res.status === 404 || res.status === 400) throw notFound();
 
-    if (!res.ok) return { project: null, todos: [], shareToken: null, error: TRANSIENT };
+    if (!res.ok)
+      return { project: null, todos: [], assignees: [], shareToken: null, error: TRANSIENT };
 
     const { project, todos } = await res.json();
+
+    // Who tasks here can be assigned to. One person today, because a project
+    // has one owner — asked for rather than assumed, so the answer can change
+    // without this code noticing.
+    let assignees: Assignee[] = [];
+    try {
+      const res = await apiClient.api.projects[":projectId"].assignees.$get({
+        param: { projectId: params.projectId },
+      });
+      if (res.ok) assignees = await res.json();
+    } catch {
+      // The page works without it; the picker just offers nobody.
+    }
 
     // Fetched separately rather than folded into the todos response: whether a
     // project is shared is not part of reading it, and every list request would
@@ -126,7 +141,7 @@ export const Route = createFileRoute("/projects/$projectId")({
       // un-shared state, and enabling is idempotent so nothing is lost.
     }
 
-    return { project, todos, shareToken, error: null };
+    return { project, todos, assignees, shareToken, error: null };
   },
   pendingComponent: TodosPending,
   component: ProjectTodosComponent,
@@ -185,7 +200,7 @@ function ProjectTodosComponent() {
   // pure function of its inputs and its layout can be tested without a clock.
   const today = new Date().toISOString().slice(0, 10);
   const navigate = Route.useNavigate();
-  const { project, todos, shareToken, error } = Route.useLoaderData();
+  const { project, todos, assignees, shareToken, error } = Route.useLoaderData();
 
   // What the detail dialog is working on — a new task or an existing row. Held
   // as the row itself rather than an id so the dialog opens with values already
@@ -251,6 +266,7 @@ function ProjectTodosComponent() {
 
       <TodoDetailDialog
         editor={editor}
+        assignees={assignees}
         onOpenChange={(open) => setEditor(open ? editor : null)}
         onSave={handleSave}
       />
@@ -291,6 +307,7 @@ function ProjectTodosComponent() {
         ) : view === "timeline" ? (
           <TodoTimeline
             todos={todos}
+            assignees={assignees}
             today={today}
             truncated={todos.length >= WHOLE_VIEW_LIMIT}
             onEdit={(todo) => setEditor({ mode: "edit", todo })}
@@ -298,6 +315,7 @@ function ProjectTodosComponent() {
         ) : view === "board" ? (
           <TodoBoard
             todos={todos}
+            assignees={assignees}
             onStatusChange={handleStatusChange}
             onEdit={(todo) => setEditor({ mode: "edit", todo })}
             truncated={todos.length >= WHOLE_VIEW_LIMIT}
@@ -305,6 +323,7 @@ function ProjectTodosComponent() {
         ) : (
           <TodoList
             todos={todos}
+            assignees={assignees}
             onStatusChange={handleStatusChange}
             onEdit={(todo) => setEditor({ mode: "edit", todo })}
             onDelete={handleDelete}

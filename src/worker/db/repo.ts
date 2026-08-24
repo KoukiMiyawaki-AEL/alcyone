@@ -60,12 +60,14 @@ export type TodoFilter = "all" | "active" | (typeof TODO_STATUSES)[number];
  * it".
  */
 /** The fields whose changes are worth a history row. See TODO_EVENT_FIELDS. */
-const TRACKED_FIELDS = ["status", "startAt", "dueAt", "title", "priority"] as const;
+const TRACKED_FIELDS = ["status", "assigneeId", "startAt", "dueAt", "title", "priority"] as const;
 type TrackedField = (typeof TRACKED_FIELDS)[number];
 
 export type TodoFields = {
   title?: string;
   status?: TodoStatus;
+  /** `null` unassigns. Absent leaves it alone, like every other field here. */
+  assigneeId?: string | null;
   startAt?: string | null;
   dueAt?: string | null;
   description?: string | null;
@@ -403,6 +405,23 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           ),
         )
         .returning(),
+  };
+
+  /**
+   * Who a task on this project may be assigned to.
+   *
+   * A query rather than "it is you": today it returns exactly one row, because
+   * a project has one owner (ADR 0014). Having the client ask instead of
+   * assuming means the list grows on its own the day a project has members,
+   * and means nothing has to be found and corrected then.
+   */
+  const assignees = {
+    forProject: (projectId: number) =>
+      db
+        .select({ id: user.id, name: user.name })
+        .from(user)
+        .innerJoin(projectsTable, eq(projectsTable.ownerId, user.id))
+        .where(inArray(projectsTable.id, ownedProjectIds(projectId))),
   };
 
   const events = {
@@ -890,6 +909,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
   return {
     projects,
     todos,
+    assignees,
     comments,
     events,
     shares,

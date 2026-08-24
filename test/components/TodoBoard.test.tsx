@@ -12,6 +12,7 @@ const todo = (over: Partial<Todo> = {}): Todo => ({
   createdAt: "2026-08-24T00:00:00.000Z",
   updatedAt: "2026-08-24T00:00:00.000Z",
   projectId: 1,
+  assigneeId: null,
   deletedAt: null,
   startAt: null,
   dueAt: null,
@@ -24,6 +25,7 @@ function renderBoard(props: Partial<Parameters<typeof TodoBoard>[0]> = {}) {
   return render(
     <TodoBoard
       todos={[todo()]}
+      assignees={[]}
       onStatusChange={vi.fn()}
       onEdit={vi.fn()}
       truncated={false}

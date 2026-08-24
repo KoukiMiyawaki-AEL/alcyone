@@ -105,6 +105,18 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 （SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。
 経緯は[ADR 0011](../adr/0011-expand-contract-migrations.md)。
 
+## 担当者
+
+| Method | Path | 用途 | 成功 | 失敗 |
+|---|---|---|---|---|
+| GET | `/api/projects/:projectId/assignees` | そのProjectのタスクを割り当てられる相手 | `{ id, name }[]` | `400` |
+
+**今日はちょうど1人（Projectの所有者）を返す。** クライアントが「自分自身」と決め打ちしないのは、
+複数人が届くようになったときに探して直す場所を作らないため。
+
+割り当ては `PATCH /api/todos/:id` の `assigneeId`。`null` で解除する。
+存在しないユーザーidは外部キーが拒む（`500`）。
+
 ## コメントと履歴
 
 | Method | Path | 用途 | 成功 | 失敗 |

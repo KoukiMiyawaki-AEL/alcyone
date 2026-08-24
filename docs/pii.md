@@ -26,6 +26,7 @@
 | `todo_comments` | `authorId` | 書き手 | サーバが記録 |
 | `todo_events` | `fromValue` / `toValue` | 変更前後の値。タイトルの変更履歴を含むので**自由入力が残る** | サーバが記録 |
 | `todo_events` | `actorId` | 変更した人 | サーバが記録 |
+| `todos` | `assigneeId` | 担当者 | 本人が設定 |
 
 ### データベースの外
 

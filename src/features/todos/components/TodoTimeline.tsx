@@ -3,11 +3,13 @@ import { CalendarRangeIcon } from "lucide-react";
 import { EmptyState } from "@/components/app/empty-state";
 import { cn } from "@/lib/utils";
 
+import { assigneeName } from "../assignee";
 import { buildTimeline, isoFromDayNumber, monthSpans } from "../timeline";
-import { STATUS_LABELS, type Todo } from "../types";
+import { STATUS_LABELS, type Assignee, type Todo } from "../types";
 
 type TodoTimelineProps = {
   todos: Todo[];
+  assignees: Assignee[];
   /** Today as a calendar date. Passed in so the view is a pure function of it. */
   today: string;
   /** True when the fetch was capped, so this is not the whole project. */
@@ -38,7 +40,7 @@ const BAR_CLASS: Record<Todo["status"], string> = {
  * dates, and getting that wrong moves a deadline the user did not touch; the
  * detail form edits the same dates with no ambiguity.
  */
-export function TodoTimeline({ todos, today, truncated, onEdit }: TodoTimelineProps) {
+export function TodoTimeline({ todos, assignees, today, truncated, onEdit }: TodoTimelineProps) {
   const { from, days, bars, unscheduled, todayOffset, clipped } = buildTimeline(todos, today);
 
   if (todos.length === 0) {
@@ -101,6 +103,11 @@ export function TodoTimeline({ todos, today, truncated, onEdit }: TodoTimelinePr
                     >
                       {bar.todo.title}
                     </button>
+                    {assigneeName(bar.todo.assigneeId, assignees) ? (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {assigneeName(bar.todo.assigneeId, assignees)}
+                      </span>
+                    ) : null}
                   </div>
 
                   {/*

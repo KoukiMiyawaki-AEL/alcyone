@@ -91,6 +91,11 @@ const todoFieldsSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
     status: z.enum(TODO_STATUSES).optional(),
+    // Not validated against a candidate list here: the foreign key already
+    // refuses an id that is not a user, and the repository refuses one that
+    // cannot reach the project. A list in the schema would be a third place
+    // to keep in step with the other two.
+    assigneeId: z.string().min(1).max(200).nullable().optional(),
     startAt: z.iso.date().nullable().optional(),
     dueAt: z.iso.date().nullable().optional(),
     // Trimmed to null so that "" and "no description" are one state rather
@@ -532,6 +537,12 @@ const app = new Hono<{
   // Comments and history are read together, because the screen shows them
   // interleaved. Two queries rather than one union: they are different kinds of
   // thing with different rules — one can be edited, the other never can.
+  // Who this project's tasks can be assigned to. One row today; the client
+  // asks rather than assuming so the answer can change without it noticing.
+  .get("/api/projects/:projectId/assignees", validate("param", projectIdParamSchema), async (c) => {
+    const { projectId } = c.req.valid("param");
+    return c.json(await c.get("repo").assignees.forProject(projectId));
+  })
   .get("/api/todos/:id/activity", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
     const repo = c.get("repo");

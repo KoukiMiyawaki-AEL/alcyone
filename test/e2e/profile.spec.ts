@@ -53,3 +53,64 @@ test.describe("display name", () => {
     await expect(page.getByLabel("メールアドレス")).toBeDisabled();
   });
 });
+
+test.describe("assignment", () => {
+  test("a task shows who it is assigned to, by their current name", async ({ page }) => {
+    await signUp(page);
+
+    await page.getByRole("button", { name: /^アカウント:/ }).click();
+    await page.getByRole("menuitem", { name: "Account" }).click();
+    await page.getByLabel("表示名").fill("実装担当");
+    await page.getByRole("button", { name: "保存" }).click();
+
+    await page.getByRole("link", { name: "Projects" }).click();
+    await createProject(page, "Assigning");
+    await page.getByRole("link", { name: "Assigning" }).click();
+    await createTodo(page, "割り当てるタスク");
+
+    await page.getByRole("button", { name: "「割り当てるタスク」の操作" }).click();
+    await page.getByRole("menuitem", { name: "詳細を編集" }).click();
+    await page.getByRole("combobox", { name: "担当者" }).click();
+    await page.getByRole("option", { name: "実装担当" }).click();
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeHidden();
+
+    await expect(page.getByLabel("担当: 実装担当")).toBeVisible();
+
+    // Renaming moves the name everywhere without touching a task, because the
+    // task stores an id.
+    await page.getByRole("button", { name: /^アカウント:/ }).click();
+    await page.getByRole("menuitem", { name: "Account" }).click();
+    await page.getByLabel("表示名").fill("改名後");
+    await page.getByRole("button", { name: "保存" }).click();
+
+    await page.getByRole("link", { name: "Projects" }).click();
+    await page.getByRole("link", { name: "Assigning" }).click();
+    await expect(page.getByLabel("担当: 改名後")).toBeVisible();
+  });
+
+  test("a task can be handed back to nobody", async ({ page }) => {
+    await signUp(page);
+    await createProject(page, "Assigning");
+    await page.getByRole("link", { name: "Assigning" }).click();
+    await createTodo(page, "戻すタスク");
+
+    await page.getByRole("button", { name: "「戻すタスク」の操作" }).click();
+    await page.getByRole("menuitem", { name: "詳細を編集" }).click();
+    await page.getByRole("combobox", { name: "担当者" }).click();
+    await page.getByRole("option", { name: "E2E user" }).click();
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeHidden();
+    await expect(page.getByLabel("担当: E2E user")).toBeVisible();
+
+    await page.getByRole("button", { name: "「戻すタスク」の操作" }).click();
+    await page.getByRole("menuitem", { name: "詳細を編集" }).click();
+    await page.getByRole("combobox", { name: "担当者" }).click();
+    await page.getByRole("option", { name: "未割り当て" }).click();
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeHidden();
+
+    // Assignable but never un-assignable would be a trap.
+    await expect(page.getByLabel(/^担当:/)).toBeHidden();
+  });
+});

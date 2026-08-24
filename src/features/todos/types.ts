@@ -23,6 +23,8 @@ export type TodoFields = {
   /** A note written with this change. Not a field on the task. */
   comment?: string;
   title?: string;
+  /** `null` unassigns. Absent leaves it alone. */
+  assigneeId?: string | null;
   status?: TodoStatus;
   startAt?: string | null;
   dueAt?: string | null;
@@ -35,6 +37,9 @@ export type TodoFields = {
  * "active" are ways of *not* naming a status, so they live alongside the real
  * ones rather than inside them.
  */
+/** Who a task can be assigned to, as the project's own list reports them. */
+export type Assignee = { id: string; name: string };
+
 export type TodoFilter = "all" | "active" | TodoStatus;
 
 export type TodoSort = "created" | "due" | "priority" | "start";
@@ -56,6 +61,7 @@ export const PRIORITY_LABELS = ["None", "Low", "Medium", "High"] as const;
 export const EVENT_LABELS: Record<TodoEvent["field"], string> = {
   created: "作成",
   status: "ステータス",
+  assigneeId: "担当者",
   startAt: "開始日",
   dueAt: "期限日",
   title: "タイトル",

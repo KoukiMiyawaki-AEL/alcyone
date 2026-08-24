@@ -24,6 +24,7 @@ import { user } from "./auth-schema";
 export const TODO_EVENT_FIELDS = [
   "created",
   "status",
+  "assigneeId",
   "startAt",
   "dueAt",
   "title",
@@ -215,6 +216,20 @@ export const todosTable = sqliteTable(
      * cost is irrelevant next to being able to read what a row says.
      */
     status: text().notNull().default("todo").$type<TodoStatus>(),
+    /**
+     * Who is doing this. Null means nobody has taken it.
+     *
+     * References `user` rather than being derived from the project's owner,
+     * because "who owns the list" and "who is doing this task" are different
+     * questions that happen to have the same answer while a project has one
+     * person on it (ADR 0014).
+     *
+     * The candidate set is therefore exactly one person today, which makes the
+     * field close to useless on its own — and it is still the field ADR 0026
+     * named as a precondition for a real Gantt chart, and the one collaboration
+     * needs to exist before anyone can be invited to anything.
+     */
+    assigneeId: text().references(() => user.id),
     /** ISO-8601 date (no time). Null means not scheduled to start. */
     startAt: text(),
     /** ISO-8601 date (no time). Null means no due date. */

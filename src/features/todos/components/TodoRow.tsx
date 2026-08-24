@@ -5,6 +5,7 @@ import {
   PencilIcon,
   PlayIcon,
   TrashIcon,
+  UserIcon,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,10 +19,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-import { PRIORITY_LABELS, STATUS_LABELS, type Todo, type TodoStatus } from "../types";
+import { assigneeName } from "../assignee";
+import {
+  PRIORITY_LABELS,
+  STATUS_LABELS,
+  type Assignee,
+  type Todo,
+  type TodoStatus,
+} from "../types";
 
 type TodoRowProps = {
   todo: Todo;
+  assignees: Assignee[];
   onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
   onEdit: (todo: Todo) => void;
   onDelete: (id: number) => Promise<void>;
@@ -39,7 +48,8 @@ const STATUS_VARIANT: Record<TodoStatus, "secondary" | "outline" | "destructive"
   done: null,
 };
 
-export function TodoRow({ todo, onStatusChange, onEdit, onDelete }: TodoRowProps) {
+export function TodoRow({ todo, assignees, onStatusChange, onEdit, onDelete }: TodoRowProps) {
+  const assignee = assigneeName(todo.assigneeId, assignees);
   const done = todo.status === "done";
   const variant = STATUS_VARIANT[todo.status];
 
@@ -68,6 +78,16 @@ export function TodoRow({ todo, onStatusChange, onEdit, onDelete }: TodoRowProps
             <Badge variant={variant} className="text-xs">
               {STATUS_LABELS[todo.status]}
             </Badge>
+          ) : null}
+
+          {assignee ? (
+            <span
+              className="flex items-center gap-1 text-xs text-muted-foreground"
+              aria-label={`担当: ${assignee}`}
+            >
+              <UserIcon className="size-3" />
+              {assignee}
+            </span>
           ) : null}
 
           {todo.startAt ? (

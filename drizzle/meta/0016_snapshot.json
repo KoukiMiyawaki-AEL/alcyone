@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "aad17b72-2817-5976-898c-5802a9c7a6c0",
-  "prevId": "34e3d357-91e2-48c9-aaaf-cb200fb4ecce",
+  "id": "72ac2837-00fa-409a-839e-40369614b0ab",
+  "prevId": "aad17b72-2817-5976-898c-5802a9c7a6c0",
   "tables": {
     "attachments": {
       "name": "attachments",
@@ -251,6 +251,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "revisionId": {
+          "name": "revisionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "text",
@@ -267,13 +274,6 @@
         },
         "deletedAt": {
           "name": "deletedAt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "revisionId": {
-          "name": "revisionId",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -346,6 +346,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "revisionId": {
+          "name": "revisionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "field": {
           "name": "field",
           "type": "text",
@@ -369,13 +376,6 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "revisionId": {
-          "name": "revisionId",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -470,6 +470,13 @@
           "autoincrement": false,
           "default": "'todo'"
         },
+        "assigneeId": {
+          "name": "assigneeId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "startAt": {
           "name": "startAt",
           "type": "text",
@@ -533,6 +540,19 @@
           "tableTo": "projects",
           "columnsFrom": [
             "projectId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "todos_assigneeId_user_id_fk": {
+          "name": "todos_assigneeId_user_id_fk",
+          "tableFrom": "todos",
+          "tableTo": "user",
+          "columnsFrom": [
+            "assigneeId"
           ],
           "columnsTo": [
             "id"

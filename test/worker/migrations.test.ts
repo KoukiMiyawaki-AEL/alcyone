@@ -39,13 +39,17 @@ describe("migrations", () => {
       on_delete: string;
     }>();
 
-    expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({
+    // Asserted by name rather than by position: `todos` gained a second
+    // foreign key when tasks became assignable, and a test that counted them
+    // would have failed for a change it has no opinion about.
+    expect(results.find((fk) => fk.from === "projectId")).toMatchObject({
       table: "projects",
-      from: "projectId",
       to: "id",
       on_delete: "NO ACTION",
     });
+    // Every one of them, present and future: the reason applies to the table,
+    // not to one column.
+    expect(results.map((fk) => fk.on_delete)).toEqual(results.map(() => "NO ACTION"));
   });
 
   it("keeps the projectId index after the table rebuild", async () => {
@@ -85,9 +89,9 @@ describe("migrations", () => {
     // `projects`. This is what notices if the reattach half is ever botched.
     const { results } = await env.DB.prepare("SELECT * FROM pragma_foreign_key_list('todos')").all<{
       table: string;
+      from: string;
     }>();
-    expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({ table: "projects" });
+    expect(results.map((fk) => fk.table)).toContain("projects");
 
     const idx = await env.DB.prepare(
       "SELECT name FROM sqlite_master WHERE type='index' AND name='todos_project_id_idx'",

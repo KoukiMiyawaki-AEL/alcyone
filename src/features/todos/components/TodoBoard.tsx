@@ -1,4 +1,4 @@
-import { CalendarIcon, FlagIcon, KanbanIcon, PlayIcon } from "lucide-react";
+import { CalendarIcon, FlagIcon, KanbanIcon, PlayIcon, UserIcon } from "lucide-react";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/app/empty-state";
@@ -7,10 +7,18 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { TODO_STATUSES } from "@/worker/db/schema";
 
-import { PRIORITY_LABELS, STATUS_LABELS, type Todo, type TodoStatus } from "../types";
+import { assigneeName } from "../assignee";
+import {
+  PRIORITY_LABELS,
+  STATUS_LABELS,
+  type Assignee,
+  type Todo,
+  type TodoStatus,
+} from "../types";
 
 type TodoBoardProps = {
   todos: Todo[];
+  assignees: Assignee[];
   onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
   onEdit: (todo: Todo) => void;
   /** True when the fetch was capped, so the board is not showing everything. */
@@ -27,7 +35,7 @@ type TodoBoardProps = {
  * library and its own set of ARIA problems; two working paths cost less and
  * leave nobody out.
  */
-export function TodoBoard({ todos, onStatusChange, onEdit, truncated }: TodoBoardProps) {
+export function TodoBoard({ todos, assignees, onStatusChange, onEdit, truncated }: TodoBoardProps) {
   // Which column is under the pointer. Purely visual, but without it a drop
   // target gives no sign it will accept anything.
   const [over, setOver] = useState<TodoStatus | null>(null);
@@ -85,6 +93,7 @@ export function TodoBoard({ todos, onStatusChange, onEdit, truncated }: TodoBoar
               <BoardCard
                 key={todo.id}
                 todo={todo}
+                assignees={assignees}
                 onEdit={onEdit}
                 onStatusChange={onStatusChange}
               />
@@ -106,10 +115,12 @@ export function TodoBoard({ todos, onStatusChange, onEdit, truncated }: TodoBoar
 
 function BoardCard({
   todo,
+  assignees,
   onEdit,
   onStatusChange,
 }: {
   todo: Todo;
+  assignees: Assignee[];
   onEdit: (todo: Todo) => void;
   onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
 }) {
@@ -138,6 +149,13 @@ function BoardCard({
 
       {todo.description ? (
         <p className="line-clamp-2 text-xs text-muted-foreground">{todo.description}</p>
+      ) : null}
+
+      {assigneeName(todo.assigneeId, assignees) ? (
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          <UserIcon className="size-3" />
+          {assigneeName(todo.assigneeId, assignees)}
+        </p>
       ) : null}
 
       {todo.startAt || todo.dueAt || todo.priority > 0 ? (

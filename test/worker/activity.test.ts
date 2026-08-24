@@ -46,6 +46,11 @@ async function patch(headers: Headers, id: number, body: unknown) {
   );
 }
 
+async function currentUserId(headers: Headers): Promise<string> {
+  const res = await app.request("/api/auth/get-session", { headers }, env);
+  return ((await res.json()) as { user: { id: string } }).user.id;
+}
+
 async function activity(headers: Headers, todoId: number) {
   const res = await app.request(`/api/todos/${todoId}/activity`, { headers }, env);
   return {
@@ -355,6 +360,23 @@ describe("change history", () => {
     const { events, comments } = await activity(alice, todo.id);
     expect(events.map((e) => e.field)).toEqual(["created"]);
     expect(comments.map((c) => c.body)).toEqual(["何も変えていない"]);
+  });
+
+  it("records who a task was assigned to", async () => {
+    const me = await currentUserId(alice);
+    await patch(alice, todo.id, { assigneeId: me });
+
+    const { events } = await activity(alice, todo.id);
+    expect(events.at(-1)).toMatchObject({ field: "assigneeId", fromValue: null, toValue: me });
+  });
+
+  it("records a task being unassigned", async () => {
+    const me = await currentUserId(alice);
+    await patch(alice, todo.id, { assigneeId: me });
+    await patch(alice, todo.id, { assigneeId: null });
+
+    const { events } = await activity(alice, todo.id);
+    expect(events.at(-1)).toMatchObject({ field: "assigneeId", fromValue: me, toValue: null });
   });
 
   it("cannot be altered through the API at all", async () => {

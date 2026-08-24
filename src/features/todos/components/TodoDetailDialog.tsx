@@ -22,7 +22,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { TODO_STATUSES } from "@/worker/db/schema";
 
-import { PRIORITY_LABELS, STATUS_LABELS, type Todo, type TodoFields } from "../types";
+import {
+  PRIORITY_LABELS,
+  STATUS_LABELS,
+  type Assignee,
+  type Todo,
+  type TodoFields,
+} from "../types";
 import { TodoActivity } from "./TodoActivityPanel";
 
 /**
@@ -33,8 +39,12 @@ import { TodoActivity } from "./TodoActivityPanel";
  */
 export type TodoEditor = { mode: "create"; title: string } | { mode: "edit"; todo: Todo };
 
+/** A Select cannot hold null, so "nobody" needs a value of its own. */
+const UNASSIGNED = "__unassigned__";
+
 type TodoDetailDialogProps = {
   editor: TodoEditor | null;
+  assignees: Assignee[];
   onOpenChange: (open: boolean) => void;
   /** `todo` is null when creating. Resolves to whether the write happened. */
   onSave: (fields: TodoFields, todo: Todo | null) => Promise<boolean>;
@@ -50,7 +60,12 @@ const orNull = (value: string) => (value.trim() === "" ? null : value);
  * open and the fields are few, so a diff would add a way to be wrong without
  * saving a round trip.
  */
-export function TodoDetailDialog({ editor, onOpenChange, onSave }: TodoDetailDialogProps) {
+export function TodoDetailDialog({
+  editor,
+  assignees,
+  onOpenChange,
+  onSave,
+}: TodoDetailDialogProps) {
   return (
     <Dialog open={editor !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
@@ -64,6 +79,7 @@ export function TodoDetailDialog({ editor, onOpenChange, onSave }: TodoDetailDia
           <TodoDetailForm
             key={editor.mode === "edit" ? `edit-${editor.todo.id}` : "create"}
             editor={editor}
+            assignees={assignees}
             onOpenChange={onOpenChange}
             onSave={onSave}
           />
@@ -75,15 +91,21 @@ export function TodoDetailDialog({ editor, onOpenChange, onSave }: TodoDetailDia
 
 function TodoDetailForm({
   editor,
+  assignees,
   onOpenChange,
   onSave,
 }: {
   editor: TodoEditor;
+  assignees: Assignee[];
   onOpenChange: (open: boolean) => void;
   onSave: (fields: TodoFields, todo: Todo | null) => Promise<boolean>;
 }) {
   const formId = useId();
   const creating = editor.mode === "create";
+  const assigneeOptions = [
+    { value: UNASSIGNED, label: "未割り当て" },
+    ...assignees.map((person) => ({ value: person.id, label: person.name })),
+  ];
   const [fields, setFields] = useState<TodoFields>(
     creating
       ? // A new task starts with only what was typed. Leaving the rest empty is
@@ -91,6 +113,7 @@ function TodoDetailForm({
         {
           title: editor.title,
           status: "todo",
+          assigneeId: null,
           startAt: null,
           dueAt: null,
           description: null,
@@ -99,6 +122,7 @@ function TodoDetailForm({
       : {
           title: editor.todo.title,
           status: editor.todo.status,
+          assigneeId: editor.todo.assigneeId,
           startAt: editor.todo.startAt,
           dueAt: editor.todo.dueAt,
           description: editor.todo.description,
@@ -171,6 +195,34 @@ function TodoDetailForm({
                 {TODO_STATUSES.map((value) => (
                   <SelectItem key={value} value={value}>
                     {STATUS_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor={`${formId}-assignee`}>担当者</Label>
+            <Select
+              items={assigneeOptions}
+              value={fields.assigneeId ?? UNASSIGNED}
+              onValueChange={(value) =>
+                setFields((f) => ({
+                  // A Select cannot hold null, and "nobody" has to stay
+                  // expressible — otherwise a task could be assigned but never
+                  // un-assigned.
+                  ...f,
+                  assigneeId: value === UNASSIGNED ? null : String(value),
+                }))
+              }
+            >
+              <SelectTrigger id={`${formId}-assignee`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {assigneeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
                   </SelectItem>
                 ))}
               </SelectContent>

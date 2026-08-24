@@ -83,6 +83,24 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 （SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。
 経緯は[ADR 0011](../adr/0011-expand-contract-migrations.md)。
 
+## 共有リンク
+
+| Method | Path | 用途 | 認証 | 成功 | 失敗 |
+|---|---|---|---|---|---|
+| POST | `/api/projects/:projectId/share` | リンクを発行（冪等） | 要 | `{ token }` | `404` |
+| GET | `/api/projects/:projectId/share` | 現在のリンク | 要 | `{ token または null }` | `400` |
+| DELETE | `/api/projects/:projectId/share` | リンクを解除 | 要 | `204` | `404` |
+| GET | `/api/shared/:token` | 共有ビューを読む | **不要** | `{ project, todos }` | `400` `404` `429` |
+
+`/api/shared/:token`は**このAPIで唯一、認証が要らない**。IPでレート制限している。
+
+返すのは行そのものではなく、公開用に選んだ形（id・ownerId・createdAtを含まない）。
+
+**KVが前段にあるので、内容は最大60秒古い。解除も「1分以内に効く」であって即座ではない。**
+理由と、その取引を受け入れた条件は[ADR 0022](../adr/0022-share-links-cached-in-kv.md)。
+
+取り消し済みトークンと存在しないトークンは**同じ応答**を返す。
+
 ## データエクスポート
 
 | Method | Path | 用途 | パラメータ | 成功 | 失敗 |

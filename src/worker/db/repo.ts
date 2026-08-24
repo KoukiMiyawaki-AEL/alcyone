@@ -16,7 +16,7 @@ import { drizzle } from "drizzle-orm/d1";
 
 import { type Cursor } from "./cursor";
 import { ftsRank, toFtsQuery, toLikePattern, todosFts } from "./fts";
-import { attachmentsTable, projectsTable, todosTable } from "./schema";
+import { attachmentsTable, projectsTable, sharesTable, todosTable } from "./schema";
 
 /**
  * Timestamps are generated here, not by the database.
@@ -146,6 +146,48 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           id === undefined ? undefined : eq(projectsTable.id, id),
         ),
       );
+
+  const shares = {
+    find: (projectId: number) =>
+      db
+        .select()
+        .from(sharesTable)
+        .where(inArray(sharesTable.projectId, ownedProjectIds(projectId)))
+        .limit(1),
+
+    /**
+     * Insert-from-select, so ownership is part of the statement rather than a
+     * check the caller is trusted to have done.
+     *
+     * A plain insert passes the foreign key for *any* existing project, because
+     * a foreign key checks existence and not ownership — which meant any signed
+     * in user could mint a public link to a stranger's project. A test caught
+     * it. The select yields no row when the project is not this owner's, so
+     * nothing is inserted and the caller sees the same "not found" as for an id
+     * that never existed.
+     *
+     * Written as SQL because drizzle's insert-select requires the selected
+     * columns to match the table definition exactly, including the
+     * autoincrement id — which would mean naming a column precisely to avoid
+     * setting it.
+     */
+    create: (projectId: number, token: string) =>
+      db.all<{ token: string }>(sql`
+        insert into ${sharesTable} (token, "projectId", "createdAt")
+        select ${token}, ${projectsTable.id}, ${now()}
+        from ${projectsTable}
+        where ${projectsTable.id} = ${projectId}
+          and ${projectsTable.ownerId} = ${ownerId}
+          and ${projectsTable.deletedAt} is null
+        returning token
+      `),
+
+    remove: (projectId: number) =>
+      db
+        .delete(sharesTable)
+        .where(inArray(sharesTable.projectId, ownedProjectIds(projectId)))
+        .returning({ token: sharesTable.token }),
+  };
 
   const projects = {
     list: (options: { cursor?: Cursor | null; limit?: number } = {}) =>
@@ -401,6 +443,17 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
       // not rows and survive this; see ownedAttachmentKeys.
       db.delete(attachmentsTable).where(inArray(attachmentsTable.todoId, allOwnedTodoIds())),
       db
+        .delete(sharesTable)
+        .where(
+          inArray(
+            sharesTable.projectId,
+            db
+              .select({ id: projectsTable.id })
+              .from(projectsTable)
+              .where(eq(projectsTable.ownerId, ownerId)),
+          ),
+        ),
+      db
         .delete(todosTable)
         .where(
           inArray(
@@ -463,6 +516,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
   return {
     projects,
     todos,
+    shares,
     attachments,
     purgeOwnedData,
     /**

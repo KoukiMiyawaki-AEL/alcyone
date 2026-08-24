@@ -77,6 +77,9 @@ export async function resetAll() {
   for (const table of [
     "attachments",
     "todos",
+    // Also a child of `projects`, and forgetting it fails the delete below
+    // rather than leaving orphans — which is the good outcome.
+    "shares",
     "projects",
     "session",
     "account",

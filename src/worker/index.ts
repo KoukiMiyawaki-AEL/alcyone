@@ -12,6 +12,7 @@ import { handleObjectCleanup, type CleanupMessage } from "./object-cleanup";
 import { clientIp, enforce } from "./rate-limit";
 import { notifyUser } from "./realtime";
 import { purgeExpiredDeletions } from "./scheduled";
+import { getSharedView, newShareToken, purgeSharedView } from "./share";
 import { validate } from "./validator";
 
 const createProjectSchema = z.object({
@@ -44,6 +45,10 @@ const pageQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
 });
+
+// Bounded and character-restricted: the token becomes part of a KV key, and an
+// unbounded one is a way to write keys nobody intended.
+const shareTokenParamSchema = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/) });
 
 const exportParamSchema = z.object({ instanceId: z.string().min(1).max(200) });
 
@@ -130,6 +135,32 @@ const app = new Hono<{
   // Unauthenticated liveness probe. Kept outside the guard on purpose: a health
   // check that needs credentials cannot be used by an uptime monitor.
   .get("/api/health", (c) => c.json({ ok: true }))
+  // The one endpoint anyone on the internet can reach with no account. Placed
+  // above the guard for that reason, and rate limited by IP for the same reason
+  // the auth endpoints are.
+  //
+  // KV answers it; D1 is consulted only on a miss. That is the whole point —
+  // a link doing the rounds must not cost one database read per viewer.
+  //
+  // The limit is a middleware rather than a line in the handler so that the
+  // handler's return type stays a union of `c.json(...)` calls. A bare
+  // `Response` in there collapses the whole route's RPC type to `unknown`, and
+  // the client silently loses every field.
+  .use("/api/shared/*", async (c, next) => {
+    const limited = await enforce(c.env.PUBLIC_RATE_LIMITER, clientIp(c), 60);
+    if (limited) return limited;
+    await next();
+  })
+  .get("/api/shared/:token", validate("param", shareTokenParamSchema), async (c) => {
+    const { token } = c.req.valid("param");
+    const view = await getSharedView(c.env.SHARE_CACHE, c.get("db"), token);
+
+    // A revoked link and a token that never existed answer identically. Any
+    // difference would let someone probe for tokens that used to work.
+    if (!view) return c.json({ error: "Not found" }, 404);
+
+    return c.json(view);
+  })
   // Everything past here requires a session, and every query is scoped to the
   // signed-in user. Both are established in one place so that no handler can
   // forget either.
@@ -180,6 +211,42 @@ const app = new Hono<{
   .get("/api/realtime", (c) => {
     const id = c.env.USER_CHANNEL.idFromName(c.get("userId"));
     return c.env.USER_CHANNEL.get(id).fetch(c.req.raw);
+  })
+  .post("/api/projects/:projectId/share", validate("param", projectIdParamSchema), async (c) => {
+    const { projectId } = c.req.valid("param");
+    const repo = c.get("repo");
+
+    // Idempotent: asking twice returns the same link rather than quietly
+    // invalidating the one already sent to someone.
+    const [existing] = await repo.shares.find(projectId);
+    if (existing) return c.json({ token: existing.token });
+
+    const [created] = await repo.shares.create(projectId, newShareToken());
+    // `shares.create` is scoped by a foreign key, not by an ownership subquery,
+    // so a project that is not this user's fails the insert rather than
+    // succeeding — but the id could also simply not exist.
+    if (!created) return c.json({ error: "Not found" }, 404);
+
+    return c.json({ token: created.token }, 201);
+  })
+  .get("/api/projects/:projectId/share", validate("param", projectIdParamSchema), async (c) => {
+    const { projectId } = c.req.valid("param");
+    const [existing] = await c.get("repo").shares.find(projectId);
+
+    return c.json({ token: existing?.token ?? null });
+  })
+  .delete("/api/projects/:projectId/share", validate("param", projectIdParamSchema), async (c) => {
+    const { projectId } = c.req.valid("param");
+    const [removed] = await c.get("repo").shares.remove(projectId);
+
+    if (!removed) return c.json({ error: "Not found" }, 404);
+
+    // Awaited, not deferred: revocation is the one operation here where being
+    // late actually matters. KV is still eventually consistent, so this bites
+    // within the TTL rather than at once — recorded in ADR 0022.
+    await purgeSharedView(c.env.SHARE_CACHE, removed.token);
+
+    return c.body(null, 204);
   })
   // Starts a data export and returns immediately with an id to poll. The work
   // is a Workflow, so "started" is durable — the response is a receipt, not a

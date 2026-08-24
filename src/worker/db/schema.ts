@@ -2,7 +2,7 @@
 // drizzle-kit — which is pointed at this file alone — sees the whole schema.
 export * from "./auth-schema";
 
-import { index, int, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, int, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 import { user } from "./auth-schema";
 
@@ -28,6 +28,34 @@ export const projectsTable = sqliteTable(
     // NULL`. Load-bearing rather than speculative: D1 bills rows scanned, on a
     // database that runs one query at a time.
     index("projects_owner_id_idx").on(t.ownerId, t.deletedAt),
+  ],
+);
+
+/**
+ * A read-only public link to one project.
+ *
+ * A table rather than a column on `projects` because `projects` is a parent
+ * table, and D1 cannot rebuild one (ADR 0011) — a new table costs nothing and
+ * keeps that door shut. It also makes revocation a delete rather than a nulled
+ * column, so there is no "was it ever shared" ambiguity.
+ *
+ * D1 is the authority on whether a link exists; KV only caches what it renders.
+ */
+export const sharesTable = sqliteTable(
+  "shares",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    /** Random and unguessable — this is the only thing protecting the view. */
+    token: text().notNull(),
+    projectId: int()
+      .notNull()
+      .references(() => projectsTable.id),
+    createdAt: text().notNull(),
+  },
+  (table) => [
+    uniqueIndex("shares_token_uidx").on(table.token),
+    // One live link per project, so revoking is unambiguous.
+    uniqueIndex("shares_projectId_uidx").on(table.projectId),
   ],
 );
 

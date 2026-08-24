@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Project } from "@/features/projects/types";
+import { ShareCard } from "@/features/share/ShareCard";
 import { addTodo, deleteTodo, restoreTodo, setTodoCompleted } from "@/features/todos/api";
 import { TodoFilters } from "@/features/todos/components/TodoFilters";
 import { TodoForm } from "@/features/todos/components/TodoForm";
@@ -16,7 +17,12 @@ import type { Todo } from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
 import { toastUndo } from "@/lib/undo-toast";
 
-type LoaderData = { project: Project | null; todos: Todo[]; error: string | null };
+type LoaderData = {
+  project: Project | null;
+  todos: Todo[];
+  shareToken: string | null;
+  error: string | null;
+};
 
 /**
  * List state lives in the URL, not in component state.
@@ -61,7 +67,7 @@ export const Route = createFileRoute("/projects/$projectId")({
     } catch {
       // Network failure is transient — show the inline Retry card, not a
       // hard "not found". The project may well exist.
-      return { project: null, todos: [], error: TRANSIENT };
+      return { project: null, todos: [], shareToken: null, error: TRANSIENT };
     }
 
     // Everything below is outside the catch on purpose: both `redirect()` and
@@ -75,10 +81,25 @@ export const Route = createFileRoute("/projects/$projectId")({
     }
     if (res.status === 404 || res.status === 400) throw notFound();
 
-    if (!res.ok) return { project: null, todos: [], error: TRANSIENT };
+    if (!res.ok) return { project: null, todos: [], shareToken: null, error: TRANSIENT };
 
     const { project, todos } = await res.json();
-    return { project, todos, error: null };
+
+    // Fetched separately rather than folded into the todos response: whether a
+    // project is shared is not part of reading it, and every list request would
+    // otherwise carry a field only one card uses.
+    let shareToken: string | null = null;
+    try {
+      const shareRes = await apiClient.api.projects[":projectId"].share.$get({
+        param: { projectId: params.projectId },
+      });
+      if (shareRes.ok) shareToken = (await shareRes.json()).token;
+    } catch {
+      // The page is perfectly usable without knowing; the card just shows the
+      // un-shared state, and enabling is idempotent so nothing is lost.
+    }
+
+    return { project, todos, shareToken, error: null };
   },
   pendingComponent: TodosPending,
   component: ProjectTodosComponent,
@@ -125,7 +146,7 @@ function ProjectTodosComponent() {
   const { projectId } = Route.useParams();
   const { status, sort } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const { project, todos, error } = Route.useLoaderData();
+  const { project, todos, shareToken, error } = Route.useLoaderData();
 
   async function handleAdd(title: string) {
     const added = await addTodo(projectId, title);
@@ -166,6 +187,8 @@ function ProjectTodosComponent() {
           <TodoForm onAdd={handleAdd} />
         </CardContent>
       </Card>
+
+      {project && <ShareCard projectId={project.id} token={shareToken} />}
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">

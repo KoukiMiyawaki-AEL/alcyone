@@ -27,6 +27,7 @@
 | [0019](./0019-object-cleanup-queue.md) | R2オブジェクトの削除をQueuesに逃がす | Accepted |
 | [0020](./0020-data-export-workflow.md) | データエクスポートをWorkflowsで実装する | Accepted |
 | [0021](./0021-d1-sessions-for-read-replicas.md) | リクエストごとにD1 Sessionを開き、bookmarkをCookieで引き継ぐ | Accepted |
+| [0022](./0022-share-links-cached-in-kv.md) | 公開共有リンクを作り、その描画結果をKVにキャッシュする | Accepted |
 
 ## ルール
 

@@ -1,7 +1,7 @@
 import { and, inArray, isNotNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { attachmentsTable, projectsTable, todosTable } from "./schema";
+import { attachmentsTable, projectsTable, sharesTable, todosTable } from "./schema";
 
 /**
  * Queries that run without a user.
@@ -65,6 +65,19 @@ export function createMaintenance(binding: D1Database) {
           .delete(todosTable)
           .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before)))
           .returning({ id: todosTable.id }),
+        // Same shape of bug as the attachments one above, one table over:
+        // `shares.projectId` references `projects.id`, so an expired project
+        // with a live share link would fail the foreign key and take the whole
+        // run with it. Written before it could happen rather than after.
+        db.delete(sharesTable).where(
+          inArray(
+            sharesTable.projectId,
+            db
+              .select({ id: projectsTable.id })
+              .from(projectsTable)
+              .where(and(isNotNull(projectsTable.deletedAt), lt(projectsTable.deletedAt, before))),
+          ),
+        ),
         db
           .delete(projectsTable)
           .where(and(isNotNull(projectsTable.deletedAt), lt(projectsTable.deletedAt, before)))

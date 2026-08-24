@@ -331,6 +331,13 @@ pnpm test --project worker     # APIのみ
 **E2Eを計測するときは他のコマンドを同時に走らせない。** 並行させると実行時間が数十倍になり、
 アプリのバグに見える失敗が出る（このセッションで2回、いずれも誤診の原因になった）。
 
+キューのテストは`createMessageBatch()`でハンドラを直接呼ぶ。**`queue.send()`は
+vitest環境で消費側を駆動しない**（測って確認済み）ので、送って待つテストは
+何も起きないまま合格するか、時間切れになる。
+
+Workflowのテストは`introspectWorkflowInstance()`。`mockStepError`で狙ったステップだけ
+失敗させ、`disableRetryDelays`でバックオフを飛ばす。
+
 Durable Objectのテストは`cloudflare:test`の`runInDurableObject`で中を覗く。
 `waitUntil`に載せた処理を検証するときは`createExecutionContext()`を渡し、
 アサーションの前に`waitOnExecutionContext(ctx)`で待つ（待たないと当然まだ走っていない）。

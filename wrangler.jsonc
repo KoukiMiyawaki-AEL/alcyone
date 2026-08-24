@@ -45,7 +45,12 @@
     { "name": "alcyone-data-export", "binding": "DATA_EXPORT", "class_name": "DataExportWorkflow" },
   ],
   "queues": {
-    "producers": [{ "queue": "alcyone-object-cleanup", "binding": "OBJECT_CLEANUP" }],
+    "producers": [
+      { "queue": "alcyone-object-cleanup", "binding": "OBJECT_CLEANUP" },
+      // Bound as a producer only so a test can put a message on it directly.
+      // Nothing in the application sends here; the platform does.
+      { "queue": "alcyone-object-cleanup-dlq", "binding": "OBJECT_CLEANUP_DLQ" },
+    ],
     "consumers": [
       {
         "queue": "alcyone-object-cleanup",
@@ -56,6 +61,13 @@
         // be processed must stop costing retries and start being visible.
         "max_retries": 3,
         "dead_letter_queue": "alcyone-object-cleanup-dlq",
+      },
+      {
+        // A dead letter queue nobody reads is a place messages go to be
+        // forgotten. This consumer exists so that giving up is *recorded*.
+        "queue": "alcyone-object-cleanup-dlq",
+        "max_batch_size": 100,
+        "max_batch_timeout": 30,
       },
     ],
   },

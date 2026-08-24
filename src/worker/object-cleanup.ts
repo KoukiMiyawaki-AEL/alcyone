@@ -93,6 +93,35 @@ export async function deleteObjectsNow(bucket: R2Bucket, keys: string[]): Promis
  * make ninety-nine good ones run again, which at best doubles the work and at
  * worst never converges.
  */
+/** The queue whose messages have given up. Must match `wrangler.jsonc`. */
+export const DEAD_LETTER_QUEUE = "alcyone-object-cleanup-dlq";
+
+/**
+ * Records a message that exhausted its retries.
+ *
+ * A dead letter queue with no consumer is a place messages go to be forgotten:
+ * the objects are never deleted, nothing says so, and the only evidence is a
+ * queue depth nobody is looking at. Acknowledging here is deliberate — the
+ * message has already failed as many times as it is going to, and leaving it
+ * to be redelivered forever buys nothing.
+ *
+ * The keys are logged so the deletion can be retried by hand. That is the
+ * actual recovery path, and it only exists if the keys are written down.
+ */
+export function handleDeadLetters(batch: MessageBatch<CleanupMessage>): void {
+  for (const message of batch.messages) {
+    console.log(
+      JSON.stringify({
+        level: "error",
+        message: "object cleanup gave up",
+        keys: message.body.keys,
+        attempts: message.attempts,
+      }),
+    );
+    message.ack();
+  }
+}
+
 export async function handleObjectCleanup(
   batch: MessageBatch<CleanupMessage>,
   env: CloudflareBindings,

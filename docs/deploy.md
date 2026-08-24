@@ -82,8 +82,8 @@ CPUを食い、**Workers Freeの1呼び出し10ms上限を超える**。Paidが�
 | D1の読み取りレプリカ整合 | [ADR 0021](./adr/0021-d1-sessions-for-read-replicas.md) | 作成直後の一覧に出るか |
 | KVの結果整合 | [ADR 0022](./adr/0022-share-links-cached-in-kv.md) | 共有解除が何秒で効くか |
 | Analytics Engine | [ADR 0023](./adr/0023-analytics-engine-events.md) | SQL APIで1件でも読めるか |
-| Queuesのdead letter | [ADR 0019](./adr/0019-object-cleanup-queue.md) | 失敗が実際にDLQへ落ちるか |
-| Workflowsの再開 | [ADR 0020](./adr/0020-data-export-workflow.md) | ステップ失敗後に飛ばして再開するか |
+| Queuesのdead letter | [ADR 0019](./adr/0019-object-cleanup-queue.md) | 失敗が実際にDLQへ落ちるか（**ローカルでは`send()`が消費側を駆動しないので原理的に不可**） |
+| Workflowsの完了済みステップ | [ADR 0020](./adr/0020-data-export-workflow.md) | 再開時に本当に飛ばしているか（失敗と再開自体はローカルで検証済み） |
 
 ## `pnpm run preflight` が見ているもの
 

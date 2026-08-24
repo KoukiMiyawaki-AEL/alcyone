@@ -9,7 +9,12 @@ import { exportKey, type ExportManifest, type ExportParams } from "./data-export
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todoCursorValue, type Repo } from "./db/repo";
 import { bookmarkCookie, openSession } from "./db/session";
-import { handleObjectCleanup, type CleanupMessage } from "./object-cleanup";
+import {
+  DEAD_LETTER_QUEUE,
+  handleDeadLetters,
+  handleObjectCleanup,
+  type CleanupMessage,
+} from "./object-cleanup";
 import { clientIp, enforce } from "./rate-limit";
 import { notifyUser } from "./realtime";
 import { purgeExpiredDeletions } from "./scheduled";
@@ -603,6 +608,14 @@ export default {
   // `scheduled` on purpose: the cron decides *what* is expired, this does the
   // unbounded I/O, and neither has to fit in the other's time budget.
   queue: async (batch, env) => {
+    // One handler, two queues — the runtime distinguishes them only by name.
+    // Getting this branch wrong would run the deletion again on messages that
+    // already failed it as many times as they are allowed to.
+    if (batch.queue === DEAD_LETTER_QUEUE) {
+      handleDeadLetters(batch);
+      return;
+    }
+
     await handleObjectCleanup(batch, env);
   },
   scheduled: async (_controller, env, ctx) => {

@@ -107,6 +107,8 @@ function TodoDetailForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Written with the change, not stored on the task. Reset by remounting. */
+  const [note, setNote] = useState("");
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -120,7 +122,13 @@ function TodoDetailForm({
     }
 
     setSaving(true);
-    const saved = await onSave(fields, creating ? null : editor.todo);
+    const trimmed = note.trim();
+    const saved = await onSave(
+      // Sent only when there is something to say: an empty box must not become
+      // an empty comment.
+      trimmed === "" ? fields : { ...fields, comment: trimmed },
+      creating ? null : editor.todo,
+    );
     setSaving(false);
     if (saved) onOpenChange(false);
   }
@@ -209,6 +217,24 @@ function TodoDetailForm({
             />
           </div>
         </div>
+
+        {/*
+          Only when editing: a note explaining a change needs a change to
+          explain, and a new task has nothing to say it about yet.
+        */}
+        {creating ? null : (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${formId}-note`}>この変更についてのコメント（任意）</Label>
+            <Textarea
+              id={`${formId}-note`}
+              rows={2}
+              maxLength={4000}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="ブロックの理由や、日程を動かした背景など"
+            />
+          </div>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${formId}-description`}>メモ</Label>

@@ -38,6 +38,15 @@ import {
 const now = () => new Date().toISOString();
 
 /**
+ * Identifies one save.
+ *
+ * `crypto.randomUUID`, not a timestamp: two saves in the same millisecond would
+ * merge into one entry, and grouping by a coincidence of equal clocks is not
+ * something the data would ever say out loud. A generated id states it.
+ */
+const newRevisionId = () => crypto.randomUUID();
+
+/**
  * What a list is narrowed to. Distinct from `TodoStatus` in the schema, which
  * is what a single row *is* — one of these ("active") is not a status at all
  * but "anything unfinished", and conflating the two is how a filter ends up
@@ -219,7 +228,12 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
    * a history table that could be written for someone else's todo would be a
    * way to learn their ids.
    */
-  const changeEvent = (todoId: number, field: TrackedField, to: string | number | null) => {
+  const changeEvent = (
+    todoId: number,
+    revisionId: string,
+    field: TrackedField,
+    to: string | number | null,
+  ) => {
     const column = todosTable[field];
     const next = to === null ? null : String(to);
 
@@ -232,6 +246,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           id: sql<number>`null`.as("id"),
           todoId: todosTable.id,
           actorId: sql<string>`${ownerId}`.as("actorId"),
+          revisionId: sql<string>`${revisionId}`.as("revisionId"),
           field: sql<string>`${field}`.as("field"),
           fromValue: sql<string | null>`${column}`.as("fromValue"),
           toValue: sql<string | null>`${next}`.as("toValue"),
@@ -251,13 +266,18 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
     );
   };
 
-  const lifecycleEvent = (todoId: number, field: "created" | "deleted" | "restored") =>
+  const lifecycleEvent = (
+    todoId: number,
+    revisionId: string,
+    field: "created" | "deleted" | "restored",
+  ) =>
     db.insert(todoEventsTable).select(
       db
         .select({
           id: sql<number>`null`.as("id"),
           todoId: todosTable.id,
           actorId: sql<string>`${ownerId}`.as("actorId"),
+          revisionId: sql<string>`${revisionId}`.as("revisionId"),
           field: sql<string>`${field}`.as("field"),
           fromValue: sql<string | null>`null`.as("fromValue"),
           toValue: sql<string | null>`null`.as("toValue"),
@@ -282,21 +302,42 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .orderBy(asc(todoCommentsTable.id)),
 
     /**
-     * Insert-from-select, so the todo's ownership is part of the statement.
-     * A plain insert would satisfy the foreign key for *any* existing todo —
-     * a foreign key checks existence, not ownership, which is how a public
-     * share link for someone else's project once became possible (ADR 0022).
+     * Insert-from-select, so the todo's ownership is part of the statement, and
+     * a builder rather than raw SQL so it can go in a batch.
+     *
+     * A plain insert would satisfy the foreign key for *any* existing todo — a
+     * foreign key checks existence, not ownership, which is how a public share
+     * link for someone else's project once became possible (ADR 0022). And raw
+     * `db.run()` is not batchable: it type-checks and throws when batched,
+     * which is how the first version of the history failed.
      */
-    create: (todoId: number, body: string) =>
-      db.all<{ id: number }>(sql`
-        insert into ${todoCommentsTable} ("todoId", "authorId", "body", "createdAt", "updatedAt")
-        select ${todosTable.id}, ${ownerId}, ${body}, ${now()}, ${now()}
-        from ${todosTable}
-        where ${todosTable.id} = ${todoId}
-          and ${todosTable.deletedAt} is null
-          and ${todosTable.projectId} in ${ownedProjectIds()}
-        returning id
-      `),
+    create: (todoId: number, body: string, revisionId: string | null = null) =>
+      db
+        .insert(todoCommentsTable)
+        .select(
+          db
+            .select({
+              // Named in table order, `null` into the primary key so SQLite
+              // assigns the next one. drizzle requires every column.
+              id: sql<number>`null`.as("id"),
+              todoId: todosTable.id,
+              authorId: sql<string>`${ownerId}`.as("authorId"),
+              body: sql<string>`${body}`.as("body"),
+              revisionId: sql<string | null>`${revisionId}`.as("revisionId"),
+              createdAt: sql<string>`${now()}`.as("createdAt"),
+              updatedAt: sql<string>`${now()}`.as("updatedAt"),
+              deletedAt: sql<string | null>`null`.as("deletedAt"),
+            })
+            .from(todosTable)
+            .where(
+              and(
+                eq(todosTable.id, todoId),
+                isNull(todosTable.deletedAt),
+                inArray(todosTable.projectId, ownedProjectIds()),
+              ),
+            ),
+        )
+        .returning({ id: todoCommentsTable.id }),
 
     find: (id: number) =>
       db
@@ -522,7 +563,10 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
 
     /** The opening entry of a task's history. */
     createdEvent: (id: number) =>
-      [lifecycleEvent(id, "created")] as unknown as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]],
+      [lifecycleEvent(id, newRevisionId(), "created")] as unknown as [
+        BatchItem<"sqlite">,
+        ...BatchItem<"sqlite">[],
+      ],
 
     /**
      * Records a lifecycle event alongside a soft delete or restore.
@@ -532,13 +576,13 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
      * means a failed delete leaves no history claiming it happened.
      */
     removeWithHistory: (id: number) =>
-      [todos.remove(id), lifecycleEvent(id, "deleted")] as unknown as [
+      [todos.remove(id), lifecycleEvent(id, newRevisionId(), "deleted")] as unknown as [
         BatchItem<"sqlite">,
         ...BatchItem<"sqlite">[],
       ],
 
     restoreWithHistory: (id: number) =>
-      [todos.restore(id), lifecycleEvent(id, "restored")] as unknown as [
+      [todos.restore(id), lifecycleEvent(id, newRevisionId(), "restored")] as unknown as [
         BatchItem<"sqlite">,
         ...BatchItem<"sqlite">[],
       ],
@@ -563,16 +607,25 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
      * the case the readiness map recorded as D5 before there was any history to
      * write.
      */
-    updateWithHistory: (id: number, values: TodoFields) => {
+    updateWithHistory: (id: number, values: TodoFields, comment?: string) => {
+      // One id for the whole save, so the rows it writes read as one action
+      // rather than as several that happened to coincide.
+      const revisionId = newRevisionId();
+
       const events = TRACKED_FIELDS.filter((field) => values[field] !== undefined).map((field) =>
-        changeEvent(id, field, values[field] ?? null),
+        changeEvent(id, revisionId, field, values[field] ?? null),
       );
+
+      // A comment written with a change carries the same revision, which is
+      // what lets the screen show "moved to blocked" and the reason for it as
+      // one entry instead of two things that happened at the same time.
+      const note = comment === undefined ? [] : [comments.create(id, comment, revisionId)];
 
       // Always at least the update, so the tuple is never empty — which is what
       // `batch()` requires and what this asserts. Through `unknown` because a
       // raw statement and an update builder share no structural shape, not
       // because either is the wrong thing to put in a batch.
-      return [...events, todos.update(id, values)] as unknown as [
+      return [...events, ...note, todos.update(id, values)] as unknown as [
         BatchItem<"sqlite">,
         ...BatchItem<"sqlite">[],
       ];

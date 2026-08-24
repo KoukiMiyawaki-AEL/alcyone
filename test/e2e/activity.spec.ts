@@ -53,6 +53,32 @@ test.describe("comments and history", () => {
     await expect(page.getByText(/未着手 → 進行中/)).toBeVisible();
   });
 
+  test("one save is one entry, and the note explaining it sits inside", async ({ page }) => {
+    await signUp(page);
+    await createProject(page, "Activity");
+    await page.getByRole("link", { name: "Activity" }).click();
+    await createTodo(page, "まとめて更新するタスク");
+
+    await openDetails(page, "まとめて更新するタスク");
+    await page.getByRole("combobox", { name: "ステータス" }).click();
+    await page.getByRole("option", { name: "ブロック中" }).click();
+    await page.getByLabel("期限日").fill("2026-12-01");
+    await page.getByLabel("この変更についてのコメント（任意）").fill("APIレビュー待ち");
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.getByRole("dialog")).toBeHidden();
+
+    await openDetails(page, "まとめて更新するタスク");
+
+    // Two fields and the reason, as one thing that happened — not three items
+    // that share a timestamp.
+    const feed = page.getByRole("list", { name: "アクティビティ" });
+    const entries = feed.getByRole("listitem");
+    const entry = entries.filter({ hasText: "APIレビュー待ち" });
+    await expect(entry).toHaveCount(1);
+    await expect(entry).toContainText("未着手 → ブロック中");
+    await expect(entry).toContainText("2026-12-01");
+  });
+
   test("saving without changing anything records nothing", async ({ page }) => {
     // The form submits every field on every save, so a history that recorded
     // what was asked for would bury real changes under non-changes.

@@ -114,6 +114,15 @@ export const todoCommentsTable = sqliteTable(
       .notNull()
       .references(() => user.id),
     body: text().notNull(),
+    /**
+     * The change this comment was written with, if it was written with one.
+     *
+     * Nullable, and the null carries meaning: a comment on its own is a remark
+     * about the task, while one carrying a revision is the reason for that
+     * change. The screen reads very differently for the two, so collapsing
+     * them would lose the distinction the writer made.
+     */
+    revisionId: text(),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
     /** Soft delete, like every other user-facing row (ADR 0015). */
@@ -143,6 +152,15 @@ export const todoEventsTable = sqliteTable(
     actorId: text()
       .notNull()
       .references(() => user.id),
+    /**
+     * The single save these rows were written by.
+     *
+     * One update usually changes several fields at once, and showing those as
+     * separate entries makes one action look like three. Not null: a history
+     * row that belongs to no revision is a state with no meaning, and carrying
+     * it would mean handling it forever.
+     */
+    revisionId: text().notNull(),
     /** The column that changed, or `created` / `deleted` / `restored`. */
     field: text().notNull().$type<TodoEventField>(),
     /** Null for `created`, and for a field that had no value before. */

@@ -112,6 +112,15 @@ const todoFieldsSchema = z
             : value.trim(),
       ),
     priority: z.number().int().min(0).max(3).optional(),
+    /**
+     * A note written with the change rather than about the task.
+     *
+     * Optional, and its presence is what links it to this save — "moved to
+     * blocked, waiting on the API review" is one thing that happened, and
+     * making the user post it separately turns it into two that merely
+     * coincide.
+     */
+    comment: z.string().trim().min(1).max(4000).optional(),
   })
   // Only catches the case where both arrive together — a request that moves
   // only one of them is checked against the other by the database. Recorded
@@ -489,12 +498,13 @@ const app = new Hono<{
     validate("json", todoFieldsSchema),
     async (c) => {
       const { id } = c.req.valid("param");
+      const { comment, ...values } = c.req.valid("json");
       const repo = c.get("repo");
 
-      // The history rows and the change go in one batch, history first: each
-      // one reads the value it replaces. The updated row is the last result —
-      // named here rather than counted at every call site.
-      const results = await repo.batch(repo.todos.updateWithHistory(id, c.req.valid("json")));
+      // The history rows, the note and the change go in one batch, history
+      // first: each row reads the value it replaces. The updated row is the
+      // last result — named here rather than counted at every call site.
+      const results = await repo.batch(repo.todos.updateWithHistory(id, values, comment));
       const [todo] = results.at(-1) as Todo[];
 
       if (!todo) {

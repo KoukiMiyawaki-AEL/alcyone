@@ -43,9 +43,31 @@ export function TodoActivity({
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<{ id: number; body: string } | null>(null);
 
+  // One entry per revision, plus the standalone comments. A save that changed
+  // three fields is one thing that happened, and three lines claiming
+  // otherwise is the problem this grouping exists to fix.
+  const revisions = new Map<string, { at: string; events: TodoEvent[]; note?: TodoComment }>();
+  for (const event of events) {
+    const group = revisions.get(event.revisionId);
+    if (group) group.events.push(event);
+    else revisions.set(event.revisionId, { at: event.createdAt, events: [event] });
+  }
+  for (const comment of comments) {
+    // A comment written *with* a change belongs to that entry. One written on
+    // its own is a remark about the task, and stands alone.
+    const group = comment.revisionId ? revisions.get(comment.revisionId) : undefined;
+    if (group) group.note = comment;
+  }
+
   const entries = [
-    ...comments.map((comment) => ({ kind: "comment" as const, at: comment.createdAt, comment })),
-    ...events.map((event) => ({ kind: "event" as const, at: event.createdAt, event })),
+    ...comments
+      .filter((comment) => !comment.revisionId || !revisions.get(comment.revisionId)?.note)
+      .map((comment) => ({ kind: "comment" as const, at: comment.createdAt, comment })),
+    ...[...revisions.values()].map((group) => ({
+      kind: "revision" as const,
+      at: group.at,
+      group,
+    })),
     // Ties broken by kind so an ordering never flips between renders; both
     // carry second-resolution timestamps, and a change plus the comment about
     // it land in the same second often enough to matter.
@@ -86,7 +108,7 @@ export function TodoActivity({
       ) : entries.length === 0 ? (
         <p className="text-sm text-muted-foreground">まだ何もありません。</p>
       ) : (
-        <ol className="flex flex-col gap-3">
+        <ol aria-label="アクティビティ" className="flex flex-col gap-3">
           {entries.map((entry) =>
             entry.kind === "comment" ? (
               <li key={`c${entry.comment.id}`} className="rounded-md border border-border p-3">
@@ -157,14 +179,31 @@ export function TodoActivity({
               </li>
             ) : (
               <li
-                key={`e${entry.event.id}`}
-                className="flex items-baseline gap-2 px-1 text-xs text-muted-foreground"
+                key={`r${entry.group.events[0]!.revisionId}`}
+                className="flex flex-col gap-1 rounded-md bg-muted/40 px-3 py-2"
               >
-                <HistoryIcon className="size-3 shrink-0 self-center" />
-                <span>{describe(entry.event)}</span>
-                <time dateTime={entry.event.createdAt} className="ml-auto shrink-0 tabular-nums">
-                  {entry.event.createdAt.slice(0, 16).replace("T", " ")}
-                </time>
+                <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                  <HistoryIcon className="size-3 shrink-0 self-center" />
+                  <ul className="flex flex-col gap-0.5">
+                    {entry.group.events.map((event) => (
+                      <li key={event.id}>{describe(event)}</li>
+                    ))}
+                  </ul>
+                  <time dateTime={entry.at} className="ml-auto shrink-0 tabular-nums">
+                    {entry.at.slice(0, 16).replace("T", " ")}
+                  </time>
+                </div>
+
+                {/*
+                  The note written with the change, inside the same entry. Read
+                  as a separate item it would look like a coincidence of timing
+                  rather than the reason for what happened above it.
+                */}
+                {entry.group.note ? (
+                  <p className="border-l-2 border-border pl-2 text-sm whitespace-pre-wrap">
+                    {entry.group.note.body}
+                  </p>
+                ) : null}
               </li>
             ),
           )}

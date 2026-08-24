@@ -5,8 +5,20 @@ import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
 import { jsonHeaders, resetAll, signUp } from "./auth-helper";
 
-type Comment = { id: number; body: string; authorId: string; updatedAt: string };
-type Event = { field: string; fromValue: string | null; toValue: string | null; actorId: string };
+type Comment = {
+  id: number;
+  body: string;
+  authorId: string;
+  updatedAt: string;
+  revisionId: string | null;
+};
+type Event = {
+  field: string;
+  fromValue: string | null;
+  toValue: string | null;
+  actorId: string;
+  revisionId: string;
+};
 
 async function createProject(headers: Headers, name = "P"): Promise<number> {
   const res = await app.request(
@@ -276,6 +288,73 @@ describe("change history", () => {
     // that could be written for a todo you cannot see would be a way to learn
     // that it exists.
     expect(events.map((e) => e.field)).toEqual(["created"]);
+  });
+
+  it("gives every field changed by one save the same revision", async () => {
+    // The form submits everything at once, so a real save often touches
+    // several fields. Without a shared id there is nothing in the data saying
+    // they were one action, and the screen has to guess from timestamps.
+    await patch(alice, todo.id, { status: "in_progress", priority: 2, dueAt: "2026-12-01" });
+
+    const { events } = await activity(alice, todo.id);
+    const changed = events.filter((e) => e.field !== "created");
+
+    expect(changed).toHaveLength(3);
+    expect(new Set(changed.map((e) => e.revisionId)).size).toBe(1);
+  });
+
+  it("gives separate saves separate revisions", async () => {
+    await patch(alice, todo.id, { status: "in_progress" });
+    await patch(alice, todo.id, { status: "done" });
+
+    const { events } = await activity(alice, todo.id);
+    const changed = events.filter((e) => e.field === "status");
+
+    expect(new Set(changed.map((e) => e.revisionId)).size).toBe(2);
+  });
+
+  it("attaches a comment written with the change to that change", async () => {
+    await patch(alice, todo.id, { status: "blocked", comment: "APIレビュー待ち" });
+
+    const { events, comments } = await activity(alice, todo.id);
+    const status = events.find((e) => e.field === "status")!;
+
+    expect(comments).toHaveLength(1);
+    // Same revision, which is what lets the screen show the change and its
+    // reason as one entry instead of two things that coincided.
+    expect(comments[0]!.revisionId).toBe(status.revisionId);
+    expect(comments[0]!.body).toBe("APIレビュー待ち");
+  });
+
+  it("writes the comment and the change together or not at all", async () => {
+    // One batch. A comment explaining a change that did not happen would be
+    // worse than no comment.
+    const res = await patch(alice, todo.id, { status: "not-a-status", comment: "理由" });
+
+    expect(res.status).toBe(400);
+    expect((await activity(alice, todo.id)).comments).toEqual([]);
+  });
+
+  it("leaves a standalone comment with no revision", async () => {
+    await app.request(
+      `/api/todos/${todo.id}/comments`,
+      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({ body: "ただの補足" }) },
+      env,
+    );
+
+    const { comments } = await activity(alice, todo.id);
+    expect(comments[0]!.revisionId).toBeNull();
+  });
+
+  it("keeps a note whose save turned out to change nothing", async () => {
+    // Its revision has no events, so it has nothing to attach to and renders
+    // as an ordinary remark. Discarding what someone wrote because the form
+    // happened to submit no changes would be worse than showing it loose.
+    await patch(alice, todo.id, { status: "todo", comment: "何も変えていない" });
+
+    const { events, comments } = await activity(alice, todo.id);
+    expect(events.map((e) => e.field)).toEqual(["created"]);
+    expect(comments.map((c) => c.body)).toEqual(["何も変えていない"]);
   });
 
   it("cannot be altered through the API at all", async () => {

@@ -13,6 +13,8 @@ export type { TodoStatus };
 
 /** What a caller may change. `null` clears; omitted leaves alone. */
 export type TodoFields = {
+  /** A note written with this change. Not a field on the task. */
+  comment?: string;
   title?: string;
   status?: TodoStatus;
   startAt?: string | null;

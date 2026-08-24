@@ -28,8 +28,9 @@
 - 決済情報（課金なし）
 - 位置情報、電話番号、生年月日
 - サードパーティのトラッキング（アナリティクスを入れていない）
-- **アクセスログ中の個人データ** — `app.onError` が出すのは stack / method / path のみで、
-  リクエストボディもヘッダも出さない（[マップのD11](./design/service-readiness-map.md)）
+- **アクセスログ中の個人データ** — `app.onError` が出すのは requestId / userId / stack / method /
+  path のみで、**リクエストボディもヘッダも出さない**。テストで固定してある
+  （`test/worker/request-id.test.ts`）
 
 ## 削除
 
@@ -44,5 +45,5 @@
 
 - 論理削除された `projects` / `todos` は**30日で自動削除**される（`src/worker/scheduled.ts`）。それ以外の保持期間は未定義
 - **エクスポート（データポータビリティ）が無い**
-- Workers Logs の保持は Paid 7日 / Free 3日。**PIIを出さない方針で運用しているが、機械的な検査は無い**
+- Workers Logs の保持は Paid 7日 / Free 3日
 - 削除請求・開示請求を受け付ける窓口が無い（利用規約もプライバシーポリシーも未作成）

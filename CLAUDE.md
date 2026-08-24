@@ -263,8 +263,10 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
   ユーザーを持たないクエリは`src/worker/db/maintenance.ts`に置く（名前で区別が付くようにしてある）。
 - エラーレスポンスは`{ error: string }`で揃える（404は`{ error: "Not found" }`、
   未捕捉例外は`onError`が`{ error: "Internal Server Error" }`を返す）。例外の内容はクライアントに返さない。
-- ログは`console.error(JSON.stringify({ ... }))`のように構造化JSONで出す
-  （Workersのobservabilityでフィールド検索できるようにするため）。
+- ログは`console.error(JSON.stringify({ ... }))`のように構造化JSONで出し、**必ず`requestId`を含める**
+  （Workersのobservabilityでフィールド検索し、1リクエストのログを束ねるため）。
+- **リクエストボディとヘッダをログに出さない。** 一度Workers Logsに入ったPIIは保持期間内は
+  消せない。`docs/pii.md`と`test/worker/request-id.test.ts`を参照。
 - ルートを追加・変更したら[`docs/api/README.md`](./docs/api/)の表も更新する。
 - **`/api/*` はすべて認証が必要**（例外は `/api/health` と `/api/auth/*`）。未認証は401。
   セッション検証とリポジトリ生成は`src/worker/index.ts`の1つのミドルウェアがやる。

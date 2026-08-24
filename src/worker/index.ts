@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { requestId } from "hono/request-id";
+import type { RequestIdVariables } from "hono/request-id";
 import { z } from "zod";
 
 import { createAuth } from "./auth";
@@ -49,8 +51,12 @@ const patchTodoSchema = z.object({
 
 const app = new Hono<{
   Bindings: CloudflareBindings;
-  Variables: { repo: Repo; userId: string };
+  Variables: RequestIdVariables & { repo: Repo; userId: string };
 }>()
+  // First in the chain so that everything downstream — including failures in
+  // the auth middleware — can be tied back to one request. Also echoed to the
+  // client as X-Request-Id, which is what makes a bug report actionable.
+  .use("*", requestId())
   // Better Auth owns everything under /api/auth. Mounted before the guard
   // below, since signing in obviously cannot require being signed in.
   .on(["GET", "POST"], "/api/auth/*", async (c) => {
@@ -305,12 +311,19 @@ const app = new Hono<{
     return c.json(todo);
   })
   .notFound((c) => c.json({ error: "Not found" }, 404))
+  // Deliberately never logs the request body or headers: a body can hold a
+  // password or a project name, and once personal data is in Workers Logs it
+  // cannot be taken out again within the retention window. See docs/pii.md.
   .onError((err, c) => {
     // Structured JSON so the Workers dashboard can filter on these fields.
     // The message is deliberately not echoed to the client.
     console.error(
       JSON.stringify({
         level: "error",
+        requestId: c.get("requestId"),
+        // Present only once the auth middleware has run — an unauthenticated
+        // failure has no user, and inventing one would be misleading.
+        userId: c.get("userId"),
         message: err.message,
         stack: err.stack,
         method: c.req.method,

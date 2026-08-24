@@ -1,0 +1,71 @@
+import { expect, test } from "./fixtures";
+import { createProject, createTodo, signUp } from "./helpers";
+
+async function openDetails(page: import("@playwright/test").Page, title: string) {
+  await page.getByRole("button", { name: `「${title}」の操作` }).click();
+  await page.getByRole("menuitem", { name: "詳細を編集" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+}
+
+test.describe("comments and history", () => {
+  test("a comment is written, edited and removed", async ({ page }) => {
+    await signUp(page);
+    await createProject(page, "Activity");
+    await page.getByRole("link", { name: "Activity" }).click();
+    await createTodo(page, "議論するタスク");
+
+    await openDetails(page, "議論するタスク");
+
+    await page.getByLabel("コメント", { exact: true }).fill("先に前提を確認する");
+    await page.getByRole("button", { name: "コメントする" }).click();
+    await expect(page.getByText("先に前提を確認する")).toBeVisible();
+
+    await page.getByRole("button", { name: "コメントを編集" }).click();
+    await page.getByLabel("コメントを編集").fill("前提はもう確認済み");
+    await page.getByRole("button", { name: "更新" }).click();
+    await expect(page.getByText("前提はもう確認済み")).toBeVisible();
+    await expect(page.getByText(/編集済み/)).toBeVisible();
+
+    await page.getByRole("button", { name: "コメントを削除" }).click();
+    await expect(page.getByText("前提はもう確認済み")).toBeHidden();
+  });
+
+  test("a status change is recorded with both values and survives a reload", async ({ page }) => {
+    await signUp(page);
+    await createProject(page, "Activity");
+    await page.getByRole("link", { name: "Activity" }).click();
+    await createTodo(page, "動かすタスク");
+
+    await openDetails(page, "動かすタスク");
+    await page.getByRole("combobox", { name: "ステータス" }).click();
+    await page.getByRole("option", { name: "進行中" }).click();
+    await page.getByRole("button", { name: "保存" }).click();
+
+    await openDetails(page, "動かすタスク");
+    // Both ends: "it became blocked" without saying from what is half the
+    // story when the question is why a schedule slipped.
+    await expect(page.getByText(/ステータス.*未着手 → 進行中/)).toBeVisible();
+    await expect(page.getByText("作成", { exact: true })).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await openDetails(page, "動かすタスク");
+    await expect(page.getByText(/未着手 → 進行中/)).toBeVisible();
+  });
+
+  test("saving without changing anything records nothing", async ({ page }) => {
+    // The form submits every field on every save, so a history that recorded
+    // what was asked for would bury real changes under non-changes.
+    await signUp(page);
+    await createProject(page, "Activity");
+    await page.getByRole("link", { name: "Activity" }).click();
+    await createTodo(page, "触らないタスク");
+
+    await openDetails(page, "触らないタスク");
+    await page.getByRole("button", { name: "保存" }).click();
+
+    await openDetails(page, "触らないタスク");
+    await expect(page.getByText("作成", { exact: true })).toBeVisible();
+    await expect(page.getByText("→")).toBeHidden();
+  });
+});

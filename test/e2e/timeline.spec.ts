@@ -15,6 +15,7 @@ test.describe("timeline view", () => {
     await page.getByLabel("開始日").fill("2026-11-02");
     await page.getByLabel("期限日").fill("2026-11-06");
     await page.getByRole("dialog").getByRole("button", { name: "追加" }).click();
+    await expect(page.getByRole("dialog")).toBeHidden();
     await expect(page.getByText("日程のあるタスク")).toBeVisible();
 
     await createTodo(page, "日程のないタスク");
@@ -52,6 +53,9 @@ test.describe("timeline view", () => {
     await page.getByRole("button", { name: "詳細を設定して追加" }).click();
     await page.getByLabel("期限日").fill("2026-11-20");
     await page.getByRole("dialog").getByRole("button", { name: "追加" }).click();
+    // Wait for it to actually close: clicking on while it is still dismissing
+    // lets the close land on the dialog opened next, which shuts it again.
+    await expect(page.getByRole("dialog")).toBeHidden();
 
     await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
     await page.getByRole("button", { name: "編集する" }).click();

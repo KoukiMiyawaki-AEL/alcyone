@@ -270,8 +270,12 @@ describe("the search index tracks its table", () => {
 
   it("drops a hard-deleted todo out of the index", async () => {
     // Account deletion hard-deletes, so the delete trigger is not theoretical.
-    await addTodo(alice, projectId, "hard deleted title");
-    await env.DB.prepare("DELETE FROM todos WHERE title = ?").bind("hard deleted title").run();
+    const todo = await addTodo(alice, projectId, "hard deleted title");
+    // Children first: creating a todo now writes a history row, and that row
+    // references it with NO ACTION. Deleting the parent while a child points
+    // at it is the same foreign key that took down the retention purge.
+    await env.DB.prepare("DELETE FROM todo_events WHERE todoId = ?").bind(todo.id).run();
+    await env.DB.prepare("DELETE FROM todos WHERE id = ?").bind(todo.id).run();
 
     const row = await env.DB.prepare("SELECT count(*) AS n FROM todos_fts WHERE todos_fts MATCH ?")
       .bind('"hard deleted"')

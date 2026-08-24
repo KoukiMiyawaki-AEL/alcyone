@@ -3,6 +3,7 @@ import { requestId } from "hono/request-id";
 import type { RequestIdVariables } from "hono/request-id";
 import { z } from "zod";
 
+import type { Todo } from "../features/todos/types";
 import { recordServerError, recordShareView } from "./analytics";
 import { createAuth } from "./auth";
 import { exportKey, type ExportManifest, type ExportParams } from "./data-export";
@@ -48,6 +49,11 @@ const pageQuerySchema = z.object({
 // Bounded and character-restricted: the token becomes part of a KV key, and an
 // unbounded one is a way to write keys nobody intended.
 const shareTokenParamSchema = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{16,64}$/) });
+
+// Bounded because it is stored and rendered. 4000 is roughly a screen of text:
+// long enough for a real explanation, short enough that a comment cannot be
+// used as a place to put a file.
+const commentSchema = z.object({ body: z.string().trim().min(1).max(4000) });
 
 const exportParamSchema = z.object({ instanceId: z.string().min(1).max(200) });
 
@@ -461,6 +467,14 @@ const app = new Hono<{
       }
 
       const [todo] = await repo.todos.create({ ...fields, projectId });
+      if (!todo) return c.json({ error: "Not found" }, 404);
+
+      // Recorded after the insert because the id does not exist until then.
+      // Not batched with it for the same reason — and a history row without a
+      // task is harmless, while a task with no "created" row only makes its
+      // history start one entry late.
+      await repo.batch(repo.todos.createdEvent(todo.id));
+
       return c.json(todo, 201);
     },
   )
@@ -475,7 +489,13 @@ const app = new Hono<{
     validate("json", todoFieldsSchema),
     async (c) => {
       const { id } = c.req.valid("param");
-      const [todo] = await c.get("repo").todos.update(id, c.req.valid("json"));
+      const repo = c.get("repo");
+
+      // The history rows and the change go in one batch, history first: each
+      // one reads the value it replaces. The updated row is the last result —
+      // named here rather than counted at every call site.
+      const results = await repo.batch(repo.todos.updateWithHistory(id, c.req.valid("json")));
+      const [todo] = results.at(-1) as Todo[];
 
       if (!todo) {
         return c.json({ error: "Not found" }, 404);
@@ -486,11 +506,73 @@ const app = new Hono<{
   )
   .delete("/api/todos/:id", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
-    const [todo] = await c.get("repo").todos.remove(id);
+    const repo = c.get("repo");
 
-    if (!todo) {
+    // The soft delete first, the history second: unlike a field change this
+    // reads nothing the change destroys, so recording it after means a failed
+    // delete leaves behind no history claiming it happened.
+    const [removed] = await repo.batch(repo.todos.removeWithHistory(id));
+
+    if ((removed as Todo[]).length === 0) {
       return c.json({ error: "Not found" }, 404);
     }
+
+    return c.body(null, 204);
+  })
+  // Comments and history are read together, because the screen shows them
+  // interleaved. Two queries rather than one union: they are different kinds of
+  // thing with different rules — one can be edited, the other never can.
+  .get("/api/todos/:id/activity", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const repo = c.get("repo");
+
+    const [todo] = await repo.todos.find(id);
+    if (!todo) return c.json({ error: "Not found" }, 404);
+
+    const [comments, events] = await Promise.all([
+      repo.comments.listByTodo(id),
+      repo.events.listByTodo(id),
+    ]);
+
+    return c.json({ comments, events });
+  })
+  .post(
+    "/api/todos/:id/comments",
+    validate("param", idParamSchema),
+    validate("json", commentSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { body } = c.req.valid("json");
+      const repo = c.get("repo");
+
+      // Ownership lives in the INSERT itself, so an id that is not this user's
+      // inserts nothing and looks exactly like one that does not exist.
+      const [created] = await repo.comments.create(id, body);
+      if (!created) return c.json({ error: "Not found" }, 404);
+
+      const [comment] = await repo.comments.find(created.id);
+      return c.json(comment, 201);
+    },
+  )
+  .patch(
+    "/api/comments/:id",
+    validate("param", idParamSchema),
+    validate("json", commentSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { body } = c.req.valid("json");
+      const [comment] = await c.get("repo").comments.update(id, body);
+
+      if (!comment) return c.json({ error: "Not found" }, 404);
+
+      return c.json(comment);
+    },
+  )
+  .delete("/api/comments/:id", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const [comment] = await c.get("repo").comments.remove(id);
+
+    if (!comment) return c.json({ error: "Not found" }, 404);
 
     return c.body(null, 204);
   })
@@ -578,7 +660,10 @@ const app = new Hono<{
   })
   .post("/api/todos/:id/restore", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
-    const [todo] = await c.get("repo").todos.restore(id);
+    const repo = c.get("repo");
+
+    const [restored] = await repo.batch(repo.todos.restoreWithHistory(id));
+    const [todo] = restored as Todo[];
 
     if (!todo) {
       return c.json({ error: "Not found" }, 404);

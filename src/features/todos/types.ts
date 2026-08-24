@@ -1,6 +1,13 @@
-import type { TodoStatus, todosTable } from "@/worker/db/schema";
+import type {
+  TodoStatus,
+  todoCommentsTable,
+  todoEventsTable,
+  todosTable,
+} from "@/worker/db/schema";
 
 export type Todo = typeof todosTable.$inferSelect;
+export type TodoComment = typeof todoCommentsTable.$inferSelect;
+export type TodoEvent = typeof todoEventsTable.$inferSelect;
 
 export type { TodoStatus };
 
@@ -35,3 +42,15 @@ export const STATUS_LABELS: Record<TodoStatus, string> = {
 };
 
 export const PRIORITY_LABELS = ["None", "Low", "Medium", "High"] as const;
+
+/** How a history row reads. The field names come from the database. */
+export const EVENT_LABELS: Record<TodoEvent["field"], string> = {
+  created: "作成",
+  status: "ステータス",
+  startAt: "開始日",
+  dueAt: "期限日",
+  title: "タイトル",
+  priority: "優先度",
+  deleted: "削除",
+  restored: "復元",
+};

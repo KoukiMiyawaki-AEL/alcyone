@@ -1,7 +1,14 @@
 import { and, inArray, isNotNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { attachmentsTable, projectsTable, sharesTable, todosTable } from "./schema";
+import {
+  attachmentsTable,
+  projectsTable,
+  sharesTable,
+  todoCommentsTable,
+  todoEventsTable,
+  todosTable,
+} from "./schema";
 
 /**
  * Queries that run without a user.
@@ -45,22 +52,25 @@ export function createMaintenance(binding: D1Database) {
           ),
         ),
 
-    purgeDeletedBefore: (before: string) =>
-      db.batch([
+    purgeDeletedBefore: async (before: string) => {
+      /** The todos this run is about to remove, as a subquery. */
+      const expiredTodoIds = db
+        .select({ id: todosTable.id })
+        .from(todosTable)
+        .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before)));
+
+      const results = await db.batch([
         // Attachments first. `attachments.todoId` references `todos.id` with NO
         // ACTION (ADR 0012), so deleting a todo that still has one fails the
         // foreign key — and because this is a single batch, one such row made
         // the entire nightly purge fail for every user. It did exactly that
         // until a test was written for it.
-        db.delete(attachmentsTable).where(
-          inArray(
-            attachmentsTable.todoId,
-            db
-              .select({ id: todosTable.id })
-              .from(todosTable)
-              .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before))),
-          ),
-        ),
+        db.delete(attachmentsTable).where(inArray(attachmentsTable.todoId, expiredTodoIds)),
+        // Children of `todos` first, for the same reason attachments are: a
+        // NO ACTION foreign key fails the whole batch, and the batch is the
+        // whole nightly job.
+        db.delete(todoCommentsTable).where(inArray(todoCommentsTable.todoId, expiredTodoIds)),
+        db.delete(todoEventsTable).where(inArray(todoEventsTable.todoId, expiredTodoIds)),
         db
           .delete(todosTable)
           .where(and(isNotNull(todosTable.deletedAt), lt(todosTable.deletedAt, before)))
@@ -82,6 +92,16 @@ export function createMaintenance(binding: D1Database) {
           .delete(projectsTable)
           .where(and(isNotNull(projectsTable.deletedAt), lt(projectsTable.deletedAt, before)))
           .returning({ id: projectsTable.id }),
-      ]),
+      ]);
+
+      // Named here so callers never count commas. Adding a statement to the
+      // batch above is then a one-line change instead of a silent off-by-one
+      // in every caller — which is exactly what happened when comments and
+      // history joined the batch.
+      return {
+        todos: results[3] as { id: number }[],
+        projects: results[5] as { id: number }[],
+      };
+    },
   };
 }

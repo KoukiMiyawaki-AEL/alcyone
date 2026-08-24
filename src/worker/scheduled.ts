@@ -39,7 +39,7 @@ export async function purgeExpiredDeletions(env: CloudflareBindings, now = new D
     await enqueueObjectCleanup(env.OBJECT_CLEANUP, staleExports);
   }
 
-  const [, todos, , projects] = await maintenance.purgeDeletedBefore(cutoff);
+  const { todos, projects } = await maintenance.purgeDeletedBefore(cutoff);
   // Counting the returned rows, not `meta.changes` — see maintenance.ts for
   // why that number cannot be believed once a trigger is in play.
   const counts = {

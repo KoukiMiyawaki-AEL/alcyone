@@ -105,6 +105,23 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 （SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。
 経緯は[ADR 0011](../adr/0011-expand-contract-migrations.md)。
 
+## コメントと履歴
+
+| Method | Path | 用途 | 成功 | 失敗 |
+|---|---|---|---|---|
+| GET | `/api/todos/:id/activity` | コメントと変更履歴 | `{ comments, events }` | `400` `404` |
+| POST | `/api/todos/:id/comments` | コメントを投稿 | `201` `Comment` | `400` `404` |
+| PATCH | `/api/comments/:id` | 自分のコメントを編集 | `200` `Comment` | `400` `404` |
+| DELETE | `/api/comments/:id` | 自分のコメントを削除（論理削除） | `204` | `400` `404` |
+
+`events` は**追記専用で、書き込むエンドポイントは存在しない**。1行が1フィールドの変更で、
+`field` / `fromValue` / `toValue` を持つ。`created` / `deleted` / `restored` は値を持たない。
+
+**変わっていないフィールドは記録されない。** 詳細フォームは毎回全項目を送るので、
+「送られたもの」を記録すると本当の変更が埋もれる。
+
+`description` の編集は記録しない。理由は[ADR 0027](../adr/0027-comments-and-append-only-history.md)。
+
 ## 共有リンク
 
 | Method | Path | 用途 | 認証 | 成功 | 失敗 |

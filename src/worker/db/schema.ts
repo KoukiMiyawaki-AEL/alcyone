@@ -14,6 +14,25 @@ import { user } from "./auth-schema";
  * in the UI. `blocked` is deliberately not a terminal state — it is a reason
  * work stopped, not a way it ended.
  */
+/**
+ * What a history row can be about.
+ *
+ * The tracked fields are the ones a person schedules and reports against.
+ * `description` is deliberately not here: a note is prose, and a history of
+ * prose edits is noise that buries the changes worth seeing.
+ */
+export const TODO_EVENT_FIELDS = [
+  "created",
+  "status",
+  "startAt",
+  "dueAt",
+  "title",
+  "priority",
+  "deleted",
+  "restored",
+] as const;
+export type TodoEventField = (typeof TODO_EVENT_FIELDS)[number];
+
 export const TODO_STATUSES = ["todo", "in_progress", "blocked", "done"] as const;
 export type TodoStatus = (typeof TODO_STATUSES)[number];
 
@@ -68,6 +87,70 @@ export const sharesTable = sqliteTable(
     // One live link per project, so revoking is unambiguous.
     uniqueIndex("shares_projectId_uidx").on(table.projectId),
   ],
+);
+
+/**
+ * What a person wrote about a task.
+ *
+ * Separate from `todoEventsTable` on purpose. A comment is editable and
+ * retractable — people make typos and say wrong things — while an audit trail
+ * that can be edited is not an audit trail. Mixing them would cost the second
+ * one its only real property.
+ *
+ * `authorId` rather than deriving it from the project's owner: today they are
+ * always the same person, because a project has exactly one
+ * (ADR 0014). Recording who wrote it anyway is what makes these comments
+ * survive the day that stops being true — attributing them retroactively would
+ * be guessing.
+ */
+export const todoCommentsTable = sqliteTable(
+  "todo_comments",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    todoId: int()
+      .notNull()
+      .references(() => todosTable.id),
+    authorId: text()
+      .notNull()
+      .references(() => user.id),
+    body: text().notNull(),
+    createdAt: text().notNull(),
+    updatedAt: text().notNull(),
+    /** Soft delete, like every other user-facing row (ADR 0015). */
+    deletedAt: text(),
+  },
+  (t) => [index("todo_comments_todo_id_idx").on(t.todoId, t.deletedAt)],
+);
+
+/**
+ * What happened to a task.
+ *
+ * Append-only: nothing updates or deletes a row here except the hard delete
+ * that removes an account. A history that can be rewritten answers no question
+ * worth asking.
+ *
+ * One row per field that actually changed, with the value it had and the value
+ * it got. Storing a diff of the whole row would make "when did this become
+ * blocked" a scan-and-parse instead of a query.
+ */
+export const todoEventsTable = sqliteTable(
+  "todo_events",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    todoId: int()
+      .notNull()
+      .references(() => todosTable.id),
+    actorId: text()
+      .notNull()
+      .references(() => user.id),
+    /** The column that changed, or `created` / `deleted` / `restored`. */
+    field: text().notNull().$type<TodoEventField>(),
+    /** Null for `created`, and for a field that had no value before. */
+    fromValue: text(),
+    toValue: text(),
+    createdAt: text().notNull(),
+  },
+  (t) => [index("todo_events_todo_id_idx").on(t.todoId, t.id)],
 );
 
 export const attachmentsTable = sqliteTable(

@@ -76,6 +76,8 @@ export async function resetAll() {
   // foreign keys, so a wrong order fails loudly rather than leaving orphans.
   for (const table of [
     "attachments",
+    "todo_comments",
+    "todo_events",
     "todos",
     // Also a child of `projects`, and forgetting it fails the delete below
     // rather than leaving orphans — which is the good outcome.

@@ -32,6 +32,7 @@
 | [0024](./0024-todo-status-instead-of-completed.md) | Todoの完了状態を真偽値から`status`に置き換え、詳細情報を持たせる | Accepted |
 | [0025](./0025-kanban-board-view.md) | Todoをボード表示でも見せ、追加時から詳細を設定できるようにする | Accepted |
 | [0026](./0026-timeline-not-a-gantt-chart.md) | 日付軸のタイムラインを作り、本格的なガントチャートは作らない | Accepted |
+| [0027](./0027-comments-and-append-only-history.md) | Todoにコメントと、書き換えられない変更履歴を持たせる | Accepted |
 
 ## ルール
 

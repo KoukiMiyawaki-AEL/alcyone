@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { TODO_STATUSES } from "@/worker/db/schema";
 
 import { PRIORITY_LABELS, STATUS_LABELS, type Todo, type TodoFields } from "../types";
+import { TodoActivity } from "./TodoActivityPanel";
 
 /**
  * Creating and editing are the same form.
@@ -52,7 +53,7 @@ const orNull = (value: string) => (value.trim() === "" ? null : value);
 export function TodoDetailDialog({ editor, onOpenChange, onSave }: TodoDetailDialogProps) {
   return (
     <Dialog open={editor !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         {/*
           Keyed by what is being edited, so opening a different row remounts the
           form with that row's values. Copying props into state inside an effect
@@ -226,6 +227,17 @@ function TodoDetailForm({
           </p>
         ) : null}
       </form>
+
+      {/*
+        Only on an existing task. A comment needs something to be about, and a
+        history of a task that does not exist yet is empty by definition.
+      */}
+      {creating ? null : (
+        <section className="flex flex-col gap-3 border-t border-border pt-4">
+          <h3 className="text-sm font-medium">アクティビティ</h3>
+          <TodoActivity todoId={editor.todo.id} />
+        </section>
+      )}
 
       <DialogFooter>
         <DialogClose render={<Button variant="outline">キャンセル</Button>} />

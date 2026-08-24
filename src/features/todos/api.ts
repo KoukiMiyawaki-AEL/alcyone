@@ -39,3 +39,29 @@ export const restoreTodo = (id: number) =>
     () => apiClient.api.todos[":id"].restore.$post({ param: { id: String(id) } }),
     "タスクの復元に失敗しました。",
   );
+
+export const addComment = (todoId: number, body: string) =>
+  mutate(
+    () =>
+      apiClient.api.todos[":id"].comments.$post({
+        param: { id: String(todoId) },
+        json: { body },
+      }),
+    "コメントの投稿に失敗しました。",
+  );
+
+export const editComment = (id: number, body: string) =>
+  mutate(
+    () =>
+      apiClient.api.comments[":id"].$patch({
+        param: { id: String(id) },
+        json: { body },
+      }),
+    "コメントの更新に失敗しました。",
+  );
+
+export const removeComment = (id: number) =>
+  mutate(
+    () => apiClient.api.comments[":id"].$delete({ param: { id: String(id) } }),
+    "コメントの削除に失敗しました。",
+  );

@@ -20,6 +20,8 @@ import { ftsRank, toFtsQuery, toLikePattern, todosFts } from "./fts";
 import {
   TODO_STATUSES,
   attachmentsTable,
+  todoCommentsTable,
+  todoEventsTable,
   projectsTable,
   sharesTable,
   todosTable,
@@ -47,6 +49,10 @@ export type TodoFilter = "all" | "active" | (typeof TODO_STATUSES)[number];
  * clearing is meaningful — `undefined` means "leave it", `null` means "empty
  * it".
  */
+/** The fields whose changes are worth a history row. See TODO_EVENT_FIELDS. */
+const TRACKED_FIELDS = ["status", "startAt", "dueAt", "title", "priority"] as const;
+type TrackedField = (typeof TRACKED_FIELDS)[number];
+
 export type TodoFields = {
   title?: string;
   status?: TodoStatus;
@@ -192,6 +198,174 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           id === undefined ? undefined : eq(projectsTable.id, id),
         ),
       );
+
+  /** Live todos this owner can reach. Comments hang off it. */
+  const ownedTodoIdsForComments = () =>
+    db
+      .select({ id: todosTable.id })
+      .from(todosTable)
+      .where(and(isNull(todosTable.deletedAt), inArray(todosTable.projectId, ownedProjectIds())));
+
+  /**
+   * Records one field's change, but only if it is actually changing.
+   *
+   * An INSERT ... SELECT with the comparison in its WHERE: no row is selected
+   * when the value already matches, so nothing is inserted. That matters
+   * because the detail form submits every field on every save — a naive
+   * "record what was asked for" would bury one real change under five
+   * non-changes.
+   *
+   * Ownership is in the SELECT too. Nothing here is reachable without it, but
+   * a history table that could be written for someone else's todo would be a
+   * way to learn their ids.
+   */
+  const changeEvent = (todoId: number, field: TrackedField, to: string | number | null) => {
+    const column = todosTable[field];
+    const next = to === null ? null : String(to);
+
+    return db.insert(todoEventsTable).select(
+      db
+        .select({
+          // Selected explicitly and in table order: drizzle requires an
+          // insert-from-select to name every column. `null` into an INTEGER
+          // PRIMARY KEY is what makes SQLite assign the next id.
+          id: sql<number>`null`.as("id"),
+          todoId: todosTable.id,
+          actorId: sql<string>`${ownerId}`.as("actorId"),
+          field: sql<string>`${field}`.as("field"),
+          fromValue: sql<string | null>`${column}`.as("fromValue"),
+          toValue: sql<string | null>`${next}`.as("toValue"),
+          createdAt: sql<string>`${now()}`.as("createdAt"),
+        })
+        .from(todosTable)
+        .where(
+          and(
+            eq(todosTable.id, todoId),
+            isNull(todosTable.deletedAt),
+            // `is not` rather than `<>`: SQL's inequality is null-propagating,
+            // so `<>` would never record a date being set or cleared.
+            sql`${column} is not ${next}`,
+            inArray(todosTable.projectId, ownedProjectIds()),
+          ),
+        ),
+    );
+  };
+
+  const lifecycleEvent = (todoId: number, field: "created" | "deleted" | "restored") =>
+    db.insert(todoEventsTable).select(
+      db
+        .select({
+          id: sql<number>`null`.as("id"),
+          todoId: todosTable.id,
+          actorId: sql<string>`${ownerId}`.as("actorId"),
+          field: sql<string>`${field}`.as("field"),
+          fromValue: sql<string | null>`null`.as("fromValue"),
+          toValue: sql<string | null>`null`.as("toValue"),
+          createdAt: sql<string>`${now()}`.as("createdAt"),
+        })
+        .from(todosTable)
+        .where(and(eq(todosTable.id, todoId), inArray(todosTable.projectId, ownedProjectIds()))),
+    );
+
+  const comments = {
+    listByTodo: (todoId: number) =>
+      db
+        .select()
+        .from(todoCommentsTable)
+        .where(
+          and(
+            eq(todoCommentsTable.todoId, todoId),
+            isNull(todoCommentsTable.deletedAt),
+            inArray(todoCommentsTable.todoId, ownedTodoIdsForComments()),
+          ),
+        )
+        .orderBy(asc(todoCommentsTable.id)),
+
+    /**
+     * Insert-from-select, so the todo's ownership is part of the statement.
+     * A plain insert would satisfy the foreign key for *any* existing todo —
+     * a foreign key checks existence, not ownership, which is how a public
+     * share link for someone else's project once became possible (ADR 0022).
+     */
+    create: (todoId: number, body: string) =>
+      db.all<{ id: number }>(sql`
+        insert into ${todoCommentsTable} ("todoId", "authorId", "body", "createdAt", "updatedAt")
+        select ${todosTable.id}, ${ownerId}, ${body}, ${now()}, ${now()}
+        from ${todosTable}
+        where ${todosTable.id} = ${todoId}
+          and ${todosTable.deletedAt} is null
+          and ${todosTable.projectId} in ${ownedProjectIds()}
+        returning id
+      `),
+
+    find: (id: number) =>
+      db
+        .select()
+        .from(todoCommentsTable)
+        .where(
+          and(
+            eq(todoCommentsTable.id, id),
+            isNull(todoCommentsTable.deletedAt),
+            inArray(todoCommentsTable.todoId, ownedTodoIdsForComments()),
+          ),
+        ),
+
+    /**
+     * Only the author may edit. Today that is always the owner, so the two
+     * conditions are the same one — but they will stop being the same the day
+     * a project has more than one person on it, and a rule that only holds by
+     * coincidence is not a rule.
+     */
+    update: (id: number, body: string) =>
+      db
+        .update(todoCommentsTable)
+        .set({ body, updatedAt: now() })
+        .where(
+          and(
+            eq(todoCommentsTable.id, id),
+            eq(todoCommentsTable.authorId, ownerId),
+            isNull(todoCommentsTable.deletedAt),
+            inArray(todoCommentsTable.todoId, ownedTodoIdsForComments()),
+          ),
+        )
+        .returning(),
+
+    remove: (id: number) =>
+      db
+        .update(todoCommentsTable)
+        .set({ deletedAt: now() })
+        .where(
+          and(
+            eq(todoCommentsTable.id, id),
+            eq(todoCommentsTable.authorId, ownerId),
+            isNull(todoCommentsTable.deletedAt),
+            inArray(todoCommentsTable.todoId, ownedTodoIdsForComments()),
+          ),
+        )
+        .returning(),
+  };
+
+  const events = {
+    listByTodo: (todoId: number) =>
+      db
+        .select()
+        .from(todoEventsTable)
+        .where(
+          and(
+            eq(todoEventsTable.todoId, todoId),
+            // Deliberately not filtered by the todo being live: the history of
+            // a deleted-then-restored task is exactly when it is worth reading.
+            inArray(
+              todoEventsTable.todoId,
+              db
+                .select({ id: todosTable.id })
+                .from(todosTable)
+                .where(inArray(todosTable.projectId, ownedProjectIds())),
+            ),
+          ),
+        )
+        .orderBy(asc(todoEventsTable.id)),
+  };
 
   const shares = {
     find: (projectId: number) =>
@@ -346,6 +520,64 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         )
         .returning(),
 
+    /** The opening entry of a task's history. */
+    createdEvent: (id: number) =>
+      [lifecycleEvent(id, "created")] as unknown as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]],
+
+    /**
+     * Records a lifecycle event alongside a soft delete or restore.
+     *
+     * The event goes *after* the change here, not before: unlike a field
+     * change it reads nothing that the change destroys, and putting it second
+     * means a failed delete leaves no history claiming it happened.
+     */
+    removeWithHistory: (id: number) =>
+      [todos.remove(id), lifecycleEvent(id, "deleted")] as unknown as [
+        BatchItem<"sqlite">,
+        ...BatchItem<"sqlite">[],
+      ],
+
+    restoreWithHistory: (id: number) =>
+      [todos.restore(id), lifecycleEvent(id, "restored")] as unknown as [
+        BatchItem<"sqlite">,
+        ...BatchItem<"sqlite">[],
+      ],
+
+    /**
+     * The change, and the record of it, as one batch. **The updated rows are
+     * the last result.**
+     *
+     * The history rows come first, and that ordering is the whole design: each
+     * one reads the value it is about to replace, which stops existing the
+     * moment the UPDATE runs.
+     *
+     * Reading the row in the handler and diffing it there would have been the
+     * obvious shape, and wrong twice over. It costs a round trip, and between
+     * the read and the write another request can change the same row — the
+     * history would then record a transition that never happened. Doing the
+     * comparison inside each INSERT ... SELECT means the old value is read at
+     * the instant it is used, with no window in between.
+     *
+     * `db.transaction()` is not an option and is worth naming: it type-checks
+     * and fails at runtime, because D1 has no interactive transactions. This is
+     * the case the readiness map recorded as D5 before there was any history to
+     * write.
+     */
+    updateWithHistory: (id: number, values: TodoFields) => {
+      const events = TRACKED_FIELDS.filter((field) => values[field] !== undefined).map((field) =>
+        changeEvent(id, field, values[field] ?? null),
+      );
+
+      // Always at least the update, so the tuple is never empty — which is what
+      // `batch()` requires and what this asserts. Through `unknown` because a
+      // raw statement and an update builder share no structural shape, not
+      // because either is the wrong thing to put in a batch.
+      return [...events, todos.update(id, values)] as unknown as [
+        BatchItem<"sqlite">,
+        ...BatchItem<"sqlite">[],
+      ];
+    },
+
     setStatus: (id: number, status: TodoStatus) =>
       db
         .update(todosTable)
@@ -499,6 +731,8 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
       // projects — so three statements in dependency order. The R2 objects are
       // not rows and survive this; see ownedAttachmentKeys.
       db.delete(attachmentsTable).where(inArray(attachmentsTable.todoId, allOwnedTodoIds())),
+      db.delete(todoCommentsTable).where(inArray(todoCommentsTable.todoId, allOwnedTodoIds())),
+      db.delete(todoEventsTable).where(inArray(todoEventsTable.todoId, allOwnedTodoIds())),
       db
         .delete(sharesTable)
         .where(
@@ -573,6 +807,8 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
   return {
     projects,
     todos,
+    comments,
+    events,
     shares,
     attachments,
     purgeOwnedData,

@@ -27,6 +27,7 @@ function renderBoard(props: Partial<Parameters<typeof TodoBoard>[0]> = {}) {
     <TodoBoard
       todos={[todo()]}
       assignees={[]}
+      today="2026-08-26"
       onStatusChange={vi.fn()}
       onEdit={vi.fn()}
       truncated={false}
@@ -139,6 +140,21 @@ describe("TodoBoard", () => {
     await user.click(screen.getByRole("button", { name: "開く" }));
 
     expect(onEdit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 7 }));
+  });
+
+  it("counts what is late in each column", () => {
+    // A board exists to answer "where is the work", and "some of it is late"
+    // is part of that answer.
+    renderBoard({
+      todos: [
+        todo({ id: 1, title: "遅れ", status: "todo", dueAt: "2026-08-20" }),
+        todo({ id: 2, title: "まだ", status: "todo", dueAt: "2026-12-20" }),
+      ],
+      today: "2026-08-26",
+    });
+
+    expect(column("未着手").getByText("1 期限切れ")).toBeInTheDocument();
+    expect(column("進行中").queryByText(/期限切れ/)).not.toBeInTheDocument();
   });
 
   it("says so when it is not showing everything", () => {

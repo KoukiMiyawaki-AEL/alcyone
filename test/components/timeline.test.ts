@@ -7,6 +7,7 @@ import {
   buildTimeline,
   dayNumber,
   isoFromDayNumber,
+  cells,
   days,
   monthSpans,
 } from "@/features/todos/timeline";
@@ -274,5 +275,40 @@ describe("day columns", () => {
     const marked = days(from, 10, "2026-11-08").filter((d) => d.isToday);
 
     expect(marked.map((d) => d.iso)).toEqual(["2026-11-08"]);
+  });
+});
+
+describe("zoom", () => {
+  it("gives one cell per day at day zoom", () => {
+    const from = dayNumber("2026-11-02");
+    expect(cells(from, 3, "2026-11-02", "day").map((c) => c.label)).toEqual(["2", "3", "4"]);
+  });
+
+  it("gives one cell per week at week zoom", () => {
+    // A quarter at one column per day is over two thousand pixels — legible,
+    // but only through a letterbox.
+    const from = dayNumber("2026-11-02");
+    const weekly = cells(from, 21, "2026-11-02", "week");
+
+    expect(weekly).toHaveLength(3);
+    expect(weekly.map((c) => c.iso)).toEqual(["2026-11-02", "2026-11-09", "2026-11-16"]);
+    expect(weekly.map((c) => c.label)).toEqual(["11/2", "11/9", "11/16"]);
+  });
+
+  it("rounds a partial week up rather than dropping it", () => {
+    const from = dayNumber("2026-11-02");
+    expect(cells(from, 9, "2026-11-02", "week")).toHaveLength(2);
+  });
+
+  it("marks the week that contains today", () => {
+    const from = dayNumber("2026-11-02");
+    const weekly = cells(from, 21, "2026-11-12", "week");
+
+    expect(weekly.map((c) => c.isToday)).toEqual([false, true, false]);
+  });
+
+  it("does not shade weekends at week zoom, where a cell is not one", () => {
+    const from = dayNumber("2026-11-07");
+    expect(cells(from, 14, "2026-11-07", "week").every((c) => !c.weekend)).toBe(true);
   });
 });

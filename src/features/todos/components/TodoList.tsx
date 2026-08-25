@@ -9,12 +9,20 @@ import { TodoRow } from "./TodoRow";
 type TodoListProps = {
   todos: Todo[];
   assignees: Assignee[];
+  today: string;
   onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
   onEdit: (todo: Todo) => void;
   onDelete: (id: number) => Promise<void>;
 };
 
-export function TodoList({ todos, assignees, onStatusChange, onEdit, onDelete }: TodoListProps) {
+export function TodoList({
+  todos,
+  assignees,
+  today,
+  onStatusChange,
+  onEdit,
+  onDelete,
+}: TodoListProps) {
   if (todos.length === 0) {
     return (
       <EmptyState
@@ -52,6 +60,7 @@ export function TodoList({ todos, assignees, onStatusChange, onEdit, onDelete }:
           <TodoRow
             todo={todo}
             assignees={assignees}
+            today={today}
             onStatusChange={onStatusChange}
             onEdit={onEdit}
             onDelete={onDelete}

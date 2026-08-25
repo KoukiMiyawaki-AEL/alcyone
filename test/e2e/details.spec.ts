@@ -22,7 +22,7 @@ test.describe("task details", () => {
     await page.getByLabel("メモ").fill("先に前提を洗い出す");
     await page.getByRole("button", { name: "保存" }).click();
 
-    await expect(page.getByLabel("期限日 2026-11-30")).toBeVisible();
+    await expect(page.getByLabel(new RegExp("期限.* 2026-11-30"))).toBeVisible();
     await expect(page.getByText("先に前提を洗い出す")).toBeVisible();
 
     await page.reload();

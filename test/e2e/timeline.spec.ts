@@ -72,6 +72,30 @@ test.describe("timeline view", () => {
     await expect(page.getByTitle(daysFromToday(1))).toBeAttached();
   });
 
+  test("switches between day and week granularity", async ({ page }) => {
+    // A quarter at one column per day is over two thousand pixels — legible,
+    // but only through a letterbox.
+    await signUp(page);
+    await createProject(page, "Zoom");
+    await page.getByRole("link", { name: "Zoom" }).click();
+    await createTodo(page, "なにか");
+
+    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+
+    const grain = page.getByRole("group", { name: "表示の粒度" });
+    const today = daysFromToday(0);
+    await expect(page.getByTitle(today)).toBeVisible();
+
+    await grain.getByRole("button", { name: "週" }).click();
+    // Week cells start on the axis origin, so most individual days stop having
+    // a column of their own — which is the trade the zoom makes.
+    await expect(page.getByTitle(today)).toBeHidden();
+    await expect(grain.getByRole("button", { name: "週" })).toHaveAttribute("aria-pressed", "true");
+
+    await grain.getByRole("button", { name: "日" }).click();
+    await expect(page.getByTitle(today)).toBeVisible();
+  });
+
   test("says so when no task has a date yet", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Schedule");

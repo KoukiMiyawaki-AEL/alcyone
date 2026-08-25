@@ -106,11 +106,17 @@ export function buildTimeline(
 }
 
 /** Month boundaries within the axis, for the header row. */
-export function monthSpans(from: number, days: number): { label: string; span: number }[] {
+export function monthSpans(
+  from: number,
+  days: number,
+  step = 1,
+): { label: string; span: number }[] {
   const out: { label: string; span: number }[] = [];
 
-  for (let i = 0; i < days; i++) {
-    const iso = isoFromDayNumber(from + i);
+  // Counted in cells, not days: at week zoom a month covers four or five
+  // columns, and a span measured in days would run off the end of the grid.
+  for (let i = 0; i < Math.ceil(days / step); i++) {
+    const iso = isoFromDayNumber(from + i * step);
     const label = `${iso.slice(0, 4)}/${iso.slice(5, 7)}`;
     const last = out.at(-1);
     if (last?.label === label) last.span += 1;
@@ -191,6 +197,53 @@ export function days(from: number, count: number, today: string): Day[] {
       label: String(Number(iso.slice(8, 10))),
       weekend: weekday === 0 || weekday === 6,
       isToday: iso === todayIso,
+    };
+  });
+}
+
+/**
+ * How much calendar one column holds.
+ *
+ * A quarter at one column per day is well over two thousand pixels — legible,
+ * but only through a letterbox. Weeks make the same span fit on a laptop, at
+ * the cost of not being able to point at a particular Tuesday. Neither is
+ * right for both questions, so it is a choice rather than a compromise.
+ */
+export type Zoom = "day" | "week";
+
+export const ZOOM_DAYS: Record<Zoom, number> = { day: 1, week: 7 };
+export const ZOOM_WIDTH: Record<Zoom, number> = { day: 26, week: 34 };
+
+/** One header cell, which is a day or a week depending on the zoom. */
+export type Cell = {
+  /** The first day the cell covers. */
+  iso: string;
+  label: string;
+  /** True when every day it covers is a weekend — only ever at day zoom. */
+  weekend: boolean;
+  /** True when the cell covers today. */
+  isToday: boolean;
+};
+
+export function cells(from: number, count: number, today: string, zoom: Zoom): Cell[] {
+  const step = ZOOM_DAYS[zoom];
+  const todayDay = dayNumber(today);
+
+  return Array.from({ length: Math.ceil(count / step) }, (_, i) => {
+    const start = from + i * step;
+    const iso = isoFromDayNumber(start);
+    const weekday = new Date(`${iso}T00:00:00Z`).getUTCDay();
+
+    return {
+      iso,
+      // At week zoom the day number alone is ambiguous, so it carries the month.
+      label:
+        zoom === "day"
+          ? String(Number(iso.slice(8, 10)))
+          : `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`,
+      weekend: zoom === "day" && (weekday === 0 || weekday === 6),
+      // A week cell contains today if today falls anywhere inside it.
+      isToday: todayDay >= start && todayDay < start + step,
     };
   });
 }

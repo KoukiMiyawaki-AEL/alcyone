@@ -320,6 +320,7 @@ function ProjectTodosComponent() {
           <TodoBoard
             todos={todos}
             assignees={assignees}
+            today={today}
             onStatusChange={handleStatusChange}
             onEdit={(todo) => setEditor({ mode: "edit", todo })}
             truncated={todos.length >= WHOLE_VIEW_LIMIT}
@@ -328,6 +329,7 @@ function ProjectTodosComponent() {
           <TodoList
             todos={todos}
             assignees={assignees}
+            today={today}
             onStatusChange={handleStatusChange}
             onEdit={(todo) => setEditor({ mode: "edit", todo })}
             onDelete={handleDelete}

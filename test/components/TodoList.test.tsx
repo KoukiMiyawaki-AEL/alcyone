@@ -27,6 +27,7 @@ function renderList(props: Partial<Parameters<typeof TodoList>[0]> = {}) {
     <TodoList
       todos={[todo()]}
       assignees={[]}
+      today="2026-08-26"
       onStatusChange={vi.fn()}
       onEdit={vi.fn()}
       onDelete={vi.fn()}
@@ -126,6 +127,39 @@ describe("TodoList", () => {
     expect(screen.queryByText("未着手")).not.toBeInTheDocument();
   });
 
+  it("marks a task whose due date has passed", () => {
+    // The single most actionable fact in a list, and it used to render exactly
+    // like a date next month — leaving the reader to compare every row against
+    // today themselves, which is not what anyone does with a list.
+    renderList({
+      todos: [
+        todo({ id: 1, title: "遅れている", dueAt: "2026-08-20" }),
+        todo({ id: 2, title: "まだ先", dueAt: "2026-12-20" }),
+      ],
+      today: "2026-08-26",
+    });
+
+    expect(screen.getByLabelText("期限切れ 2026-08-20")).toBeInTheDocument();
+    expect(screen.getByLabelText("期限 2026-12-20")).toBeInTheDocument();
+  });
+
+  it("stops marking it once the task is done", () => {
+    // A finished task that was late is history; alarming about it fills a
+    // completed list with work nobody has to do.
+    renderList({
+      todos: [todo({ title: "終わった", dueAt: "2026-08-20", status: "done" })],
+      today: "2026-08-26",
+    });
+
+    expect(screen.getByLabelText("期限 2026-08-20")).toBeInTheDocument();
+  });
+
+  it("names today's deadline as today's", () => {
+    renderList({ todos: [todo({ dueAt: "2026-08-26" })], today: "2026-08-26" });
+
+    expect(screen.getByLabelText("本日期限 2026-08-26")).toBeInTheDocument();
+  });
+
   it("shows the dates and the note a todo carries", () => {
     renderList({
       todos: [
@@ -139,7 +173,7 @@ describe("TodoList", () => {
     });
 
     expect(screen.getByLabelText("開始日 2026-09-01")).toBeInTheDocument();
-    expect(screen.getByLabelText("期限日 2026-09-30")).toBeInTheDocument();
+    expect(screen.getByLabelText(/2026-09-30/)).toBeInTheDocument();
     expect(screen.getByText("先に設計を書く")).toBeInTheDocument();
     expect(screen.getByLabelText("優先度: Medium")).toBeInTheDocument();
   });

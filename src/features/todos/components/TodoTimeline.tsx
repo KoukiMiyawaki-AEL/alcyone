@@ -2,17 +2,21 @@ import { CalendarRangeIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/app/empty-state";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { assigneeName } from "../assignee";
 import {
+  ZOOM_DAYS,
+  ZOOM_WIDTH,
   applyDrag,
   buildTimeline,
+  cells,
   dayNumber,
-  days as dayColumns,
   monthSpans,
   type DragMode,
   type DragResult,
+  type Zoom,
 } from "../timeline";
 import { STATUS_LABELS, type Assignee, type Todo } from "../types";
 
@@ -28,8 +32,12 @@ type TodoTimelineProps = {
   onReschedule: (id: number, dates: DragResult) => Promise<boolean>;
 };
 
-/** One column per day. Narrow enough that a couple of months fit on a laptop. */
-const DAY_WIDTH = 26;
+const ZOOM_LABELS: Record<Zoom, string> = { day: "日", week: "週" };
+
+/** How wide a column is, which depends on how much calendar it holds. */
+const columnWidth = (zoom: Zoom) => ZOOM_WIDTH[zoom];
+/** Pixels per day, which is what turns a pointer movement into a date. */
+const dayWidth = (zoom: Zoom) => ZOOM_WIDTH[zoom] / ZOOM_DAYS[zoom];
 /** The task-name column, frozen while the axis scrolls under it. */
 const LABEL_WIDTH = 200;
 
@@ -69,6 +77,10 @@ export function TodoTimeline({
 }: TodoTimelineProps) {
   // What is being dragged, and how far it has moved so far. Held here rather
   // than per-bar so the whole grid can show the pending dates while it happens.
+  // Not in the URL, unlike the view itself. A zoom is how you are looking at
+  // the chart right now, not what you are looking at — a link to a project
+  // should not carry someone else's magnification.
+  const [zoom, setZoom] = useState<Zoom>("day");
   const [drag, setDrag] = useState<{
     id: number;
     mode: DragMode;
@@ -76,7 +88,9 @@ export function TodoTimeline({
     deltaDays: number;
   } | null>(null);
   const { from, days, bars, unscheduled, clipped } = buildTimeline(todos, today);
-  const columns = dayColumns(from, days, today);
+  const columns = cells(from, days, today, zoom);
+  const width = columnWidth(zoom);
+  const perDay = dayWidth(zoom);
 
   /** The dates a bar would get if the drag ended now. */
   const pending = (todo: Todo): DragResult =>
@@ -117,7 +131,7 @@ export function TodoTimeline({
             // nothing to round wrong — the property that makes editing here
             // safe at all.
             (console.log("[drag] move", event.clientX - current.fromX),
-            { ...current, deltaDays: Math.round((event.clientX - current.fromX) / DAY_WIDTH) }),
+            { ...current, deltaDays: Math.round((event.clientX - current.fromX) / perDay) }),
       );
 
     window.addEventListener("pointermove", onMove);
@@ -143,6 +157,22 @@ export function TodoTimeline({
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <div role="group" aria-label="表示の粒度" className="flex gap-1">
+          {(Object.keys(ZOOM_LABELS) as Zoom[]).map((option) => (
+            <Button
+              key={option}
+              size="sm"
+              variant={zoom === option ? "secondary" : "ghost"}
+              aria-pressed={zoom === option}
+              onClick={() => setZoom(option)}
+            >
+              {ZOOM_LABELS[option]}
+            </Button>
+          ))}
+        </div>
+      </div>
+
       {truncated ? (
         <p className="text-xs text-muted-foreground">
           表示はこのプロジェクトの最初の{todos.length}件です。すべては一覧表示で確認できます。
@@ -169,10 +199,12 @@ export function TodoTimeline({
         // The axis is the one thing here that legitimately exceeds the page
         // width, so it scrolls inside its own box rather than pushing the body.
         <div className="overflow-x-auto rounded-lg border border-border">
-          <div style={{ width: days * DAY_WIDTH + LABEL_WIDTH }} className="min-w-full">
+          <div style={{ width: columns.length * width + LABEL_WIDTH }} className="min-w-full">
             <div
               className="relative grid"
-              style={{ gridTemplateColumns: `${LABEL_WIDTH}px repeat(${days}, ${DAY_WIDTH}px)` }}
+              style={{
+                gridTemplateColumns: `${LABEL_WIDTH}px repeat(${columns.length}, ${width}px)`,
+              }}
             >
               {/*
                 One layer for the weekend and today stripes, instead of a cell
@@ -183,7 +215,9 @@ export function TodoTimeline({
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0 grid"
-                style={{ gridTemplateColumns: `${LABEL_WIDTH}px repeat(${days}, ${DAY_WIDTH}px)` }}
+                style={{
+                  gridTemplateColumns: `${LABEL_WIDTH}px repeat(${columns.length}, ${width}px)`,
+                }}
               >
                 <div />
                 {columns.map((day) => (
@@ -200,7 +234,7 @@ export function TodoTimeline({
               <div className="sticky left-0 z-20 border-r border-b border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground">
                 タスク
               </div>
-              {monthSpans(from, days).map((month) => (
+              {monthSpans(from, days, ZOOM_DAYS[zoom]).map((month) => (
                 <div
                   key={month.label}
                   style={{ gridColumn: `span ${month.span}` }}
@@ -258,8 +292,8 @@ export function TodoTimeline({
                   >
                     <div
                       style={{
-                        marginLeft: bar.offset * DAY_WIDTH + 1,
-                        width: Math.min(bar.length, days - bar.offset) * DAY_WIDTH - 2,
+                        marginLeft: bar.offset * perDay + 1,
+                        width: Math.min(bar.length, days - bar.offset) * perDay - 2,
                       }}
                       className={cn(
                         "flex h-4 items-stretch rounded-sm",
@@ -296,7 +330,7 @@ export function TodoTimeline({
                       where".
                     */}
                     {drag?.id === bar.todo.id ? (
-                      <Ghost dates={pending(bar.todo)} from={from} />
+                      <Ghost dates={pending(bar.todo)} from={from} perDay={perDay} />
                     ) : null}
                   </div>
                 </div>
@@ -343,7 +377,7 @@ export function TodoTimeline({
  * printed beside it because a rectangle answers "roughly when" and a schedule
  * argument is about exact days.
  */
-function Ghost({ dates, from }: { dates: DragResult; from: number }) {
+function Ghost({ dates, from, perDay }: { dates: DragResult; from: number; perDay: number }) {
   const start = dates.startAt ?? dates.dueAt;
   const end = dates.dueAt ?? dates.startAt;
   if (!start || !end) return null;
@@ -354,7 +388,7 @@ function Ghost({ dates, from }: { dates: DragResult; from: number }) {
   return (
     <div
       aria-hidden
-      style={{ marginLeft: offset * DAY_WIDTH + 1, width: length * DAY_WIDTH - 2 }}
+      style={{ marginLeft: offset * perDay + 1, width: length * perDay - 2 }}
       className="pointer-events-none absolute top-1.5 flex h-4 items-center rounded-sm border-2 border-dashed border-primary bg-primary/20"
     >
       <span className="absolute left-full ml-1.5 rounded bg-popover px-1.5 py-0.5 text-[10px] whitespace-nowrap text-popover-foreground tabular-nums shadow-sm ring-1 ring-border">

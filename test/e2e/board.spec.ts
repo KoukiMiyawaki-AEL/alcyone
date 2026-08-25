@@ -71,7 +71,7 @@ test.describe("adding a task", () => {
       .getByRole("button", { name: "追加" })
       .click();
 
-    await expect(page.getByLabel("期限日 2026-12-24")).toBeVisible();
+    await expect(page.getByLabel(new RegExp("期限.* 2026-12-24"))).toBeVisible();
     await expect(page.getByText("期限つきで作る")).toBeVisible();
   });
 });

@@ -27,3 +27,4 @@ design docの中で「これは後から覆されると困る、明確な決定�
 
 - [`initial-architecture.md`](./initial-architecture.md) — 標準的な分量のdesign doc
 - [`service-readiness-map.md`](./service-readiness-map.md) — 網羅型（実サービス化に必要なもののマップ）
+- [`task-views.md`](./task-views.md) —— 一覧 / ボード / タイムラインを横に並べて見たときの設計と、次に直すこと

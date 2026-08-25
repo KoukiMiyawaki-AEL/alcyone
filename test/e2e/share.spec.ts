@@ -12,8 +12,9 @@ test.describe("share links", () => {
     await owner.getByRole("link", { name: "Shared board" }).click();
     await createTodo(owner, "publicly visible");
 
+    await owner.getByRole("button", { name: /^共有/ }).click();
     await owner.getByRole("button", { name: "共有リンクを発行" }).click();
-    const url = await owner.getByLabel("共有リンク").inputValue();
+    const url = await owner.getByLabel("共有リンクのURL").inputValue();
     expect(url).toContain("/s/");
 
     // A separate context with no cookies at all — the point of the feature is
@@ -36,8 +37,9 @@ test.describe("share links", () => {
     await createProject(owner, "Temporarily shared");
     await owner.getByRole("link", { name: "Temporarily shared" }).click();
 
+    await owner.getByRole("button", { name: /^共有/ }).click();
     await owner.getByRole("button", { name: "共有リンクを発行" }).click();
-    const url = await owner.getByLabel("共有リンク").inputValue();
+    const url = await owner.getByLabel("共有リンクのURL").inputValue();
 
     await owner.getByRole("button", { name: "解除" }).click();
     await expect(owner.getByRole("button", { name: "共有リンクを発行" })).toBeVisible();

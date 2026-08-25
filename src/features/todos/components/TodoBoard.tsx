@@ -106,7 +106,7 @@ export function TodoBoard({ todos, assignees, onStatusChange, onEdit, truncated 
         <EmptyState
           icon={KanbanIcon}
           title="No tasks yet"
-          description="上のフォームから最初のタスクを追加してください。"
+          description="「タスクを追加」から最初のタスクを作成してください。"
         />
       ) : null}
     </div>

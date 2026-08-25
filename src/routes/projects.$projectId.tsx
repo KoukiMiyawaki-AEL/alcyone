@@ -1,5 +1,5 @@
 import { Link, createFileRoute, notFound, redirect, useRouter } from "@tanstack/react-router";
-import { FolderXIcon, TriangleAlertIcon } from "lucide-react";
+import { FolderXIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 
@@ -14,7 +14,6 @@ import { addTodo, deleteTodo, restoreTodo, updateTodo } from "@/features/todos/a
 import { TodoBoard } from "@/features/todos/components/TodoBoard";
 import { TodoDetailDialog, type TodoEditor } from "@/features/todos/components/TodoDetailDialog";
 import { TodoFilters } from "@/features/todos/components/TodoFilters";
-import { TodoForm } from "@/features/todos/components/TodoForm";
 import { TodoList } from "@/features/todos/components/TodoList";
 import { TodoTimeline } from "@/features/todos/components/TodoTimeline";
 import { ViewSwitch } from "@/features/todos/components/ViewSwitch";
@@ -208,12 +207,6 @@ function ProjectTodosComponent() {
   // wrong one.
   const [editor, setEditor] = useState<TodoEditor | null>(null);
 
-  async function handleAdd(title: string) {
-    const added = await addTodo(projectId, { title });
-    if (added) await router.invalidate();
-    return added;
-  }
-
   async function handleSave(fields: TodoFields, todo: Todo | null) {
     const saved = todo
       ? await updateTodo(todo.id, fields)
@@ -253,25 +246,25 @@ function ProjectTodosComponent() {
         title={project?.name ?? "Todos"}
         description="Manage your tasks"
         actions={
-          <Button size="sm" variant="outline" render={<Link to="/" />}>
-            All projects
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/*
+              One button, and it opens the whole form. There was a title-only
+              field here as the fast path, which assumed a task is usually just
+              a line of text — for a list anyone actually plans against it is
+              not, and the shortcut mostly produced tasks that had to be opened
+              and filled in anyway.
+            */}
+            <Button size="sm" onClick={() => setEditor({ mode: "create", title: "" })}>
+              <PlusIcon className="size-4" />
+              タスクを追加
+            </Button>
+            {project ? <ShareCard projectId={project.id} token={shareToken} /> : null}
+            <Button size="sm" variant="outline" render={<Link to="/" />}>
+              All projects
+            </Button>
+          </div>
         }
       />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add a task</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TodoForm
-            onAdd={handleAdd}
-            onAddWithDetails={(title) => setEditor({ mode: "create", title })}
-          />
-        </CardContent>
-      </Card>
-
-      {project && <ShareCard projectId={project.id} token={shareToken} />}
 
       <TodoDetailDialog
         editor={editor}

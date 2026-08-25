@@ -24,12 +24,7 @@ test.describe("timeline view", () => {
     await createProject(page, "Schedule");
     await page.getByRole("link", { name: "Schedule" }).click();
 
-    await page.getByLabel("新しいタスクのタイトル").fill("日程のあるタスク");
-    await page.getByRole("button", { name: "詳細を設定して追加" }).click();
-    await page.getByLabel("開始日").fill("2026-11-02");
-    await page.getByLabel("期限日").fill("2026-11-06");
-    await page.getByRole("dialog").getByRole("button", { name: "追加" }).click();
-    await expect(page.getByRole("dialog")).toBeHidden();
+    await scheduleTask(page, "日程のあるタスク", "2026-11-02", "2026-11-06");
     await expect(page.getByText("日程のあるタスク")).toBeVisible();
 
     await createTodo(page, "日程のないタスク");
@@ -93,18 +88,12 @@ test.describe("timeline view", () => {
     await createProject(page, "Schedule");
     await page.getByRole("link", { name: "Schedule" }).click();
 
-    await page.getByLabel("新しいタスクのタイトル").fill("編集する");
-    await page.getByRole("button", { name: "詳細を設定して追加" }).click();
-    await page.getByLabel("期限日").fill("2026-11-20");
-    await page.getByRole("dialog").getByRole("button", { name: "追加" }).click();
-    // Wait for it to actually close: clicking on while it is still dismissing
-    // lets the close land on the dialog opened next, which shuts it again.
-    await expect(page.getByRole("dialog")).toBeHidden();
+    await scheduleTask(page, "編集する", "2026-11-18", "2026-11-20");
 
     await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
-    await page.getByRole("button", { name: "編集する" }).click();
+    await page.getByRole("button", { name: "編集する", exact: true }).click();
 
-    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeVisible();
     await expect(page.getByLabel("期限日")).toHaveValue("2026-11-20");
   });
 });
@@ -115,12 +104,15 @@ async function scheduleTask(
   startAt: string,
   dueAt: string,
 ) {
-  await page.getByLabel("新しいタスクのタイトル").fill(title);
-  await page.getByRole("button", { name: "詳細を設定して追加" }).click();
+  await page.getByRole("button", { name: "タスクを追加" }).click();
+  await page.getByLabel("タイトル", { exact: true }).fill(title);
   await page.getByLabel("開始日").fill(startAt);
   await page.getByLabel("期限日").fill(dueAt);
-  await page.getByRole("dialog").getByRole("button", { name: "追加" }).click();
-  await expect(page.getByRole("dialog")).toBeHidden();
+  await page
+    .getByRole("dialog", { name: "タスクを追加" })
+    .getByRole("button", { name: "追加" })
+    .click();
+  await expect(page.getByRole("dialog", { name: "タスクを追加" })).toBeHidden();
 }
 
 /** Drags a bar by whole day columns, scrolling it into reach first. */
@@ -168,7 +160,7 @@ test.describe("rescheduling on the chart", () => {
     // it was already on screen before the drag and would pass instantly.
     await expect(barFor(page, daysFromToday(4), daysFromToday(6))).toBeVisible();
 
-    await page.getByRole("button", { name: "動かす予定" }).click();
+    await page.getByRole("button", { name: "動かす予定", exact: true }).click();
     await expect(page.getByLabel("開始日")).toHaveValue(daysFromToday(4));
     await expect(page.getByLabel("期限日")).toHaveValue(daysFromToday(6));
   });
@@ -186,7 +178,7 @@ test.describe("rescheduling on the chart", () => {
     await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
     await dragBar(page, from, daysFromToday(4), 0);
 
-    await page.getByRole("button", { name: "触るだけ" }).click();
+    await page.getByRole("button", { name: "触るだけ", exact: true }).click();
     await expect(page.getByLabel("開始日")).toHaveValue(from);
     await expect(page.getByText("→")).toBeHidden();
   });
@@ -245,7 +237,7 @@ test.describe("rescheduling on the chart", () => {
 
     await expect(barFor(page, from, daysFromToday(6))).toBeVisible();
 
-    await page.getByRole("button", { name: "伸ばす予定" }).click();
+    await page.getByRole("button", { name: "伸ばす予定", exact: true }).click();
     await expect(page.getByLabel("開始日")).toHaveValue(from);
     await expect(page.getByLabel("期限日")).toHaveValue(daysFromToday(6));
   });

@@ -42,10 +42,21 @@ export async function createProject(page: Page, name: string) {
   await expect(page.getByRole("link", { name: new RegExp(name) })).toBeVisible();
 }
 
+/**
+ * Creates a task through the only route there is: the detail form.
+ *
+ * There used to be a title-only field on the page, and this helper used it.
+ * Removing it is the point of the change — a task worth tracking is rarely
+ * just a line of text — so the helper now does what a person does.
+ */
 export async function createTodo(page: Page, title: string) {
-  await page.getByLabel("新しいタスクのタイトル").fill(title);
-  // `exact` because "詳細を設定して追加" also contains it.
-  await page.getByRole("button", { name: "追加", exact: true }).click();
+  await page.getByRole("button", { name: "タスクを追加" }).click();
+  await page.getByLabel("タイトル", { exact: true }).fill(title);
+  await page
+    .getByRole("dialog", { name: "タスクを追加" })
+    .getByRole("button", { name: "追加" })
+    .click();
+  await expect(page.getByRole("dialog", { name: "タスクを追加" })).toBeHidden();
   await expect(page.getByText(title)).toBeVisible();
 }
 

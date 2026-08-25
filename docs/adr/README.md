@@ -35,6 +35,7 @@
 | [0027](./0027-comments-and-append-only-history.md) | Todoにコメントと、書き換えられない変更履歴を持たせる | Accepted |
 | [0028](./0028-display-names-and-assignees.md) | 表示名を変更可能にし、Todoに担当者を持たせる | Accepted |
 | [0029](./0029-task-links-and-an-editable-gantt.md) | タスク間の関係を持たせ、ガントチャート上で日程を編集できるようにする（0026の一部を覆す） | Accepted |
+| [0030](./0030-put-adding-and-sharing-behind-buttons.md) | タスク追加と共有をボタンの後ろに置く（0025の「速い経路」を覆す） | Accepted |
 
 ## ルール
 

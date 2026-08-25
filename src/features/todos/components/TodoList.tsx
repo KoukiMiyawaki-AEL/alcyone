@@ -20,7 +20,7 @@ export function TodoList({ todos, assignees, onStatusChange, onEdit, onDelete }:
       <EmptyState
         icon={ListTodoIcon}
         title="No tasks yet"
-        description="上のフォームから最初のタスクを追加してください。"
+        description="「タスクを追加」から最初のタスクを作成してください。"
       />
     );
   }

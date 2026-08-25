@@ -301,7 +301,11 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 - ルートを追加・変更したら[`docs/api/README.md`](./docs/api/)の表も更新する。
 - **`/api/*` はすべて認証が必要**（例外は `/api/health` と `/api/auth/*`）。未認証は401。
   セッション検証とリポジトリ生成は`src/worker/index.ts`の1つのミドルウェアがやる。
-- **DBアクセスは`createRepo(binding, ownerId)`経由で、返るメソッドは全て所有者でスコープ済み。**
+- **アクセス範囲は`accessibleProjectIds()`、管理権限は`ownedProjectIds()`の2つだけ。** 前者は
+  「所有者 または 参加者 または 管理者」、後者は「所有者 または 管理者」。**タスクを触るのが前者、
+  プロジェクトを消す・共有する・参加者を変えるのが後者**で、混ぜると参加者が鍵を配れるようになる
+  （[ADR 0031](./docs/adr/0031-project-membership-and-roles.md)）。
+- **DBアクセスは`createRepo(binding, ownerId, role)`経由で、返るメソッドは全てスコープ済み。**
   ハンドラがスコープされていないクエリを受け取ることがないので、絞り込みを忘れられない。
   ここに新しいメソッドを足すときは、必ず`ownerId`で絞ること（[ADR 0014](./docs/adr/0014-user-owned-projects.md)）。
 - **暦日（`startAt` / `dueAt`）の計算はUTCで閉じる。** `new Date(y, m, d)`と`toLocaleDateString`を

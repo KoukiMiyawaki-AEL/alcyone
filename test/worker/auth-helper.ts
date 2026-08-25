@@ -22,7 +22,11 @@ let ipCounter = 0;
  */
 export function uniqueIp(): string {
   ipCounter += 1;
-  return `203.0.113.${ipCounter % 254}`;
+  // Two octets, so a file with more sign-ups than 254 stops wrapping back onto
+  // an address whose rate-limit window is still open. A wrapped address looks
+  // exactly like an application bug: the sign-up fails, and the test that fails
+  // is whichever one happened to be unlucky.
+  return `203.0.${Math.floor(ipCounter / 254) % 254}.${ipCounter % 254}`;
 }
 
 /** Request headers for a signed-in user, ready for a JSON body. */
@@ -88,6 +92,8 @@ export async function resetAll() {
     // Also a child of `projects`, and forgetting it fails the delete below
     // rather than leaving orphans — which is the good outcome.
     "shares",
+    // Also a child of `projects` *and* of `user`, so it goes before both.
+    "project_members",
     "projects",
     "session",
     "account",

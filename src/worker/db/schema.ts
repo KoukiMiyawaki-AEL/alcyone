@@ -123,6 +123,40 @@ export const sharesTable = sqliteTable(
  * survive the day that stops being true — attributing them retroactively would
  * be guessing.
  */
+/**
+ * Who can reach a project besides the person who made it.
+ *
+ * The owner is deliberately *not* a row here. Their access comes from
+ * `projects.ownerId`, and duplicating it would create two facts that can
+ * disagree — an owner whose membership row was deleted, or a member row for a
+ * project that changed hands.
+ *
+ * A pair is unique as an index rather than a table constraint: ADR 0011
+ * records that drizzle's rebuild path re-emits indexes and silently drops
+ * table-level UNIQUE.
+ */
+export const projectMembersTable = sqliteTable(
+  "project_members",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    projectId: int()
+      .notNull()
+      .references(() => projectsTable.id),
+    userId: text()
+      .notNull()
+      .references(() => user.id),
+    /** Who let them in, kept because "how did they get access" is asked later. */
+    addedBy: text()
+      .notNull()
+      .references(() => user.id),
+    createdAt: text().notNull(),
+  },
+  (t) => [
+    uniqueIndex("project_members_pair_uidx").on(t.projectId, t.userId),
+    index("project_members_user_idx").on(t.userId),
+  ],
+);
+
 export const todoCommentsTable = sqliteTable(
   "todo_comments",
   {

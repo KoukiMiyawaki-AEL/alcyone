@@ -27,6 +27,8 @@
 | `todo_events` | `fromValue` / `toValue` | 変更前後の値。タイトルの変更履歴を含むので**自由入力が残る** | サーバが記録 |
 | `todo_events` | `actorId` | 変更した人 | サーバが記録 |
 | `todos` | `assigneeId` | 担当者 | 本人が設定 |
+| `project_members` | `userId` / `addedBy` | 誰がどのプロジェクトに参加しているか、誰が入れたか | 所有者または管理者が設定 |
+| `user` | `role` | `member` / `admin` | **APIからは設定できない**。管理者の付与は意図的な操作でしか起きない |
 
 ### データベースの外
 

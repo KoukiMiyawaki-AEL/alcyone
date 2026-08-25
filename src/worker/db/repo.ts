@@ -20,6 +20,8 @@ import { ftsRank, toFtsQuery, toLikePattern, todosFts } from "./fts";
 import {
   TODO_STATUSES,
   attachmentsTable,
+  projectMembersTable,
+  type UserRole,
   todoLinksTable,
   type TodoLinkKind,
   user,
@@ -215,17 +217,63 @@ const sortOrder = (sort: TodoSort = "created"): SQL[] => {
  * their reads are consistent with their own writes; the cron passes the plain
  * database, having no user whose writes to be consistent with.
  */
-export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: string) {
+export function createRepo(
+  binding: D1Database | D1DatabaseSession,
+  ownerId: string,
+  role: UserRole = "member",
+) {
+  // Read once. Threading the role through every subquery would put the same
+  // decision in fourteen places, which is the shape that lets one of them
+  // disagree.
+  const isAdmin = role === "admin";
   const db = drizzle(binding as D1Database);
 
-  /** This owner's project ids, as a subquery. Optionally narrowed to one id. */
+  /**
+   * Projects this account may *administer*: rename, delete, share, or change
+   * who is on them.
+   *
+   * Ownership, plus the admin role. Kept separate from `accessibleProjectIds`
+   * on purpose — a member can work on the tasks without being able to give
+   * someone else the keys, and collapsing the two would quietly hand every
+   * member that power.
+   */
   const ownedProjectIds = (id?: number) =>
     db
       .select({ id: projectsTable.id })
       .from(projectsTable)
       .where(
         and(
-          eq(projectsTable.ownerId, ownerId),
+          isAdmin ? undefined : eq(projectsTable.ownerId, ownerId),
+          isNull(projectsTable.deletedAt),
+          id === undefined ? undefined : eq(projectsTable.id, id),
+        ),
+      );
+
+  /**
+   * Projects whose tasks this account may read and change.
+   *
+   * Owner, member, or admin. **This is the one place the boundary is drawn**,
+   * which is what made adding membership a change to one function rather than
+   * to fourteen call sites — the reason ADR 0014 put the scoping here.
+   */
+  const accessibleProjectIds = (id?: number) =>
+    db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(
+        and(
+          isAdmin
+            ? undefined
+            : or(
+                eq(projectsTable.ownerId, ownerId),
+                inArray(
+                  projectsTable.id,
+                  db
+                    .select({ id: projectMembersTable.projectId })
+                    .from(projectMembersTable)
+                    .where(eq(projectMembersTable.userId, ownerId)),
+                ),
+              ),
           isNull(projectsTable.deletedAt),
           id === undefined ? undefined : eq(projectsTable.id, id),
         ),
@@ -236,7 +284,9 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
     db
       .select({ id: todosTable.id })
       .from(todosTable)
-      .where(and(isNull(todosTable.deletedAt), inArray(todosTable.projectId, ownedProjectIds())));
+      .where(
+        and(isNull(todosTable.deletedAt), inArray(todosTable.projectId, accessibleProjectIds())),
+      );
 
   /**
    * Records one field's change, but only if it is actually changing.
@@ -283,7 +333,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
             // `is not` rather than `<>`: SQL's inequality is null-propagating,
             // so `<>` would never record a date being set or cleared.
             sql`${column} is not ${next}`,
-            inArray(todosTable.projectId, ownedProjectIds()),
+            inArray(todosTable.projectId, accessibleProjectIds()),
           ),
         ),
     );
@@ -307,7 +357,9 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           createdAt: sql<string>`${now()}`.as("createdAt"),
         })
         .from(todosTable)
-        .where(and(eq(todosTable.id, todoId), inArray(todosTable.projectId, ownedProjectIds()))),
+        .where(
+          and(eq(todosTable.id, todoId), inArray(todosTable.projectId, accessibleProjectIds())),
+        ),
     );
 
   const comments = {
@@ -374,7 +426,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
               and(
                 eq(todosTable.id, todoId),
                 isNull(todosTable.deletedAt),
-                inArray(todosTable.projectId, ownedProjectIds()),
+                inArray(todosTable.projectId, accessibleProjectIds()),
               ),
             ),
         )
@@ -435,13 +487,103 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
    * assuming means the list grows on its own the day a project has members,
    * and means nothing has to be found and corrected then.
    */
+  const members = {
+    /** Who is on a project, owner first. Readable by anyone who can reach it. */
+    forProject: (projectId: number) =>
+      db
+        .select({
+          id: projectMembersTable.id,
+          userId: projectMembersTable.userId,
+          name: user.name,
+          email: user.email,
+          createdAt: projectMembersTable.createdAt,
+        })
+        .from(projectMembersTable)
+        .innerJoin(user, eq(user.id, projectMembersTable.userId))
+        .where(inArray(projectMembersTable.projectId, accessibleProjectIds(projectId)))
+        .orderBy(asc(projectMembersTable.id)),
+
+    /**
+     * Adds someone, scoped to projects this account may *administer*.
+     *
+     * Insert-from-select, so the permission is part of the statement: a member
+     * who could add members would be a member who can hand out access, which is
+     * the one thing the owner/member distinction exists to prevent. A foreign
+     * key would not have caught it — it checks that the project exists.
+     */
+    add: (projectId: number, userId: string) =>
+      db.all<{ id: number }>(sql`
+        insert into ${projectMembersTable} ("projectId", "userId", "addedBy", "createdAt")
+        select ${projectsTable.id}, ${userId}, ${ownerId}, ${now()}
+        from ${projectsTable}
+        where ${projectsTable.id} in ${ownedProjectIds(projectId)}
+          -- The owner's access already comes from projects.ownerId; a row here
+          -- would be a second fact that can disagree with the first.
+          and ${projectsTable.ownerId} <> ${userId}
+        returning id
+      `),
+
+    remove: (projectId: number, userId: string) =>
+      db
+        .delete(projectMembersTable)
+        .where(
+          and(
+            eq(projectMembersTable.userId, userId),
+            inArray(projectMembersTable.projectId, ownedProjectIds(projectId)),
+          ),
+        )
+        .returning({ id: projectMembersTable.id }),
+  };
+
+  /**
+   * Accounts that can be invited.
+   *
+   * Only an administrator sees this: handing every user a list of every other
+   * user's name and address is a directory, and nobody asked for one.
+   */
+  const directory = {
+    list: () =>
+      isAdmin
+        ? db
+            .select({ id: user.id, name: user.name, email: user.email, role: user.role })
+            .from(user)
+            .orderBy(asc(user.name))
+        : db
+            .select({ id: user.id, name: user.name, email: user.email, role: user.role })
+            .from(user)
+            .where(sql`0 = 1`),
+  };
+
   const assignees = {
+    /**
+     * Everyone who can reach the project: its owner and its members.
+     *
+     * Written as a union rather than a join, because the owner's access comes
+     * from a column and a member's from a row — the same fact reached two ways,
+     * which is exactly why the owner is not duplicated into the members table.
+     */
     forProject: (projectId: number) =>
       db
         .select({ id: user.id, name: user.name })
         .from(user)
-        .innerJoin(projectsTable, eq(projectsTable.ownerId, user.id))
-        .where(inArray(projectsTable.id, ownedProjectIds(projectId))),
+        .where(
+          and(
+            inArray(
+              user.id,
+              db
+                .select({ id: projectsTable.ownerId })
+                .from(projectsTable)
+                .where(inArray(projectsTable.id, accessibleProjectIds(projectId)))
+                .union(
+                  db
+                    .select({ id: projectMembersTable.userId })
+                    .from(projectMembersTable)
+                    .where(inArray(projectMembersTable.projectId, accessibleProjectIds(projectId))),
+                ),
+            ),
+          ),
+        )
+        .orderBy(asc(user.name)),
   };
 
   /**
@@ -546,7 +688,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
               db
                 .select({ id: todosTable.id })
                 .from(todosTable)
-                .where(inArray(todosTable.projectId, ownedProjectIds())),
+                .where(inArray(todosTable.projectId, accessibleProjectIds())),
             ),
           ),
         )
@@ -602,7 +744,10 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .from(projectsTable)
         .where(
           and(
-            eq(projectsTable.ownerId, ownerId),
+            // Everything reachable, not everything owned: a project someone
+            // invited you to is one of yours as far as this screen is
+            // concerned, and hiding it would leave no way in.
+            inArray(projectsTable.id, accessibleProjectIds()),
             isNull(projectsTable.deletedAt),
             options.cursor ? gt(projectsTable.id, options.cursor.id) : undefined,
           ),
@@ -610,6 +755,11 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .orderBy(asc(projectsTable.id))
         .limit((options.limit ?? 0) + 1),
 
+    /**
+     * Reachable, not owned. This answers "may I work here", and a member may.
+     * Deleting and sharing use the narrower scope; those are different
+     * questions with different answers.
+     */
     find: (id: number) =>
       db
         .select()
@@ -617,7 +767,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .where(
           and(
             eq(projectsTable.id, id),
-            eq(projectsTable.ownerId, ownerId),
+            inArray(projectsTable.id, accessibleProjectIds()),
             isNull(projectsTable.deletedAt),
           ),
         ),
@@ -629,6 +779,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .returning(),
 
     /** Soft delete. The row stays so it can be restored. */
+    /** Owner or admin only: deleting a project is not a member's to do. */
     remove: (id: number) =>
       db
         .update(projectsTable)
@@ -636,7 +787,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .where(
           and(
             eq(projectsTable.id, id),
-            eq(projectsTable.ownerId, ownerId),
+            inArray(projectsTable.id, ownedProjectIds()),
             isNull(projectsTable.deletedAt),
           ),
         )
@@ -655,7 +806,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           and(
             eq(todosTable.id, id),
             isNull(todosTable.deletedAt),
-            inArray(todosTable.projectId, ownedProjectIds()),
+            inArray(todosTable.projectId, accessibleProjectIds()),
           ),
         ),
 
@@ -665,7 +816,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .from(todosTable)
         .where(
           and(
-            inArray(todosTable.projectId, ownedProjectIds(projectId)),
+            inArray(todosTable.projectId, accessibleProjectIds(projectId)),
             isNull(todosTable.deletedAt),
             statusFilter(options.status),
             options.cursor ? afterCursor(options.sort ?? "created", options.cursor) : undefined,
@@ -701,7 +852,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           and(
             eq(todosTable.id, id),
             isNull(todosTable.deletedAt),
-            inArray(todosTable.projectId, ownedProjectIds()),
+            inArray(todosTable.projectId, accessibleProjectIds()),
           ),
         )
         .returning(),
@@ -784,7 +935,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           and(
             eq(todosTable.id, id),
             isNull(todosTable.deletedAt),
-            inArray(todosTable.projectId, ownedProjectIds()),
+            inArray(todosTable.projectId, accessibleProjectIds()),
           ),
         )
         .returning(),
@@ -798,7 +949,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
           and(
             eq(todosTable.id, id),
             isNull(todosTable.deletedAt),
-            inArray(todosTable.projectId, ownedProjectIds()),
+            inArray(todosTable.projectId, accessibleProjectIds()),
           ),
         )
         .returning(),
@@ -807,7 +958,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
       db
         .update(todosTable)
         .set({ deletedAt: null })
-        .where(and(eq(todosTable.id, id), inArray(todosTable.projectId, ownedProjectIds())))
+        .where(and(eq(todosTable.id, id), inArray(todosTable.projectId, accessibleProjectIds())))
         .returning(),
 
     /** Soft-deletes a project's todos alongside it. */
@@ -817,7 +968,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .set({ deletedAt: now() })
         .where(
           and(
-            inArray(todosTable.projectId, ownedProjectIds(projectId)),
+            inArray(todosTable.projectId, accessibleProjectIds(projectId)),
             isNull(todosTable.deletedAt),
           ),
         ),
@@ -826,7 +977,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
       db
         .update(todosTable)
         .set({ deletedAt: null })
-        .where(inArray(todosTable.projectId, ownedProjectIds(projectId))),
+        .where(inArray(todosTable.projectId, accessibleProjectIds(projectId))),
 
     /**
      * Full-text search across every project this user owns.
@@ -855,7 +1006,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
             .from(todosTable)
             .where(
               and(
-                inArray(todosTable.projectId, ownedProjectIds()),
+                inArray(todosTable.projectId, accessibleProjectIds()),
                 isNull(todosTable.deletedAt),
                 // Both columns, to match what the FTS path searches. A short
                 // query finding fewer things than a long one would be a strange
@@ -879,7 +1030,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
         .where(
           and(
             sql`${todosFts} MATCH ${match}`,
-            inArray(todosTable.projectId, ownedProjectIds()),
+            inArray(todosTable.projectId, accessibleProjectIds()),
             isNull(todosTable.deletedAt),
             // Keyset on relevance. Possible only because bm25() is usable in
             // WHERE, which was measured rather than assumed. The id tiebreak
@@ -971,7 +1122,7 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
       .from(todosTable)
       .where(
         and(
-          inArray(todosTable.projectId, ownedProjectIds()),
+          inArray(todosTable.projectId, accessibleProjectIds()),
           isNull(todosTable.deletedAt),
           todoId === undefined ? undefined : eq(todosTable.id, todoId),
         ),
@@ -1013,6 +1164,9 @@ export function createRepo(binding: D1Database | D1DatabaseSession, ownerId: str
   return {
     projects,
     todos,
+    members,
+    directory,
+    isAdmin,
     links,
     wouldCycle,
     assignees,

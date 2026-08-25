@@ -7,6 +7,7 @@ import type { Todo } from "../features/todos/types";
 import { recordServerError, recordShareView } from "./analytics";
 import { createAuth } from "./auth";
 import { exportKey, type ExportManifest, type ExportParams } from "./data-export";
+import { type UserRole } from "./db/auth-schema";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todoCursorValue, type Repo } from "./db/repo";
 import { TODO_LINK_KINDS, TODO_STATUSES } from "./db/schema";
@@ -54,6 +55,12 @@ const shareTokenParamSchema = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]
 // long enough for a real explanation, short enough that a comment cannot be
 // used as a place to put a file.
 const commentSchema = z.object({ body: z.string().trim().min(1).max(4000) });
+
+const memberSchema = z.object({ userId: z.string().min(1).max(200) });
+const memberParamSchema = z.object({
+  projectId: z.coerce.number().int().positive(),
+  userId: z.string().min(1).max(200),
+});
 
 const linkSchema = z.object({
   toTodoId: z.number().int().positive(),
@@ -151,7 +158,12 @@ const createTodoSchema = z.intersection(
 
 const app = new Hono<{
   Bindings: CloudflareBindings;
-  Variables: RequestIdVariables & { db: D1DatabaseSession; repo: Repo; userId: string };
+  Variables: RequestIdVariables & {
+    db: D1DatabaseSession;
+    repo: Repo;
+    userId: string;
+    role: UserRole;
+  };
 }>()
   // First in the chain so that everything downstream — including failures in
   // the auth middleware — can be tied back to one request. Also echoed to the
@@ -252,8 +264,19 @@ const app = new Hono<{
       return c.json({ error: "Unauthorized" }, 401);
     }
 
+    // Read from the database rather than from the session: Better Auth does not
+    // know this column, and a role carried in a token would be a role that
+    // keeps its old value until the token is refreshed.
+    const account = await c
+      .get("db")
+      .prepare("SELECT role FROM user WHERE id = ?")
+      .bind(session.user.id)
+      .first<{ role: UserRole }>();
+    const role = account?.role ?? "member";
+
     c.set("userId", session.user.id);
-    c.set("repo", createRepo(c.get("db"), session.user.id));
+    c.set("role", role);
+    c.set("repo", createRepo(c.get("db"), session.user.id, role));
     await next();
   })
   // Fans a mutation out to the user's other open tabs.
@@ -569,6 +592,54 @@ const app = new Hono<{
     const { projectId } = c.req.valid("param");
     return c.json(await c.get("repo").assignees.forProject(projectId));
   })
+  // Who is on a project. Readable by anyone who can reach it, because
+  // "who else is here" is part of working on it.
+  .get("/api/projects/:projectId/members", validate("param", projectIdParamSchema), async (c) => {
+    const { projectId } = c.req.valid("param");
+    const repo = c.get("repo");
+
+    const [project] = await repo.projects.find(projectId);
+    if (!project) return c.json({ error: "Not found" }, 404);
+
+    return c.json({
+      owner: { id: project.ownerId },
+      members: await repo.members.forProject(projectId),
+      // Whether *this* caller may change the list, rather than a rule the
+      // client re-derives and gets subtly wrong.
+      canManage: repo.isAdmin || project.ownerId === c.get("userId"),
+    });
+  })
+  .post(
+    "/api/projects/:projectId/members",
+    validate("param", projectIdParamSchema),
+    validate("json", memberSchema),
+    async (c) => {
+      const { projectId } = c.req.valid("param");
+      const { userId } = c.req.valid("json");
+
+      // The permission is inside the INSERT, so a member who tried this writes
+      // nothing and is told the same thing an unknown project would say.
+      const [added] = await c.get("repo").members.add(projectId, userId);
+      if (!added) return c.json({ error: "Not found" }, 404);
+
+      return c.json({ id: added.id }, 201);
+    },
+  )
+  .delete(
+    "/api/projects/:projectId/members/:userId",
+    validate("param", memberParamSchema),
+    async (c) => {
+      const { projectId, userId } = c.req.valid("param");
+      const [removed] = await c.get("repo").members.remove(projectId, userId);
+
+      if (!removed) return c.json({ error: "Not found" }, 404);
+
+      return c.body(null, 204);
+    },
+  )
+  // Only an administrator sees this. Handing every user a list of every other
+  // user's name and address is a directory, and nobody asked for one.
+  .get("/api/users", async (c) => c.json(await c.get("repo").directory.list()))
   .get("/api/todos/:id/links", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
     const repo = c.get("repo");

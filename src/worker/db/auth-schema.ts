@@ -1,4 +1,8 @@
 import { sql } from "drizzle-orm";
+
+/** What an account may do beyond its own data. */
+export const USER_ROLES = ["member", "admin"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
@@ -37,6 +41,19 @@ export const user = sqliteTable(
     email: text("email").notNull(),
     emailVerified: integer("email_verified", { mode: "boolean" }).default(false).notNull(),
     image: text("image"),
+    /**
+     * What this account may do beyond its own data.
+     *
+     * Added to Better Auth's table rather than kept in one of ours, because a
+     * separate table would let a user exist with no row in it and force every
+     * check to decide what that means. Better Auth never writes this column and
+     * `updateUser` must never be given it — the role is not the user's to set.
+     *
+     * `member` is the default and the overwhelming majority. An admin can reach
+     * project membership everywhere, which is the one power the distinction
+     * exists to grant.
+     */
+    role: text("role").notNull().default("member").$type<UserRole>(),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
       .notNull(),

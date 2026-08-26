@@ -2,6 +2,17 @@ import { expect, type Page } from "@playwright/test";
 
 export const PASSWORD = "correct horse battery";
 
+/**
+ * The account the warm-up creates, before any test runs.
+ *
+ * The first account to exist becomes the administrator (ADR 0032), and the E2E
+ * database starts empty on every run — so without this the first test to sign
+ * up would silently hold every permission, and an isolation test would pass
+ * while proving nothing. Fixed rather than unique because there is exactly one
+ * of it per run.
+ */
+export const ADMIN_EMAIL = "warm-up-admin@example.com";
+
 let counter = 0;
 
 /** Unique per call — the E2E database persists across tests within a run. */
@@ -39,7 +50,17 @@ export async function signOut(page: Page) {
 export async function createProject(page: Page, name: string) {
   await page.getByLabel("New project name").fill(name);
   await page.getByRole("button", { name: "Add Project" }).click();
-  await expect(page.getByRole("link", { name: new RegExp(name) })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: new RegExp(name) })).toBeVisible();
+}
+
+/**
+ * Opens a project from the list on the page.
+ *
+ * Scoped to `main` because the sidebar lists the same projects (ADR 0032), so
+ * an unscoped locator matches both and Playwright refuses to guess.
+ */
+export async function openProject(page: Page, name: string | RegExp) {
+  await page.getByRole("main").getByRole("link", { name }).click();
 }
 
 /**

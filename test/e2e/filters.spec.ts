@@ -1,11 +1,11 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUp } from "./helpers";
 
 test.describe("list filtering", () => {
   test.beforeEach(async ({ page }) => {
     await signUp(page);
     await createProject(page, "Filter project");
-    await page.getByRole("link", { name: /Filter project/ }).click();
+    await openProject(page, /Filter project/);
     await createTodo(page, "still open");
     await createTodo(page, "finished");
     await page.getByRole("checkbox", { name: "「finished」を完了にする" }).click();

@@ -33,7 +33,46 @@ export function createAuth(env: CloudflareBindings, db: D1Database | D1DatabaseS
       provider: "sqlite",
       schema: authSchema,
     }),
+    databaseHooks: {
+      user: {
+        create: {
+          /**
+           * The first account to exist becomes the administrator.
+           *
+           * Someone has to be able to grant the role, and nobody can until one
+           * exists. The alternatives were worse: an endpoint that grants it is
+           * an endpoint that can be called by anyone who reaches it, and a
+           * documented SQL command is a product feature that only works if you
+           * have a database console.
+           *
+           * "First" is checked against the table rather than against a flag, so
+           * it cannot be re-triggered by deleting the flag — only by deleting
+           * every account, which is a different situation entirely.
+           */
+          before: async (user) => {
+            const existing = await env.DB.prepare("SELECT count(*) AS n FROM user").first<{
+              n: number;
+            }>();
+
+            return { data: { ...user, role: existing?.n === 0 ? "admin" : "member" } };
+          },
+        },
+      },
+    },
     user: {
+      additionalFields: {
+        /**
+         * Declared so the column survives the round trip. Better Auth drops
+         * fields it has not been told about — including ones a database hook
+         * returns — so without this the bootstrap above wrote nothing and every
+         * account came out a member.
+         *
+         * `input: false` is the other half: it means the sign-up and
+         * update-user endpoints ignore the field even when it is sent, so the
+         * role can only ever be set by the hook or by `repo.roles.set`.
+         */
+        role: { type: "string", required: false, defaultValue: "member", input: false },
+      },
       deleteUser: {
         enabled: true,
         // Runs before the user row goes. It has to: `projects.ownerId`

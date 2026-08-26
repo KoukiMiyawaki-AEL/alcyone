@@ -72,10 +72,21 @@ export async function signUp(email: string, name = "Test user"): Promise<Headers
   return headers;
 }
 
+/** The account `resetAll` seeds so that no test's own user becomes the admin. */
+export const SEED_ADMIN_ID = "seed-admin";
+
 export const PASSWORD = "correct horse battery";
 
-/** Clears every table these tests touch, children before parents. */
-export async function resetAll() {
+/**
+ * Clears every table these tests touch, children before parents.
+ *
+ * Then seeds one account, because the first one to exist becomes the
+ * administrator (src/worker/auth.ts). Without the seed, whichever user a test
+ * happened to sign up first would silently hold every permission, and an
+ * isolation test would pass while proving nothing. Pass `seedAdmin: false` only
+ * to test the bootstrap itself.
+ */
+export async function resetAll({ seedAdmin = true } = {}) {
   // Order matters: attachments -> todos -> projects -> user. D1 enforces the
   // foreign keys, so a wrong order fails loudly rather than leaving orphans.
   // `todos.parentId` points into `todos`, and SQLite checks foreign keys row
@@ -101,5 +112,16 @@ export async function resetAll() {
     "user",
   ]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
+  }
+
+  // A row rather than a sign-up: it only has to occupy "first account", and
+  // hashing a password nobody signs in with would cost every test a scrypt run.
+  if (seedAdmin) {
+    await env.DB.prepare(
+      `INSERT INTO user (id, name, email, email_verified, role, created_at, updated_at)
+       VALUES (?, 'Seed', 'seed@example.invalid', 0, 'admin', ?, ?)`,
+    )
+      .bind(SEED_ADMIN_ID, Date.now(), Date.now())
+      .run();
   }
 }

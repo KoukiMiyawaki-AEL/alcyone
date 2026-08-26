@@ -7,7 +7,7 @@ import type { Todo } from "../features/todos/types";
 import { recordServerError, recordShareView } from "./analytics";
 import { createAuth } from "./auth";
 import { exportKey, type ExportManifest, type ExportParams } from "./data-export";
-import { type UserRole } from "./db/auth-schema";
+import { USER_ROLES, type UserRole } from "./db/auth-schema";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todoCursorValue, type Repo } from "./db/repo";
 import { TODO_LINK_KINDS, TODO_STATUSES } from "./db/schema";
@@ -56,7 +56,13 @@ const shareTokenParamSchema = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]
 // used as a place to put a file.
 const commentSchema = z.object({ body: z.string().trim().min(1).max(4000) });
 
-const memberSchema = z.object({ userId: z.string().min(1).max(200) });
+// Either an id, which an administrator picks from the directory, or an address,
+// which an owner already knows. A union rather than two optional fields: "both"
+// and "neither" are not states this endpoint should have to interpret.
+const memberSchema = z.union([
+  z.object({ userId: z.string().min(1).max(200) }),
+  z.object({ email: z.string().trim().toLowerCase().pipe(z.email()) }),
+]);
 const memberParamSchema = z.object({
   projectId: z.coerce.number().int().positive(),
   userId: z.string().min(1).max(200),
@@ -615,11 +621,25 @@ const app = new Hono<{
     validate("json", memberSchema),
     async (c) => {
       const { projectId } = c.req.valid("param");
-      const { userId } = c.req.valid("json");
+      const body = c.req.valid("json");
+      const repo = c.get("repo");
 
-      // The permission is inside the INSERT, so a member who tried this writes
-      // nothing and is told the same thing an unknown project would say.
-      const [added] = await c.get("repo").members.add(projectId, userId);
+      // Accepting an address lets someone probe which ones have accounts, one
+      // guess at a time. Bounded here rather than left open, and keyed by IP
+      // like the other unauthenticated-adjacent surface.
+      if ("email" in body) {
+        const limited = await enforce(c.env.PUBLIC_RATE_LIMITER, clientIp(c), 60);
+        if (limited) return limited;
+      }
+
+      // The permission is inside the INSERT either way, so a member who tried
+      // this writes nothing and is told the same thing an unknown project
+      // would say.
+      const [added] =
+        "email" in body
+          ? await repo.members.addByEmail(projectId, body.email)
+          : await repo.members.add(projectId, body.userId);
+
       if (!added) return c.json({ error: "Not found" }, 404);
 
       return c.json({ id: added.id }, 201);
@@ -640,6 +660,23 @@ const app = new Hono<{
   // Only an administrator sees this. Handing every user a list of every other
   // user's name and address is a directory, and nobody asked for one.
   .get("/api/users", async (c) => c.json(await c.get("repo").directory.list()))
+  .patch(
+    "/api/users/:userId/role",
+    validate("param", z.object({ userId: z.string().min(1).max(200) })),
+    validate("json", z.object({ role: z.enum(USER_ROLES) })),
+    async (c) => {
+      const { userId } = c.req.valid("param");
+      const { role } = c.req.valid("json");
+
+      // Both the permission and the last-administrator rule live in the
+      // statement, so a member gets the same answer as an unknown account and
+      // there is no window where two admins demote each other at once.
+      const [changed] = await c.get("repo").roles.set(userId, role);
+      if (!changed) return c.json({ error: "Not found" }, 404);
+
+      return c.body(null, 204);
+    },
+  )
   .get("/api/todos/:id/links", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
     const repo = c.get("repo");

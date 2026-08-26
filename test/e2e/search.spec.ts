@@ -1,11 +1,11 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUp } from "./helpers";
 
 test.describe("search", () => {
   test("finds a todo from another project and links to it", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Work");
-    await page.getByRole("link", { name: "Work" }).click();
+    await openProject(page, "Work");
     await createTodo(page, "設計ドキュメントを書く");
 
     await page.getByRole("link", { name: "検索" }).click();
@@ -22,7 +22,7 @@ test.describe("search", () => {
   test("a search survives a reload and reports no matches plainly", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Work");
-    await page.getByRole("link", { name: "Work" }).click();
+    await openProject(page, "Work");
     await createTodo(page, "write the plan");
 
     await page.goto("/search?q=nothingmatchesthis");

@@ -1,11 +1,11 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUp } from "./helpers";
 
 test.describe("board view", () => {
   test("moves a task between columns and the move survives a reload", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Board");
-    await page.getByRole("link", { name: "Board" }).click();
+    await openProject(page, "Board");
     await createTodo(page, "動かすタスク");
 
     await page.getByRole("navigation").first().getByRole("link", { name: "ボード" }).click();
@@ -30,7 +30,7 @@ test.describe("board view", () => {
   test("the view is part of the link, and the list still filters", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Board");
-    await page.getByRole("link", { name: "Board" }).click();
+    await openProject(page, "Board");
     await createTodo(page, "一覧のタスク");
 
     await page.getByRole("navigation").first().getByRole("link", { name: "ボード" }).click();
@@ -50,7 +50,7 @@ test.describe("adding a task", () => {
     // to be opened and filled in anyway.
     await signUp(page);
     await createProject(page, "Planning");
-    await page.getByRole("link", { name: "Planning" }).click();
+    await openProject(page, "Planning");
 
     await expect(page.getByLabel("新しいタスクのタイトル")).toBeHidden();
 

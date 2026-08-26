@@ -1,6 +1,6 @@
 import { chromium, type FullConfig } from "@playwright/test";
 
-import { PASSWORD } from "./helpers";
+import { ADMIN_EMAIL, PASSWORD } from "./helpers";
 
 /**
  * Visits each route once before the suite starts.
@@ -15,8 +15,12 @@ import { PASSWORD } from "./helpers";
  *
  * It signs in first, because the guarded routes redirect before their chunk is
  * ever requested: warming them anonymously compiles the login screen four
- * times and nothing else. The account it creates is inert — every test makes
- * its own.
+ * times and nothing else.
+ *
+ * That account is no longer inert. Being the first to exist makes it the
+ * administrator (ADR 0032), which is what keeps every account a test signs up
+ * an ordinary member — so creating it is a precondition, not a warm-up, and it
+ * happens outside the forgiving block below.
  */
 export default async function warmUp(config: FullConfig): Promise<void> {
   const baseURL = config.projects[0]?.use.baseURL;
@@ -34,12 +38,24 @@ export default async function warmUp(config: FullConfig): Promise<void> {
   try {
     await page.goto(url("/login"));
     await page.getByRole("button", { name: "アカウントを作る" }).click();
-    await page.getByLabel("Name").fill("warm up");
-    await page.getByLabel("Email").fill(`warmup-${Date.now()}@example.com`);
+    await page.getByLabel("Name").fill("Warm up");
+    await page.getByLabel("Email").fill(ADMIN_EMAIL);
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Create account" }).click();
     await page.getByRole("heading", { level: 1, name: "Projects" }).waitFor();
+  } catch (error) {
+    // Unlike the compilation below, this one has to stop the run: without it
+    // whichever test signs up first becomes the administrator, and the suite
+    // goes green having tested a different application.
+    await browser.close();
+    throw new Error(
+      `[warm-up] could not create the administrator: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 
+  try {
     // `/projects/1` almost certainly does not exist; the route's module still
     // compiles, which is the whole point. Same for the rest.
     for (const path of ["/projects/1", "/search", "/account", "/s/warmup"]) {

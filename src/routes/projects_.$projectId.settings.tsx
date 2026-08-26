@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -14,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { addMember, removeMember } from "@/features/projects/members-api";
+import { addMember, addMemberByEmail, removeMember } from "@/features/projects/members-api";
 import type { Project } from "@/features/projects/types";
 import { apiClient } from "@/lib/api-client";
 
@@ -126,6 +127,7 @@ function ProjectSettingsComponent() {
   const { projectId } = Route.useParams();
   const { project, owner, members, canManage, directory, error } = Route.useLoaderData();
   const [picked, setPicked] = useState("");
+  const [email, setEmail] = useState("");
 
   // Everyone who is not already on it. The owner is not a member row, so they
   // are excluded here rather than by the server refusing later.
@@ -212,50 +214,90 @@ function ProjectSettingsComponent() {
             button the API refuses.
           */}
           {canManage ? (
-            <div className="flex flex-wrap items-end gap-2 border-t border-border pt-4">
-              <div className="flex flex-1 flex-col gap-1.5">
-                <Label htmlFor="member-picker">追加するユーザー</Label>
-                <Select
-                  items={invitable.map((a) => ({ value: a.id, label: `${a.name}（${a.email}）` }))}
-                  value={picked}
-                  onValueChange={(value) => setPicked(String(value))}
-                >
-                  <SelectTrigger id="member-picker" className="w-full">
-                    <SelectValue placeholder="選択してください" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {invitable.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.name}（{account.email}）
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                disabled={picked === ""}
-                onClick={async () => {
-                  if (await addMember(projectId, picked)) {
-                    setPicked("");
+            <div className="flex flex-col gap-4 border-t border-border pt-4">
+              {/*
+                The address field, not the picker, is the one everyone gets.
+                Reading the directory is an administrator's privilege, so an
+                owner would otherwise be looking at an empty list with no way to
+                invite the person they already have in mind.
+              */}
+              <form
+                className="flex flex-wrap items-end gap-2"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  if (email.trim() === "") return;
+                  if (await addMemberByEmail(projectId, email.trim())) {
+                    setEmail("");
                     await router.invalidate();
                   }
                 }}
               >
-                <UserPlusIcon className="size-4" />
-                追加
-              </Button>
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label htmlFor="member-email">メールアドレスで追加</Label>
+                  <Input
+                    id="member-email"
+                    type="email"
+                    autoComplete="off"
+                    placeholder="person@example.com"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
+                </div>
+                <Button type="submit" disabled={email.trim() === ""}>
+                  <UserPlusIcon className="size-4" />
+                  追加
+                </Button>
+              </form>
+
+              {/*
+                An administrator already has the list, so they get to pick from
+                it instead of retyping an address they can see.
+              */}
+              {invitable.length > 0 ? (
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="flex flex-1 flex-col gap-1.5">
+                    <Label htmlFor="member-picker">一覧から追加</Label>
+                    <Select
+                      items={invitable.map((a) => ({
+                        value: a.id,
+                        label: `${a.name}（${a.email}）`,
+                      }))}
+                      value={picked}
+                      onValueChange={(value) => setPicked(String(value))}
+                    >
+                      <SelectTrigger id="member-picker" className="w-full">
+                        <SelectValue placeholder="選択してください" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {invitable.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.name}（{account.email}）
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    variant="outline"
+                    disabled={picked === ""}
+                    onClick={async () => {
+                      if (await addMember(projectId, picked)) {
+                        setPicked("");
+                        await router.invalidate();
+                      }
+                    }}
+                  >
+                    <UserPlusIcon className="size-4" />
+                    追加
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="border-t border-border pt-4 text-sm text-muted-foreground">
               参加者を変更できるのは、プロジェクトのオーナーと管理者だけです。
             </p>
           )}
-
-          {canManage && invitable.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              追加できるユーザーがいません。ユーザー一覧は管理者だけが取得できます。
-            </p>
-          ) : null}
         </CardContent>
       </Card>
     </div>

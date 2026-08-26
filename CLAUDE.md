@@ -241,6 +241,11 @@ mutationは直接`apiClient`を叩かず、feature配下のラッパ（例: `src
 loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catchの外で投げる**。
 どちらもthrowで動くので、catchの中だと握り潰されて汎用エラー表示になる（実際に一度踏んだ）。
 
+**画面に出す権限の判定もコンポーネント側で`useAuth()`から読む。** `beforeLoad`の
+`redirect()`は「セッションがまだ`isPending`だった1回」で終わり、届いたあとに再実行されない
+——ハードリロードで直接URLを開いた人は弾かれずにそのまま画面に残る（`/admin`で実際に踏んだ）。
+サーバは同じ要求をどのみち拒むので、`beforeLoad`は白い画面を避けるための飾りでしかない。
+
 **セッションをReactの再レンダリングの条件に使うときは`useAuth()`から読む。**
 `Route.useRouteContext()`はmatchesが再解決されたときにしか更新されないので、
 「セッションが後から届いたら何かを始める」用途では**初回ロードで永久に発火しない**。
@@ -255,7 +260,7 @@ loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catch�
 APIのパスは必ず`/api/`配下に置くこと。
 
 画面は `/`（Project一覧）、`/projects/$projectId`（Todo。一覧/ボード/タイムラインを`view`で切り替え）、
-`/projects/$projectId/settings`（参加者）、
+`/projects/$projectId/settings`（参加者）、`/admin`（ユーザー管理。管理者のみ）、
 `/search`、`/account`、`/s/$token`（公開共有）、`/dev/design-system`。
 動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。
 存在しないリソースはloaderで`notFound()`を投げる。**`notFound()`はthrowで動くので、
@@ -306,6 +311,12 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
   「所有者 または 参加者 または 管理者」、後者は「所有者 または 管理者」。**タスクを触るのが前者、
   プロジェクトを消す・共有する・参加者を変えるのが後者**で、混ぜると参加者が鍵を配れるようになる
   （[ADR 0031](./docs/adr/0031-project-membership-and-roles.md)）。
+- **ロールはBetter Authの`additionalFields`として宣言する（`input: false`付き）。** 宣言しないと
+  Better Authが知らないフィールドを落とすので、`databaseHooks`が返した値も保存されない。
+  `input: false`があるのでサインアップにも`update-user`にも渡せない。
+  **最初に作られたアカウントが管理者になる**（[ADR 0032](./docs/adr/0032-inviting-by-email-and-bootstrapping-the-admin.md)）。
+- **権限や人数の条件はWHEREに入れて1文にする。** 「最後の管理者は降格できない」を
+  「数える→更新する」の2文にすると、最後の2人が同時に互いを降格できる隙間ができる。
 - **DBアクセスは`createRepo(binding, ownerId, role)`経由で、返るメソッドは全てスコープ済み。**
   ハンドラがスコープされていないクエリを受け取ることがないので、絞り込みを忘れられない。
   ここに新しいメソッドを足すときは、必ず`ownerId`で絞ること（[ADR 0014](./docs/adr/0014-user-owned-projects.md)）。
@@ -341,6 +352,14 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 | `worker` | `test/worker/*.test.ts` | workerd + ローカルD1 | Hono APIを`app.request()`で直接叩く統合テスト |
 | `components` | `test/components/*.test.tsx` | happy-dom + Testing Library | Reactコンポーネント |
 | E2E | `test/e2e/*.spec.ts` | Playwright + 実ブラウザ | 上2つの**隙間**（ログイン→セッション→所有スコープ） |
+
+**最初のアカウントは管理者になるので、テストは必ず管理者を先に用意する。** worker側は
+`resetAll()`が1行シードし（ブートストラップ自体を試すときだけ`resetAll({ seedAdmin: false })`）、
+E2E側は`globalSetup`のwarm-upが`ADMIN_EMAIL`で作る。用意し忘れると、そのファイルが最初に
+サインアップしたユーザーが全権限を持ち、**所有スコープのテストが何も証明せずに緑になる**。
+
+**プロジェクト名のリンクはサイドバーにも出る。** E2Eで`getByRole("link", { name })`を
+素で書くとstrict mode違反になるので、`openProject()`（`main`に絞る）を使う。
 
 E2Eは`pnpm run test:e2e`（`check`にも含まれる）。専用DB（`.wrangler/e2e-state`）で毎回空から
 起動するので、**devサーバが5173で動いていると失敗する**（開発用DBを守るための意図的な挙動）。

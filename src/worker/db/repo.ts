@@ -523,6 +523,31 @@ export function createRepo(
         returning id
       `),
 
+    /**
+     * Adds by email address rather than by id.
+     *
+     * The directory is an administrator's to see, which left an ordinary owner
+     * with a member list and no way to add to it. An address is something the
+     * person inviting already knows, so accepting one grants no knowledge —
+     * unlike a list of everyone.
+     *
+     * It does let someone learn whether an address has an account, one guess at
+     * a time, which is why this route is rate limited. Refusing to say anything
+     * would mean an owner cannot tell "wrong address" from "already a member",
+     * and would not stop the probing either.
+     */
+    addByEmail: (projectId: number, email: string) =>
+      db.all<{ id: number }>(sql`
+        insert into ${projectMembersTable} ("projectId", "userId", "addedBy", "createdAt")
+        select ${projectsTable.id}, ${user.id}, ${ownerId}, ${now()}
+        from ${projectsTable}, ${user}
+        where ${projectsTable.id} in ${ownedProjectIds(projectId)}
+          and ${user.email} = ${email}
+          -- The owner's access already comes from projects.ownerId.
+          and ${projectsTable.ownerId} <> ${user.id}
+        returning id
+      `),
+
     remove: (projectId: number, userId: string) =>
       db
         .delete(projectMembersTable)
@@ -533,6 +558,43 @@ export function createRepo(
           ),
         )
         .returning({ id: projectMembersTable.id }),
+  };
+
+  const roles = {
+    /**
+     * Changes what an account may do. Administrators only.
+     *
+     * Refuses to remove the last administrator: the role can only be granted by
+     * someone who holds it, so an installation with none has no way back short
+     * of a database console. The check and the write are one statement, because
+     * two would leave a window where both of the last two admins demote each
+     * other.
+     */
+    set: (userId: string, role: UserRole) => {
+      if (!isAdmin)
+        return db
+          .select({ id: user.id })
+          .from(user)
+          .where(sql`0 = 1`);
+
+      // Only demotion can strip the last one, and only if the target holds the
+      // role now. Written as a builder rather than raw SQL because SQLite
+      // rejects a qualified column on the left of `SET`, which is what
+      // interpolating the column into a template produces.
+      const survives =
+        role === "admin"
+          ? undefined
+          : or(
+              ne(user.role, "admin"),
+              sql`(select count(*) from ${user} where ${user.role} = 'admin') > 1`,
+            );
+
+      return db
+        .update(user)
+        .set({ role })
+        .where(and(eq(user.id, userId), survives))
+        .returning({ id: user.id });
+    },
   };
 
   /**
@@ -1165,6 +1227,7 @@ export function createRepo(
     projects,
     todos,
     members,
+    roles,
     directory,
     isAdmin,
     links,

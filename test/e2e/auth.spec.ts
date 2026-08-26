@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { PASSWORD, signIn, signOut, signUp } from "./helpers";
+import { openProject, PASSWORD, signIn, signOut, signUp } from "./helpers";
 
 /**
  * These cover the seams that neither vitest project can see. The worker tests
@@ -73,6 +73,6 @@ test.describe("authentication", () => {
 async function createProjectAndOpen(page: import("@playwright/test").Page) {
   await page.getByLabel("New project name").fill("Deep link target");
   await page.getByRole("button", { name: "Add Project" }).click();
-  await page.getByRole("link", { name: /Deep link target/ }).click();
+  await openProject(page, /Deep link target/);
   await expect(page.getByRole("heading", { level: 1, name: "Deep link target" })).toBeVisible();
 }

@@ -46,8 +46,10 @@ export const user = sqliteTable(
      *
      * Added to Better Auth's table rather than kept in one of ours, because a
      * separate table would let a user exist with no row in it and force every
-     * check to decide what that means. Better Auth never writes this column and
-     * `updateUser` must never be given it — the role is not the user's to set.
+     * check to decide what that means. It is declared to Better Auth as an
+     * additional field with `input: false` (src/worker/auth.ts): declared so a
+     * hook can write it, `input: false` so no endpoint accepts it from a
+     * request. The role is not the user's to set.
      *
      * `member` is the default and the overwhelming majority. An admin can reach
      * project membership everywhere, which is the one power the distinction

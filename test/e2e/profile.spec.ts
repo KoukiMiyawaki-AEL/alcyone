@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUp } from "./helpers";
 
 test.describe("display name", () => {
   test("is editable, and appears where the account acts", async ({ page }) => {
@@ -17,7 +17,7 @@ test.describe("display name", () => {
 
     await page.getByRole("link", { name: "プロジェクト" }).click();
     await createProject(page, "Naming");
-    await page.getByRole("link", { name: "Naming" }).click();
+    await openProject(page, "Naming");
     await createTodo(page, "誰かのタスク");
 
     await page.getByRole("button", { name: "「誰かのタスク」の操作" }).click();
@@ -65,7 +65,7 @@ test.describe("assignment", () => {
 
     await page.getByRole("link", { name: "プロジェクト" }).click();
     await createProject(page, "Assigning");
-    await page.getByRole("link", { name: "Assigning" }).click();
+    await openProject(page, "Assigning");
     await createTodo(page, "割り当てるタスク");
 
     await page.getByRole("button", { name: "「割り当てるタスク」の操作" }).click();
@@ -85,14 +85,14 @@ test.describe("assignment", () => {
     await page.getByRole("button", { name: "保存" }).click();
 
     await page.getByRole("link", { name: "プロジェクト" }).click();
-    await page.getByRole("link", { name: "Assigning" }).click();
+    await openProject(page, "Assigning");
     await expect(page.getByLabel("担当: 改名後")).toBeVisible();
   });
 
   test("a task can be handed back to nobody", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Assigning");
-    await page.getByRole("link", { name: "Assigning" }).click();
+    await openProject(page, "Assigning");
     await createTodo(page, "戻すタスク");
 
     await page.getByRole("button", { name: "「戻すタスク」の操作" }).click();

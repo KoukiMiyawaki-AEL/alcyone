@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
-import { jsonHeaders, PASSWORD, resetAll, signUp } from "./auth-helper";
+import { jsonHeaders, PASSWORD, resetAll, SEED_ADMIN_ID, signUp } from "./auth-helper";
 
 async function createProject(headers: Headers, name: string): Promise<number> {
   const res = await app.request(
@@ -23,7 +23,13 @@ async function addTodo(headers: Headers, projectId: number, title: string): Prom
 }
 
 async function count(table: string): Promise<number> {
-  const row = await env.DB.prepare(`SELECT count(*) AS n FROM ${table}`).first<{ n: number }>();
+  // `resetAll` seeds one account so that no test's own user accidentally
+  // becomes the administrator. It is not part of what these tests create, so
+  // counting it would put every expectation here one too high.
+  const skipSeed = table === "user" ? ` WHERE id <> '${SEED_ADMIN_ID}'` : "";
+  const row = await env.DB.prepare(`SELECT count(*) AS n FROM ${table}${skipSeed}`).first<{
+    n: number;
+  }>();
   return row?.n ?? 0;
 }
 

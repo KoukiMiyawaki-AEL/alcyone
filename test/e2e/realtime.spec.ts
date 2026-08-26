@@ -21,7 +21,7 @@ test.describe("realtime", () => {
 
     // No reload, no click on this page. If the socket is not delivering, this
     // times out rather than passing for the wrong reason.
-    await expect(second.getByText("Opened elsewhere")).toBeVisible();
+    await expect(second.getByRole("main").getByText("Opened elsewhere")).toBeVisible();
   });
 
   test("a second user's change does not reach the first", async ({ browser, context }) => {
@@ -39,9 +39,9 @@ test.describe("realtime", () => {
     await signUp(theirs);
     await createProject(theirs, "Theirs");
 
-    await expect(theirs.getByText("Theirs")).toBeVisible();
-    await expect(mine.getByText("Theirs")).toBeHidden();
-    await expect(mine.getByText("Mine")).toBeVisible();
+    await expect(theirs.getByRole("main").getByText("Theirs")).toBeVisible();
+    await expect(mine.getByRole("main").getByText("Theirs")).toBeHidden();
+    await expect(mine.getByRole("main").getByText("Mine")).toBeVisible();
 
     await otherContext.close();
   });

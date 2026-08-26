@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUp } from "./helpers";
 
 test.describe("share links", () => {
   test("a signed-out visitor can read a shared project but not edit it", async ({
@@ -9,7 +9,7 @@ test.describe("share links", () => {
     const owner = await context.newPage();
     await signUp(owner);
     await createProject(owner, "Shared board");
-    await owner.getByRole("link", { name: "Shared board" }).click();
+    await openProject(owner, "Shared board");
     await createTodo(owner, "publicly visible");
 
     await owner.getByRole("button", { name: /^共有/ }).click();
@@ -35,7 +35,7 @@ test.describe("share links", () => {
     const owner = await context.newPage();
     await signUp(owner);
     await createProject(owner, "Temporarily shared");
-    await owner.getByRole("link", { name: "Temporarily shared" }).click();
+    await openProject(owner, "Temporarily shared");
 
     await owner.getByRole("button", { name: /^共有/ }).click();
     await owner.getByRole("button", { name: "共有リンクを発行" }).click();

@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUp } from "./helpers";
 
 /** The views live in the sidebar now, one addressable link each. */
 const viewSwitch = (page: import("@playwright/test").Page) => page.getByRole("navigation").first();
@@ -22,7 +22,7 @@ test.describe("timeline view", () => {
   test("shows dated tasks on the axis and lists the undated ones", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Schedule");
-    await page.getByRole("link", { name: "Schedule" }).click();
+    await openProject(page, "Schedule");
 
     await scheduleTask(page, "日程のあるタスク", "2026-11-02", "2026-11-06");
     await expect(page.getByText("日程のあるタスク")).toBeVisible();
@@ -47,7 +47,7 @@ test.describe("timeline view", () => {
     // see that a month is free if the month is not drawn.
     await signUp(page);
     await createProject(page, "Empty");
-    await page.getByRole("link", { name: "Empty" }).click();
+    await openProject(page, "Empty");
     await createTodo(page, "日付なし");
 
     await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
@@ -61,7 +61,7 @@ test.describe("timeline view", () => {
   test("marks today and labels the days, not just the months", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Days");
-    await page.getByRole("link", { name: "Days" }).click();
+    await openProject(page, "Days");
     await createTodo(page, "なにか");
 
     await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
@@ -77,7 +77,7 @@ test.describe("timeline view", () => {
     // but only through a letterbox.
     await signUp(page);
     await createProject(page, "Zoom");
-    await page.getByRole("link", { name: "Zoom" }).click();
+    await openProject(page, "Zoom");
     await createTodo(page, "なにか");
 
     await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
@@ -103,7 +103,7 @@ test.describe("timeline view", () => {
   test("says so when no task has a date yet", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Schedule");
-    await page.getByRole("link", { name: "Schedule" }).click();
+    await openProject(page, "Schedule");
     await createTodo(page, "日付なし");
 
     await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
@@ -114,7 +114,7 @@ test.describe("timeline view", () => {
   test("opens the detail form from a bar", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Schedule");
-    await page.getByRole("link", { name: "Schedule" }).click();
+    await openProject(page, "Schedule");
 
     await scheduleTask(page, "編集する", "2026-11-18", "2026-11-20");
 
@@ -171,7 +171,7 @@ test.describe("rescheduling on the chart", () => {
   test("dragging a bar moves both dates and keeps the duration", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Schedule");
-    await page.getByRole("link", { name: "Schedule" }).click();
+    await openProject(page, "Schedule");
 
     const from = daysFromToday(2);
     const to = daysFromToday(4);
@@ -198,7 +198,7 @@ test.describe("rescheduling on the chart", () => {
     // change that did not happen.
     await signUp(page);
     await createProject(page, "Schedule");
-    await page.getByRole("link", { name: "Schedule" }).click();
+    await openProject(page, "Schedule");
 
     const from = daysFromToday(2);
     await scheduleTask(page, "触るだけ", from, daysFromToday(4));
@@ -216,7 +216,7 @@ test.describe("rescheduling on the chart", () => {
     // The ghost is what makes the change legible before it is committed.
     await signUp(page);
     await createProject(page, "Schedule");
-    await page.getByRole("link", { name: "Schedule" }).click();
+    await openProject(page, "Schedule");
 
     const from = daysFromToday(2);
     const to = daysFromToday(4);
@@ -245,7 +245,7 @@ test.describe("rescheduling on the chart", () => {
   test("dragging an edge moves only that end", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Schedule");
-    await page.getByRole("link", { name: "Schedule" }).click();
+    await openProject(page, "Schedule");
 
     const from = daysFromToday(2);
     await scheduleTask(page, "伸ばす予定", from, daysFromToday(4));

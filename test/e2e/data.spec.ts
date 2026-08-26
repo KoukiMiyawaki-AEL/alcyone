@@ -1,5 +1,13 @@
 import { expect, test } from "./fixtures";
-import { PASSWORD, createProject, createTodo, rowAction, signOut, signUp } from "./helpers";
+import {
+  createProject,
+  createTodo,
+  openProject,
+  PASSWORD,
+  rowAction,
+  signOut,
+  signUp,
+} from "./helpers";
 
 test.describe("ownership and deletion", () => {
   test("one user's projects are invisible to another", async ({ page }) => {
@@ -9,13 +17,15 @@ test.describe("ownership and deletion", () => {
 
     await signUp(page);
     await expect(page.getByText("No projects yet")).toBeVisible();
-    await expect(page.getByRole("link", { name: /Alice's private project/ })).toBeHidden();
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /Alice's private project/ }),
+    ).toBeHidden();
   });
 
   test("another user's project id is not reachable by URL", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Private");
-    await page.getByRole("link", { name: /Private/ }).click();
+    await openProject(page, /Private/);
     const victimUrl = page.url();
     await signOut(page);
 
@@ -29,7 +39,7 @@ test.describe("ownership and deletion", () => {
   test("deleting a todo offers Undo, and Undo restores it", async ({ page }) => {
     await signUp(page);
     await createProject(page, "Undo project");
-    await page.getByRole("link", { name: /Undo project/ }).click();
+    await openProject(page, /Undo project/);
     await createTodo(page, "bring me back");
 
     await rowAction(page, "bring me back", "削除");

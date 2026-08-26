@@ -54,6 +54,21 @@ async function addMember(headers: Headers, projectId: number, who: string) {
   );
 }
 
+async function setRole(headers: Headers, target: string, role: string) {
+  return app.request(
+    `/api/users/${target}/role`,
+    { method: "PATCH", headers: jsonHeaders(headers), body: JSON.stringify({ role }) },
+    env,
+  );
+}
+
+async function roleOf(id: string): Promise<string | undefined> {
+  const row = await env.DB.prepare("SELECT role FROM user WHERE id = ?")
+    .bind(id)
+    .first<{ role: string }>();
+  return row?.role;
+}
+
 async function projectsOf(headers: Headers): Promise<string[]> {
   const res = await app.request("/api/projects", { headers }, env);
   return ((await res.json()) as { items: Project[] }).items.map((p) => p.name);
@@ -199,6 +214,69 @@ describe("membership", () => {
   });
 });
 
+describe("inviting by address", () => {
+  let owner: Headers;
+  let guest: Headers;
+  let projectId: number;
+
+  beforeEach(async () => {
+    await resetAll();
+    owner = await signUp("owner@example.com", "Owner");
+    guest = await signUp("guest@example.com", "Guest");
+    projectId = await createProject(owner, "Shared work");
+  });
+
+  async function inviteByEmail(headers: Headers, email: string) {
+    return app.request(
+      `/api/projects/${projectId}/members`,
+      {
+        method: "POST",
+        headers: jsonHeaders(headers, uniqueIp()),
+        body: JSON.stringify({ email }),
+      },
+      env,
+    );
+  }
+
+  it("lets an owner add someone without seeing the directory", async () => {
+    // The gap this closes: the account list is an administrator's to see, which
+    // left an ordinary owner with a member list and no way to add to it.
+    const res = await inviteByEmail(owner, "guest@example.com");
+
+    expect(res.status).toBe(201);
+    expect(await projectsOf(guest)).toEqual(["Shared work"]);
+  });
+
+  it("matches an address regardless of case", async () => {
+    const res = await inviteByEmail(owner, "GUEST@Example.com");
+
+    expect(res.status).toBe(201);
+    expect(await projectsOf(guest)).toEqual(["Shared work"]);
+  });
+
+  it("says not found for an address with no account", async () => {
+    const res = await inviteByEmail(owner, "nobody@example.com");
+    expect(res.status).toBe(404);
+  });
+
+  it("still refuses a member who tries it", async () => {
+    // The permission is in the statement, so the address route is not a way
+    // around it.
+    const third = await signUp("third@example.com", "Third");
+    await addMember(owner, projectId, await userId(guest));
+
+    const res = await inviteByEmail(guest, "third@example.com");
+
+    expect(res.status).toBe(404);
+    expect(await projectsOf(third)).toEqual([]);
+  });
+
+  it("refuses the owner's own address", async () => {
+    const res = await inviteByEmail(owner, "owner@example.com");
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("administrators", () => {
   let owner: Headers;
   let admin: Headers;
@@ -245,12 +323,84 @@ describe("administrators", () => {
     expect(row?.role).toBe("member");
   });
 
-  it("starts as a member, so power is only ever granted deliberately", async () => {
+  it("starts as a member once an administrator exists", async () => {
     const fresh = await signUp("fresh@example.com", "Fresh");
 
     const row = await env.DB.prepare("SELECT role FROM user WHERE id = ?")
       .bind(await userId(fresh))
       .first<{ role: string }>();
     expect(row?.role).toBe("member");
+  });
+
+  it("promotes and demotes through the role endpoint", async () => {
+    const other = await signUp("other@example.com", "Other");
+    const otherId = await userId(other);
+
+    const up = await setRole(admin, otherId, "admin");
+    expect(up.status).toBe(204);
+    expect(await roleOf(otherId)).toBe("admin");
+
+    const down = await setRole(admin, otherId, "member");
+    expect(down.status).toBe(204);
+    expect(await roleOf(otherId)).toBe("member");
+  });
+
+  it("refuses to remove the last administrator", async () => {
+    // The role can only be granted by someone who holds it, so an installation
+    // with none has no way back short of a database console. Reset without the
+    // seed so that the account signed up here really is the only one.
+    await resetAll({ seedAdmin: false });
+    const only = await signUp("only@example.com", "Only");
+    const onlyId = await userId(only);
+
+    const res = await setRole(only, onlyId, "member");
+
+    expect(res.status).toBe(404);
+    expect(await roleOf(onlyId)).toBe("admin");
+  });
+
+  it("does not block demoting a member while only one administrator exists", async () => {
+    // The guard is about losing the last administrator, not about the count on
+    // its own — demoting someone who is already a member must not trip it. The
+    // seed is dropped so the count really is one.
+    await resetAll({ seedAdmin: false });
+    const only = await signUp("only@example.com", "Only");
+    const other = await signUp("other@example.com", "Other");
+    const otherId = await userId(other);
+
+    const res = await setRole(only, otherId, "member");
+
+    expect(res.status).toBe(204);
+    expect(await roleOf(otherId)).toBe("member");
+  });
+
+  it("lets the second-to-last administrator step down", async () => {
+    const other = await signUp("other@example.com", "Other");
+    const otherId = await userId(other);
+    await setRole(admin, otherId, "admin");
+
+    const res = await setRole(admin, await userId(admin), "member");
+
+    expect(res.status).toBe(204);
+    expect(await roleOf(otherId)).toBe("admin");
+  });
+
+  it("is not a role a member can hand themselves", async () => {
+    const res = await setRole(owner, await userId(owner), "admin");
+
+    expect(res.status).toBe(404);
+    expect(await roleOf(await userId(owner))).toBe("member");
+  });
+});
+
+describe("the first account", () => {
+  it("becomes the administrator, because nobody else can grant it", async () => {
+    await resetAll({ seedAdmin: false });
+
+    const first = await signUp("first@example.com", "First");
+    const second = await signUp("second@example.com", "Second");
+
+    expect(await roleOf(await userId(first))).toBe("admin");
+    expect(await roleOf(await userId(second))).toBe("member");
   });
 });

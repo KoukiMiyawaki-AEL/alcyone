@@ -17,6 +17,7 @@
     "deploy": "pnpm run preflight && pnpm run check && wrangler d1 migrations apply DB --remote && wrangler deploy",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "seed:accounts": "node scripts/seed-accounts.mjs",
     "test:e2e": "rm -rf .wrangler/e2e-state && wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e-state && playwright test",
     "preflight": "node scripts/preflight.mjs"
   },

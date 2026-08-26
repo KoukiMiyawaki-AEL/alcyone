@@ -1,5 +1,8 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+// The shipped statement, read rather than re-typed.
+import backfillOwner from "../../drizzle/0021_backfill_missing_owner.sql?raw";
 
 /**
  * Asserts the shape the migrations were supposed to produce.
@@ -210,5 +213,79 @@ describe("migrations", () => {
       "SELECT count(*) AS n FROM projects WHERE ownerId IS NULL",
     ).first<{ n: number }>();
     expect(row?.n).toBe(0);
+  });
+});
+
+/**
+ * The backfills are hard to reach from here: migrations run once, against an
+ * empty database, before any of these tests. So the statement is read out of
+ * the migration file and run against a state built here. Reading the file
+ * rather than re-typing the SQL is the point — a copy would pass while the
+ * shipped statement was wrong, which is exactly how 0019 got through.
+ */
+describe("giving an installation an owner", () => {
+  async function seed(accounts: { id: string; role: string; createdAt: number }[]) {
+    await env.DB.prepare("DELETE FROM user WHERE id LIKE 'backfill-%'").run();
+    for (const account of accounts) {
+      await env.DB.prepare(
+        `INSERT INTO user (id, name, email, email_verified, role, created_at, updated_at)
+         VALUES (?, 'X', ?, 0, ?, ?, 0)`,
+      )
+        .bind(account.id, `${account.id}@example.invalid`, account.role, account.createdAt)
+        .run();
+    }
+  }
+
+  async function runBackfill() {
+    // `--> statement-breakpoint` is drizzle's separator; this file has one
+    // statement, and splitting on it keeps that from being an assumption.
+    for (const statement of backfillOwner.split("--> statement-breakpoint")) {
+      if (statement.trim()) await env.DB.prepare(statement).run();
+    }
+  }
+
+  async function roleOf(id: string) {
+    const row = await env.DB.prepare("SELECT role FROM user WHERE id = ?")
+      .bind(id)
+      .first<{ role: string }>();
+    return row?.role;
+  }
+
+  afterEach(async () => {
+    await env.DB.prepare("DELETE FROM user WHERE id LIKE 'backfill-%'").run();
+  });
+
+  it("promotes the earliest account when nobody is in charge", async () => {
+    // The situation 0019 missed. `role` arrived in 0018 with DEFAULT 'member'
+    // and no way to change it, so a database created between the two has
+    // accounts, no administrator, and no owner — and cannot make one, because
+    // the bootstrap only fires on an empty table.
+    await seed([
+      { id: "backfill-second", role: "member", createdAt: 200 },
+      { id: "backfill-first", role: "member", createdAt: 100 },
+    ]);
+
+    await runBackfill();
+
+    expect(await roleOf("backfill-first")).toBe("owner");
+    expect(await roleOf("backfill-second")).toBe("member");
+  });
+
+  it("leaves an installation that already has one alone", async () => {
+    await seed([
+      { id: "backfill-first", role: "member", createdAt: 100 },
+      { id: "backfill-owner", role: "owner", createdAt: 300 },
+    ]);
+
+    await runBackfill();
+
+    expect(await roleOf("backfill-first")).toBe("member");
+    expect(await roleOf("backfill-owner")).toBe("owner");
+  });
+
+  it("does nothing to an empty database, leaving the bootstrap to decide", async () => {
+    await seed([]);
+
+    await expect(runBackfill()).resolves.not.toThrow();
   });
 });

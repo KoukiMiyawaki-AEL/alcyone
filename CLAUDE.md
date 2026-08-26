@@ -41,6 +41,7 @@ pnpm run lint             # oxlint（警告0が必須）
 pnpm run format           # oxfmt（書き換え）。検証だけなら format:check
 pnpm run db:generate      # drizzle-kit generate（schema.tsの差分からmigration生成）
 pnpm run db:migrate:local # ローカルD1へmigration適用
+pnpm run seed:accounts    # ローカル開発用のオーナー/管理者/一般アカウント（docs/dev-accounts.md）
 pnpm run preflight        # wrangler.jsoncが実リソースを指しているか（deployの前段）
 pnpm run deploy           # preflight → check → リモートmigration → deploy（未実施。docs/deploy.md）
 ```
@@ -369,6 +370,9 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 | `worker` | `test/worker/*.test.ts` | workerd + ローカルD1 | Hono APIを`app.request()`で直接叩く統合テスト |
 | `components` | `test/components/*.test.tsx` | happy-dom + Testing Library | Reactコンポーネント |
 | E2E | `test/e2e/*.spec.ts` | Playwright + 実ブラウザ | 上2つの**隙間**（ログイン→セッション→所有スコープ） |
+
+ローカルで画面を触るときのアカウントは[`docs/dev-accounts.md`](./docs/dev-accounts.md)。
+**全部できる人だけで見ていると権限のバグが隠れる**ので、一般ユーザーでも確認すること。
 
 **最初のアカウントは管理者になるので、テストは必ず管理者を先に用意する。** worker側は
 `resetAll()`が1行シードし（ブートストラップ自体を試すときだけ`resetAll({ seedAdmin: false })`）、

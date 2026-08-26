@@ -9,45 +9,44 @@ import { PASSWORD, jsonHeaders, resetAll, signUp, uniqueIp } from "./auth-helper
  * says outright it is "not an accurate accounting system". These tests assert
  * that it engages and that the response is well formed, not that it counts
  * precisely, because that is not a promise the platform makes.
+ *
+ * The attempts go out together rather than one after another. Sent
+ * sequentially they can straddle the end of the limiter's window, at which
+ * point the count resets and nothing is ever rejected — which failed once,
+ * only inside the full `check`, and looked like the limiter had stopped
+ * working. Getting it to reject is setup here; what is asserted is what it
+ * says when it does.
  */
 describe("rate limiting", () => {
   beforeEach(resetAll);
 
-  it("eventually rejects repeated sign-in attempts", async () => {
-    const ip = uniqueIp();
-    const statuses: number[] = [];
-    for (let i = 0; i < 20; i += 1) {
-      const res = await app.request(
-        "/api/auth/sign-in/email",
-        {
-          method: "POST",
-          headers: jsonHeaders(undefined, ip),
-          body: JSON.stringify({ email: "nobody@example.com", password: "wrong password here" }),
-        },
-        env,
-      );
-      statuses.push(res.status);
-    }
+  /** One burst of failed sign-ins from a single address, all in flight at once. */
+  const burst = (ip: string, attempts = 20) =>
+    Promise.all(
+      Array.from({ length: attempts }, () =>
+        app.request(
+          "/api/auth/sign-in/email",
+          {
+            method: "POST",
+            headers: jsonHeaders(undefined, ip),
+            body: JSON.stringify({ email: "nobody@example.com", password: "wrong password here" }),
+          },
+          env,
+        ),
+      ),
+    );
 
-    expect(statuses).toContain(429);
+  it("eventually rejects repeated sign-in attempts", async () => {
+    const responses = await burst(uniqueIp());
+
+    expect(responses.map((res) => res.status)).toContain(429);
   });
 
   it("tells a rejected caller when to come back", async () => {
-    const ip = uniqueIp();
-    let rejected: Response | undefined;
-    for (let i = 0; i < 20 && !rejected; i += 1) {
-      const res = await app.request(
-        "/api/auth/sign-in/email",
-        {
-          method: "POST",
-          headers: jsonHeaders(undefined, ip),
-          body: JSON.stringify({ email: "nobody@example.com", password: "wrong password here" }),
-        },
-        env,
-      );
-      if (res.status === 429) rejected = res;
-    }
+    const responses = await burst(uniqueIp());
+    const rejected = responses.find((res) => res.status === 429);
 
+    expect(rejected).toBeDefined();
     expect(rejected?.headers.get("retry-after")).toBe("60");
     expect(await rejected?.json()).toEqual({ error: "Too Many Requests" });
   });

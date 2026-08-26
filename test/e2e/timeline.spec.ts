@@ -1,8 +1,8 @@
 import { expect, test } from "./fixtures";
 import { createProject, createTodo, signUp } from "./helpers";
 
-const viewSwitch = (page: import("@playwright/test").Page) =>
-  page.getByRole("group", { name: "表示形式" });
+/** The views live in the sidebar now, one addressable link each. */
+const viewSwitch = (page: import("@playwright/test").Page) => page.getByRole("navigation").first();
 
 /**
  * Dates relative to the browser's own clock.
@@ -29,7 +29,7 @@ test.describe("timeline view", () => {
 
     await createTodo(page, "日程のないタスク");
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
     await expect(page).toHaveURL(/view=timeline/);
 
     await expect(page.getByRole("button", { name: "日程のあるタスク" })).toBeVisible();
@@ -50,7 +50,7 @@ test.describe("timeline view", () => {
     await page.getByRole("link", { name: "Empty" }).click();
     await createTodo(page, "日付なし");
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
 
     const today = daysFromToday(0);
     await expect(page.getByTitle(today)).toBeVisible();
@@ -64,7 +64,7 @@ test.describe("timeline view", () => {
     await page.getByRole("link", { name: "Days" }).click();
     await createTodo(page, "なにか");
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
 
     const today = daysFromToday(0);
     const cell = page.getByTitle(today);
@@ -80,7 +80,7 @@ test.describe("timeline view", () => {
     await page.getByRole("link", { name: "Zoom" }).click();
     await createTodo(page, "なにか");
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
 
     const grain = page.getByRole("group", { name: "表示の粒度" });
     const today = daysFromToday(0);
@@ -89,11 +89,15 @@ test.describe("timeline view", () => {
     await grain.getByRole("button", { name: "週" }).click();
     // Week cells start on the axis origin, so most individual days stop having
     // a column of their own — which is the trade the zoom makes.
-    await expect(page.getByTitle(today)).toBeHidden();
+    //
+    // Checked on tomorrow rather than today: the axis opens exactly LEAD_DAYS
+    // before today, which puts today on a week boundary every time, so it keeps
+    // a cell of its own and would have passed for the wrong reason.
+    await expect(page.getByTitle(daysFromToday(1))).toBeHidden();
     await expect(grain.getByRole("button", { name: "週" })).toHaveAttribute("aria-pressed", "true");
 
     await grain.getByRole("button", { name: "日" }).click();
-    await expect(page.getByTitle(today)).toBeVisible();
+    await expect(page.getByTitle(daysFromToday(1))).toBeVisible();
   });
 
   test("says so when no task has a date yet", async ({ page }) => {
@@ -102,7 +106,7 @@ test.describe("timeline view", () => {
     await page.getByRole("link", { name: "Schedule" }).click();
     await createTodo(page, "日付なし");
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
 
     await expect(page.getByText(/日付が設定されたタスクがまだありません/)).toBeVisible();
   });
@@ -114,7 +118,7 @@ test.describe("timeline view", () => {
 
     await scheduleTask(page, "編集する", "2026-11-18", "2026-11-20");
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
     await page.getByRole("button", { name: "編集する", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeVisible();
@@ -173,7 +177,7 @@ test.describe("rescheduling on the chart", () => {
     const to = daysFromToday(4);
     await scheduleTask(page, "動かす予定", from, to);
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
     await dragBar(page, from, to, 2);
 
     // The bar's own label is the signal that the write landed and the list
@@ -199,7 +203,7 @@ test.describe("rescheduling on the chart", () => {
     const from = daysFromToday(2);
     await scheduleTask(page, "触るだけ", from, daysFromToday(4));
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
     await dragBar(page, from, daysFromToday(4), 0);
 
     await page.getByRole("button", { name: "触るだけ", exact: true }).click();
@@ -218,7 +222,7 @@ test.describe("rescheduling on the chart", () => {
     const to = daysFromToday(4);
     await scheduleTask(page, "掴む予定", from, to);
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
 
     const bar = barFor(page, from, to);
     await bar.scrollIntoViewIfNeeded();
@@ -246,7 +250,7 @@ test.describe("rescheduling on the chart", () => {
     const from = daysFromToday(2);
     await scheduleTask(page, "伸ばす予定", from, daysFromToday(4));
 
-    await viewSwitch(page).getByRole("button", { name: "タイムライン" }).click();
+    await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
 
     const bar = barFor(page, from, daysFromToday(4));
     await bar.scrollIntoViewIfNeeded();

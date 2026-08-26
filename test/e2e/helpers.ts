@@ -65,3 +65,11 @@ export async function rowAction(page: Page, rowLabel: string, item: string) {
   await page.getByRole("button", { name: `「${rowLabel}」の操作` }).click();
   await page.getByRole("menuitem", { name: item }).click();
 }
+
+/** The signed-in account's id, read through the session endpoint. */
+export async function currentUserId(page: Page): Promise<string> {
+  const res = await page.request.get("/api/auth/get-session");
+  const body = (await res.json()) as { user?: { id: string } } | null;
+  if (!body?.user) throw new Error(`no session: ${res.status()}`);
+  return body.user.id;
+}

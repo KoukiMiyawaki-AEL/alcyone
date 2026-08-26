@@ -36,6 +36,7 @@
 | [0028](./0028-display-names-and-assignees.md) | 表示名を変更可能にし、Todoに担当者を持たせる | Accepted |
 | [0029](./0029-task-links-and-an-editable-gantt.md) | タスク間の関係を持たせ、ガントチャート上で日程を編集できるようにする（0026の一部を覆す） | Accepted |
 | [0030](./0030-put-adding-and-sharing-behind-buttons.md) | タスク追加と共有をボタンの後ろに置く（0025の「速い経路」を覆す） | Accepted |
+| [0031](./0031-project-membership-and-roles.md) | プロジェクトに参加者を持たせ、管理者ロールを導入する（0014の単独所有を広げる） | Accepted |
 
 ## ルール
 

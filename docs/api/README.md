@@ -119,6 +119,25 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 親子は関係ではなく `PATCH /api/todos/:id` の `parentId`。**循環は `400`**、
 自分のものでないタスクを親に指定すると **`404`**（存在を漏らさないため）。
 
+## 参加者とロール
+
+| Method | Path | 用途 | 誰が | 成功 | 失敗 |
+|---|---|---|---|---|---|
+| GET | `/api/projects/:projectId/members` | 参加者一覧 + `canManage` | 到達できる人 | `{ owner, members, canManage }` | `400` `404` |
+| POST | `/api/projects/:projectId/members` | 参加者を追加 | 所有者 / 管理者 | `201 { id }` | `400` `404` |
+| DELETE | `/api/projects/:projectId/members/:userId` | 参加者を解除 | 所有者 / 管理者 | `204` | `400` `404` |
+| GET | `/api/users` | アカウント一覧 | **管理者のみ** | `{ id, name, email, role }[]` | — |
+
+権限が無い場合は**すべて`404`**。「権限が無い」と「存在しない」を区別すると、
+存在の有無が漏れる。
+
+`canManage` は**サーバが答える**。クライアントが規則を再実装すると、APIが拒むボタンをUIが出す。
+
+`/api/users` は管理者以外には**空配列**を返す。全員に全員の名前と住所を配るのは名簿であり、
+誰も頼んでいない。
+
+**ロールを設定するAPIは存在しない。** 全アカウントは `member` で始まる。
+
 ## 担当者
 
 | Method | Path | 用途 | 成功 | 失敗 |

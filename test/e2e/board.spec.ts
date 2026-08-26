@@ -8,10 +8,7 @@ test.describe("board view", () => {
     await page.getByRole("link", { name: "Board" }).click();
     await createTodo(page, "動かすタスク");
 
-    await page
-      .getByRole("group", { name: "表示形式" })
-      .getByRole("button", { name: "ボード" })
-      .click();
+    await page.getByRole("navigation").first().getByRole("link", { name: "ボード" }).click();
     await expect(page).toHaveURL(/view=board/);
 
     const todoColumn = page.getByRole("region", { name: "未着手" });
@@ -36,18 +33,12 @@ test.describe("board view", () => {
     await page.getByRole("link", { name: "Board" }).click();
     await createTodo(page, "一覧のタスク");
 
-    await page
-      .getByRole("group", { name: "表示形式" })
-      .getByRole("button", { name: "ボード" })
-      .click();
+    await page.getByRole("navigation").first().getByRole("link", { name: "ボード" }).click();
     // The board's columns are its status filter, so the list's would be a
     // second one that could disagree.
     await expect(page.getByRole("group", { name: "ステータスで絞り込む" })).toBeHidden();
 
-    await page
-      .getByRole("group", { name: "表示形式" })
-      .getByRole("button", { name: "一覧" })
-      .click();
+    await page.getByRole("navigation").first().getByRole("link", { name: "一覧" }).click();
     await expect(page.getByRole("group", { name: "ステータスで絞り込む" })).toBeVisible();
   });
 });

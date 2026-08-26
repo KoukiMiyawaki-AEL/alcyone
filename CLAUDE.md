@@ -255,6 +255,7 @@ loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catch�
 APIのパスは必ず`/api/`配下に置くこと。
 
 画面は `/`（Project一覧）、`/projects/$projectId`（Todo。一覧/ボード/タイムラインを`view`で切り替え）、
+`/projects/$projectId/settings`（参加者）、
 `/search`、`/account`、`/s/$token`（公開共有）、`/dev/design-system`。
 動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。
 存在しないリソースはloaderで`notFound()`を投げる。**`notFound()`はthrowで動くので、
@@ -388,6 +389,6 @@ Durable Objectのテストは`cloudflare:test`の`runInDurableObject`で中を�
 - Storybook
 - テストカバレッジの計測
 - メール送信（そのためメール検証とパスワード再発行は無効）
-- 組織単位のテナンシー（Projectはユーザー所有）
+- 組織単位のテナンシー（Projectは所有者 + 参加者。組織やチームという単位はまだ無い。[ADR 0031](./docs/adr/0031-project-membership-and-roles.md)）
 - ゴミ箱UI（復元できるのは削除直後のtoastからだけ。30日で自動削除される）
 - 実際のCloudflareアカウントへのD1作成・本番デプロイ（手順は[docs/deploy.md](./docs/deploy.md)。**未実施**）

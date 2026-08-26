@@ -16,7 +16,6 @@ import { TodoDetailDialog, type TodoEditor } from "@/features/todos/components/T
 import { TodoFilters } from "@/features/todos/components/TodoFilters";
 import { TodoList } from "@/features/todos/components/TodoList";
 import { TodoTimeline } from "@/features/todos/components/TodoTimeline";
-import { ViewSwitch } from "@/features/todos/components/ViewSwitch";
 import type { Assignee, Todo, TodoFields, TodoStatus } from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
 import { toastUndo } from "@/lib/undo-toast";
@@ -276,13 +275,7 @@ function ProjectTodosComponent() {
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-medium text-muted-foreground">タスク</h2>
-            <ViewSwitch
-              view={view}
-              onChange={(next) => navigate({ search: (prev) => ({ ...prev, view: next }) })}
-            />
-          </div>
+          <h2 className="text-sm font-medium text-muted-foreground">タスク</h2>
           {/*
             The status filter is the list's; the board's columns already are
             one, so offering both would let the two disagree on screen.

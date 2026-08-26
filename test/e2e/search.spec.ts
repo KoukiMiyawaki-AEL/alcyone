@@ -8,7 +8,7 @@ test.describe("search", () => {
     await page.getByRole("link", { name: "Work" }).click();
     await createTodo(page, "設計ドキュメントを書く");
 
-    await page.getByRole("link", { name: "Search" }).click();
+    await page.getByRole("link", { name: "検索" }).click();
     await page.getByLabel("Search").fill("ドキュメント");
     await page.getByRole("button", { name: "Search" }).click();
 

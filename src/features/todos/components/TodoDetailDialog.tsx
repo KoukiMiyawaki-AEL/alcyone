@@ -26,9 +26,12 @@ import {
   PRIORITY_LABELS,
   STATUS_LABELS,
   type Assignee,
+  type Label as TaskLabel,
+  type LabelledTodo,
   type Todo,
   type TodoFields,
 } from "../types";
+import { LabelChip } from "./LabelChip";
 import { TodoActivity } from "./TodoActivityPanel";
 import { TodoLinksPanel } from "./TodoLinksPanel";
 
@@ -38,7 +41,7 @@ import { TodoLinksPanel } from "./TodoLinksPanel";
  * `{ mode: "create" }` carries whatever was typed into the quick-add box, so
  * reaching for the details never costs the words already written.
  */
-export type TodoEditor = { mode: "create"; title: string } | { mode: "edit"; todo: Todo };
+export type TodoEditor = { mode: "create"; title: string } | { mode: "edit"; todo: LabelledTodo };
 
 /** A Select cannot hold null, so "nobody" needs a value of its own. */
 const UNASSIGNED = "__unassigned__";
@@ -50,9 +53,15 @@ type TodoDetailDialogProps = {
   assignees: Assignee[];
   /** Every task in the project, for choosing a parent or a link target. */
   siblings: Todo[];
+  /** Every label the project defines. The picker's options. */
+  labels: TaskLabel[];
   onOpenChange: (open: boolean) => void;
-  /** `todo` is null when creating. Resolves to whether the write happened. */
-  onSave: (fields: TodoFields, todo: Todo | null) => Promise<boolean>;
+  /**
+   * `todo` is null when creating. Labels arrive alongside the fields rather
+   * than inside them: they are rows on a join table, not columns on the task,
+   * and the caller writes them with a second request.
+   */
+  onSave: (fields: TodoFields, todo: Todo | null, labelIds: number[]) => Promise<boolean>;
 };
 
 /** An empty date input reads as "", which the API expects as `null`. */
@@ -69,6 +78,7 @@ export function TodoDetailDialog({
   editor,
   assignees,
   siblings,
+  labels,
   onOpenChange,
   onSave,
 }: TodoDetailDialogProps) {
@@ -87,6 +97,7 @@ export function TodoDetailDialog({
             editor={editor}
             assignees={assignees}
             siblings={siblings}
+            labels={labels}
             onOpenChange={onOpenChange}
             onSave={onSave}
           />
@@ -100,14 +111,16 @@ function TodoDetailForm({
   editor,
   assignees,
   siblings,
+  labels,
   onOpenChange,
   onSave,
 }: {
   editor: TodoEditor;
   assignees: Assignee[];
   siblings: Todo[];
+  labels: TaskLabel[];
   onOpenChange: (open: boolean) => void;
-  onSave: (fields: TodoFields, todo: Todo | null) => Promise<boolean>;
+  onSave: (fields: TodoFields, todo: Todo | null, labelIds: number[]) => Promise<boolean>;
 }) {
   const formId = useId();
   const creating = editor.mode === "create";
@@ -153,6 +166,9 @@ function TodoDetailForm({
   const [saving, setSaving] = useState(false);
   /** Written with the change, not stored on the task. Reset by remounting. */
   const [note, setNote] = useState("");
+  const [labelIds, setLabelIds] = useState<number[]>(
+    creating ? [] : editor.todo.labels.map((label) => label.id),
+  );
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -172,6 +188,7 @@ function TodoDetailForm({
       // an empty comment.
       trimmed === "" ? fields : { ...fields, comment: trimmed },
       creating ? null : editor.todo,
+      labelIds,
     );
     setSaving(false);
     if (saved) onOpenChange(false);
@@ -332,6 +349,43 @@ function TodoDetailForm({
             />
           </div>
         )}
+
+        {/*
+          Toggles rather than a multi-select. A project has a handful of labels
+          and all of them fit on screen, so making the reader open a menu to
+          find out which are on the task would hide the answer behind a click.
+        */}
+        {labels.length > 0 ? (
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="text-sm leading-none font-medium">ラベル</legend>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {labels.map((label) => {
+                const on = labelIds.includes(label.id);
+                return (
+                  <button
+                    key={label.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setLabelIds((ids) =>
+                        on ? ids.filter((id) => id !== label.id) : [...ids, label.id],
+                      )
+                    }
+                    className="rounded-full focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  >
+                    <LabelChip
+                      label={label}
+                      // Unselected labels stay legible rather than disappearing:
+                      // the row is also the list of what is available, and a
+                      // chip nobody can read is not an option anyone can find.
+                      className={on ? "ring-2 ring-ring/40" : "opacity-45"}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+        ) : null}
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${formId}-description`}>メモ</Label>

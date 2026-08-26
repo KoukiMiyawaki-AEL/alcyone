@@ -17,6 +17,9 @@ import {
 } from "@/components/ui/select";
 import { addMember, addMemberByEmail, removeMember } from "@/features/projects/members-api";
 import type { Project } from "@/features/projects/types";
+import { LabelManager } from "@/features/todos/components/LabelManager";
+// Aliased: `Label` is already the form-label component in this file.
+import type { Label as TaskLabel } from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
 
 const TRANSIENT = "プロジェクトの設定を取得できませんでした。";
@@ -26,6 +29,7 @@ type Account = { id: string; name: string; email: string; role: string };
 
 type LoaderData = {
   project: Project | null;
+  labels: TaskLabel[];
   owner: { id: string } | null;
   members: Member[];
   /** Whether *this* caller may change the list, as reported by the server. */
@@ -53,6 +57,7 @@ export const Route = createFileRoute("/projects_/$projectId/settings")({
       // either in here would be swallowed into the generic error card.
       return {
         project: null,
+        labels: [],
         owner: null,
         members: [],
         canManage: false,
@@ -71,6 +76,7 @@ export const Route = createFileRoute("/projects_/$projectId/settings")({
     if (!res.ok) {
       return {
         project: null,
+        labels: [],
         owner: null,
         members: [],
         canManage: false,
@@ -84,12 +90,20 @@ export const Route = createFileRoute("/projects_/$projectId/settings")({
     // Two more requests, both optional: the page is about the member list and
     // works without either. The project is fetched for its name, the directory
     // only matters to whoever may actually change the list.
-    const [project, directory] = await Promise.all([
+    const [projectAndLabels, directory] = await Promise.all([
       loadProject(params.projectId),
       canManage ? loadDirectory() : Promise.resolve([]),
     ]);
 
-    return { project, owner, members, canManage, directory, error: null };
+    return {
+      project: projectAndLabels.project,
+      labels: projectAndLabels.labels,
+      owner,
+      members,
+      canManage,
+      directory,
+      error: null,
+    };
   },
   component: ProjectSettingsComponent,
   notFoundComponent: () => (
@@ -101,15 +115,27 @@ export const Route = createFileRoute("/projects_/$projectId/settings")({
   ),
 });
 
-async function loadProject(projectId: string): Promise<Project | null> {
+/**
+ * The project's name and its labels, from one request.
+ *
+ * `limit: 1` because neither is about the tasks — the endpoint returns the
+ * project and the whole label set alongside whatever page of tasks was asked
+ * for, and one row is the smallest page there is.
+ */
+async function loadProject(
+  projectId: string,
+): Promise<{ project: Project | null; labels: TaskLabel[] }> {
   try {
     const res = await apiClient.api.projects[":projectId"].todos.$get({
       param: { projectId },
       query: { limit: "1" },
     });
-    return res.ok ? ((await res.json()).project as Project) : null;
+    if (!res.ok) return { project: null, labels: [] };
+
+    const body = await res.json();
+    return { project: body.project as Project, labels: body.labels as TaskLabel[] };
   } catch {
-    return null;
+    return { project: null, labels: [] };
   }
 }
 
@@ -125,7 +151,7 @@ async function loadDirectory(): Promise<Account[]> {
 function ProjectSettingsComponent() {
   const router = useRouter();
   const { projectId } = Route.useParams();
-  const { project, owner, members, canManage, directory, error } = Route.useLoaderData();
+  const { project, labels, owner, members, canManage, directory, error } = Route.useLoaderData();
   const [picked, setPicked] = useState("");
   const [email, setEmail] = useState("");
 
@@ -164,6 +190,14 @@ function ProjectSettingsComponent() {
             タスクに戻る
           </Button>
         }
+      />
+
+      <LabelManager
+        projectId={projectId}
+        labels={labels}
+        onChanged={async () => {
+          await router.invalidate();
+        }}
       />
 
       <Card>
@@ -222,6 +256,7 @@ function ProjectSettingsComponent() {
                 invite the person they already have in mind.
               */}
               <form
+                aria-label="参加者を追加"
                 className="flex flex-wrap items-end gap-2"
                 onSubmit={async (event) => {
                   event.preventDefault();

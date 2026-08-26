@@ -20,8 +20,11 @@ import { ftsRank, toFtsQuery, toLikePattern, todosFts } from "./fts";
 import {
   TODO_STATUSES,
   attachmentsTable,
+  labelsTable,
+  type LabelColor,
   projectMembersTable,
   roleRank,
+  todoLabelsTable,
   type UserRole,
   todoLinksTable,
   type TodoLinkKind,
@@ -111,6 +114,8 @@ export type TodoSort = "created" | "due" | "priority" | "start";
 export type TodoListOptions = {
   status?: TodoFilter;
   sort?: TodoSort;
+  /** Narrow to tasks carrying this label. Filtered in SQL, not on the client. */
+  labelId?: number;
   cursor?: Cursor | null;
   limit?: number;
 };
@@ -714,6 +719,160 @@ export function createRepo(
     return results.length > 0;
   };
 
+  const labels = {
+    /** Every label defined in one project. The palette for its tasks. */
+    forProject: (projectId: number) =>
+      db
+        .select()
+        .from(labelsTable)
+        .where(inArray(labelsTable.projectId, accessibleProjectIds(projectId)))
+        .orderBy(asc(labelsTable.name), asc(labelsTable.id)),
+
+    /**
+     * Which labels are on which tasks, for a whole project at once.
+     *
+     * One query for the list rather than one per row: a board of forty cards
+     * would otherwise be forty round trips, and D1 charges for rows read.
+     */
+    forProjectTodos: (projectId: number) =>
+      db
+        .select({
+          todoId: todoLabelsTable.todoId,
+          id: labelsTable.id,
+          name: labelsTable.name,
+          color: labelsTable.color,
+          projectId: labelsTable.projectId,
+          createdAt: labelsTable.createdAt,
+        })
+        .from(todoLabelsTable)
+        .innerJoin(labelsTable, eq(labelsTable.id, todoLabelsTable.labelId))
+        .where(inArray(labelsTable.projectId, accessibleProjectIds(projectId)))
+        .orderBy(asc(labelsTable.name), asc(labelsTable.id)),
+
+    /**
+     * Insert-from-select, so the project's reachability is part of the
+     * statement. A foreign key would check that the project exists, which is
+     * not the same question.
+     */
+    create: (projectId: number, values: { name: string; color: LabelColor }) =>
+      db.all<{ id: number }>(sql`
+        insert into ${labelsTable} ("projectId", "name", "color", "createdAt")
+        select ${projectId}, ${values.name}, ${values.color}, ${now()}
+        where ${projectId} in ${accessibleProjectIds(projectId)}
+        returning id
+      `),
+
+    update: (id: number, values: { name?: string; color?: LabelColor }) =>
+      db
+        .update(labelsTable)
+        .set(values)
+        .where(and(eq(labelsTable.id, id), inArray(labelsTable.projectId, accessibleProjectIds())))
+        .returning({ id: labelsTable.id }),
+
+    /**
+     * Deleting a label detaches it everywhere first.
+     *
+     * Not a cascade: ADR 0012 keeps deletes explicit, and here the order is
+     * also forced — SQLite checks the foreign key row by row, so a label with
+     * any task still on it cannot be removed.
+     */
+    removeWithAttachments: (id: number) =>
+      [
+        db.delete(todoLabelsTable).where(
+          and(
+            eq(todoLabelsTable.labelId, id),
+            // The scope check rides on the label, which is the row the caller
+            // named. Without it this statement would detach by id alone.
+            inArray(
+              todoLabelsTable.labelId,
+              db
+                .select({ id: labelsTable.id })
+                .from(labelsTable)
+                .where(inArray(labelsTable.projectId, accessibleProjectIds())),
+            ),
+          ),
+        ),
+        db
+          .delete(labelsTable)
+          .where(
+            and(eq(labelsTable.id, id), inArray(labelsTable.projectId, accessibleProjectIds())),
+          )
+          .returning({ id: labelsTable.id }),
+      ] as unknown as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]],
+
+    /** The labels on one task. */
+    forTodo: (todoId: number) =>
+      db
+        .select({
+          id: labelsTable.id,
+          name: labelsTable.name,
+          color: labelsTable.color,
+          projectId: labelsTable.projectId,
+          createdAt: labelsTable.createdAt,
+        })
+        .from(todoLabelsTable)
+        .innerJoin(labelsTable, eq(labelsTable.id, todoLabelsTable.labelId))
+        .where(
+          and(
+            eq(todoLabelsTable.todoId, todoId),
+            inArray(todoLabelsTable.todoId, allOwnedTodoIds()),
+          ),
+        )
+        .orderBy(asc(labelsTable.name), asc(labelsTable.id)),
+
+    /**
+     * Replaces the whole set on a task, as one batch.
+     *
+     * A set, not a sequence of adds and removes: the client sends what the task
+     * should end up with, so two people editing at once cannot interleave into
+     * a state neither of them chose. Clearing first also makes the insert
+     * idempotent without an upsert.
+     *
+     * Each insert selects the label from the same project as the task, so a
+     * label id from somewhere else writes nothing rather than crossing over.
+     */
+    setForTodo: (todoId: number, labelIds: number[]) =>
+      [
+        db
+          .delete(todoLabelsTable)
+          .where(
+            and(
+              eq(todoLabelsTable.todoId, todoId),
+              inArray(todoLabelsTable.todoId, allOwnedTodoIds()),
+            ),
+          ),
+        // A drizzle builder rather than `db.run(sql`...`)`: a raw statement is
+        // not a batch item, and fails at run time with "cannot read properties
+        // of undefined", which says nothing about why.
+        ...labelIds.map((labelId) =>
+          db.insert(todoLabelsTable).select(
+            db
+              .select({
+                // Named explicitly and in table order, as drizzle requires of
+                // an insert-from-select. `null` into an INTEGER PRIMARY KEY is
+                // what makes SQLite assign the next id.
+                id: sql<number>`null`.as("id"),
+                todoId: todosTable.id,
+                labelId: labelsTable.id,
+              })
+              .from(labelsTable)
+              // The join is the check: a label only lands on a task in its own
+              // project, so an id from elsewhere selects no row and writes
+              // nothing — rather than crossing over, or reporting by its
+              // success that some other project's label exists.
+              .innerJoin(todosTable, eq(todosTable.projectId, labelsTable.projectId))
+              .where(
+                and(
+                  eq(labelsTable.id, labelId),
+                  eq(todosTable.id, todoId),
+                  inArray(todosTable.id, allOwnedTodoIds()),
+                ),
+              ),
+          ),
+        ),
+      ] as unknown as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]],
+  };
+
   const links = {
     /** Both directions in one query: `related` is stored once, not twice. */
     forTodo: (todoId: number) =>
@@ -971,6 +1130,19 @@ export function createRepo(
             inArray(todosTable.projectId, accessibleProjectIds(projectId)),
             isNull(todosTable.deletedAt),
             statusFilter(options.status),
+            // In the WHERE, not a filter over the fetched rows: hiding rows the
+            // client already has is not filtering, it is lying about the page
+            // size — the next page would then be short by however many were
+            // hidden.
+            options.labelId === undefined
+              ? undefined
+              : inArray(
+                  todosTable.id,
+                  db
+                    .select({ id: todoLabelsTable.todoId })
+                    .from(todoLabelsTable)
+                    .where(eq(todoLabelsTable.labelId, options.labelId)),
+                ),
             options.cursor ? afterCursor(options.sort ?? "created", options.cursor) : undefined,
           ),
         )
@@ -1267,6 +1439,7 @@ export function createRepo(
       // projects — so three statements in dependency order. The R2 objects are
       // not rows and survive this; see ownedAttachmentKeys.
       db.delete(attachmentsTable).where(inArray(attachmentsTable.todoId, allOwnedTodoIds())),
+      db.delete(todoLabelsTable).where(inArray(todoLabelsTable.todoId, allOwnedTodoIds())),
       db.delete(todoLinksTable).where(inArray(todoLinksTable.fromTodoId, allOwnedTodoIds())),
       db.delete(todoCommentsTable).where(inArray(todoCommentsTable.todoId, allOwnedTodoIds())),
       db.delete(todoEventsTable).where(inArray(todoEventsTable.todoId, allOwnedTodoIds())),
@@ -1293,6 +1466,20 @@ export function createRepo(
         .where(
           inArray(
             todosTable.projectId,
+            db
+              .select({ id: projectsTable.id })
+              .from(projectsTable)
+              .where(eq(projectsTable.ownerId, ownerId)),
+          ),
+        ),
+      // After the todos, before the projects: `todo_labels` referenced these
+      // and `labels` references `projects`, so this is the only slot that
+      // satisfies both foreign keys.
+      db
+        .delete(labelsTable)
+        .where(
+          inArray(
+            labelsTable.projectId,
             db
               .select({ id: projectsTable.id })
               .from(projectsTable)
@@ -1355,6 +1542,7 @@ export function createRepo(
     roles,
     directory,
     isAdmin,
+    labels,
     links,
     wouldCycle,
     assignees,

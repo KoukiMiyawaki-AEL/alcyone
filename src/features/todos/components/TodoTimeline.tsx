@@ -18,16 +18,16 @@ import {
   type DragResult,
   type Zoom,
 } from "../timeline";
-import { STATUS_LABELS, type Assignee, type Todo } from "../types";
+import { STATUS_LABELS, type Assignee, type LabelledTodo, type Todo } from "../types";
 
 type TodoTimelineProps = {
-  todos: Todo[];
+  todos: LabelledTodo[];
   assignees: Assignee[];
   /** Today as a calendar date. Passed in so the view is a pure function of it. */
   today: string;
   /** True when the fetch was capped, so this is not the whole project. */
   truncated: boolean;
-  onEdit: (todo: Todo) => void;
+  onEdit: (todo: LabelledTodo) => void;
   /** Commits a drag. Resolves to whether the write happened. */
   onReschedule: (id: number, dates: DragResult) => Promise<boolean>;
 };
@@ -93,12 +93,12 @@ export function TodoTimeline({
   const perDay = dayWidth(zoom);
 
   /** The dates a bar would get if the drag ended now. */
-  const pending = (todo: Todo): DragResult =>
+  const pending = (todo: LabelledTodo): DragResult =>
     drag?.id === todo.id
       ? applyDrag(todo, drag.mode, drag.deltaDays)
       : { startAt: todo.startAt, dueAt: todo.dueAt };
 
-  function startDrag(event: React.PointerEvent, todo: Todo, mode: DragMode) {
+  function startDrag(event: React.PointerEvent, todo: LabelledTodo, mode: DragMode) {
     // The bar's own handler would otherwise also fire for an edge and turn a
     // resize into a move.
     event.stopPropagation();

@@ -95,11 +95,15 @@ export async function resetAll({ seedAdmin = true } = {}) {
   await env.DB.prepare("UPDATE todos SET parentId = NULL").run();
 
   for (const table of [
+    // Before `todos` and `labels`, both of which it points at.
+    "todo_labels",
     "attachments",
     "todo_links",
     "todo_comments",
     "todo_events",
     "todos",
+    // A child of `projects`, reached only after `todo_labels` has gone.
+    "labels",
     // Also a child of `projects`, and forgetting it fails the delete below
     // rather than leaving orphans — which is the good outcome.
     "shares",

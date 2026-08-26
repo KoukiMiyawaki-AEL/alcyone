@@ -10,7 +10,7 @@ import { exportKey, type ExportManifest, type ExportParams } from "./data-export
 import { USER_ROLES, type UserRole } from "./db/auth-schema";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
 import { createRepo, todayInUtc, todoCursorValue, type Repo } from "./db/repo";
-import { TODO_LINK_KINDS, TODO_STATUSES } from "./db/schema";
+import { LABEL_COLORS, TODO_LINK_KINDS, TODO_STATUSES } from "./db/schema";
 import { bookmarkCookie, openSession } from "./db/session";
 import {
   DEAD_LETTER_QUEUE,
@@ -101,8 +101,17 @@ const todoQuerySchema = z
     // kinds of question.
     status: z.enum(["all", "active", ...TODO_STATUSES]).default("all"),
     sort: z.enum(["created", "due", "start", "priority"]).default("created"),
+    // `.catch` rather than a plain optional: a label id typed into the URL by
+    // hand, or one belonging to a project that no longer has it, should show
+    // the unfiltered list rather than an error page.
+    label: z.coerce.number().int().positive().optional().catch(undefined),
   })
   .extend(pageQuerySchema.shape);
+
+const labelBodySchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  color: z.enum(LABEL_COLORS),
+});
 
 /** Small enough to buffer in a Worker's 128MB without thinking about it. */
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -456,6 +465,102 @@ const app = new Hono<{
     const rows = await c.get("repo").todos.assignedTo(c.get("userId"));
     return c.json({ items: rows.map((row) => ({ ...row.todo, projectName: row.projectName })) });
   })
+  /**
+   * A project's labels.
+   *
+   * Anyone who can work on the project's tasks can make one. A label is a way
+   * of organising the work; needing an owner's permission to name a category
+   * would turn it into a piece of administration.
+   */
+  .post(
+    "/api/projects/:projectId/labels",
+    validate("param", projectIdParamSchema),
+    validate("json", labelBodySchema),
+    async (c) => {
+      const { projectId } = c.req.valid("param");
+      const body = c.req.valid("json");
+
+      let created;
+      try {
+        [created] = await c.get("repo").labels.create(projectId, body);
+      } catch {
+        // The unique index on (projectId, name). Two labels with the same name
+        // in one project are two ways to say the same thing, and nothing on a
+        // chip tells them apart.
+        return c.json({ error: "Bad Request" }, 400);
+      }
+
+      // No row means the project is not this caller's to reach — the same
+      // answer an unknown project gives.
+      if (!created) return c.json({ error: "Not found" }, 404);
+
+      return c.json({ id: created.id }, 201);
+    },
+  )
+  .patch(
+    "/api/labels/:labelId",
+    validate("param", z.object({ labelId: z.coerce.number().int().positive() })),
+    validate("json", labelBodySchema.partial()),
+    async (c) => {
+      const { labelId } = c.req.valid("param");
+      const values = c.req.valid("json");
+      if (Object.keys(values).length === 0) return c.json({ error: "Bad Request" }, 400);
+
+      let updated;
+      try {
+        [updated] = await c.get("repo").labels.update(labelId, values);
+      } catch {
+        return c.json({ error: "Bad Request" }, 400);
+      }
+
+      if (!updated) return c.json({ error: "Not found" }, 404);
+      return c.body(null, 204);
+    },
+  )
+  .delete(
+    "/api/labels/:labelId",
+    validate("param", z.object({ labelId: z.coerce.number().int().positive() })),
+    async (c) => {
+      const { labelId } = c.req.valid("param");
+      const repo = c.get("repo");
+
+      // Detach everywhere, then delete — one batch, and in that order. SQLite
+      // checks the foreign key row by row, so a label still on a task cannot be
+      // removed; and a detach that succeeded without the delete would silently
+      // strip a label off every task while leaving it in the list.
+      const [, deleted] = await repo.batch(repo.labels.removeWithAttachments(labelId));
+      if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
+
+      return c.body(null, 204);
+    },
+  )
+  /**
+   * The whole set of labels on one task, replaced at once.
+   *
+   * A set rather than a sequence of adds and removes: the client sends what the
+   * task should end up with, so two people editing at the same time cannot
+   * interleave into a state neither of them chose.
+   */
+  .put(
+    "/api/todos/:id/labels",
+    validate("param", idParamSchema),
+    validate("json", z.object({ labelIds: z.array(z.number().int().positive()).max(20) })),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { labelIds } = c.req.valid("json");
+      const repo = c.get("repo");
+
+      // Checked first: the batch below writes nothing for a task the caller
+      // cannot reach, which is correct but indistinguishable from "it had no
+      // labels and still has none".
+      const [todo] = await repo.todos.find(id);
+      if (!todo) return c.json({ error: "Not found" }, 404);
+
+      await repo.batch(repo.labels.setForTodo(id, [...new Set(labelIds)]));
+
+      return c.json({ labels: await repo.labels.forTodo(id) });
+    },
+  )
   .post("/api/projects", validate("json", createProjectSchema), async (c) => {
     const { name } = c.req.valid("json");
     const [project] = await c.get("repo").projects.create({ name });
@@ -501,20 +606,28 @@ const app = new Hono<{
     validate("query", todoQuerySchema),
     async (c) => {
       const { projectId } = c.req.valid("param");
-      const { status, sort, cursor, limit } = c.req.valid("query");
+      const { status, sort, label, cursor, limit } = c.req.valid("query");
       const repo = c.get("repo");
 
-      // One round trip for both. Returning an envelope rather than a bare array
-      // gives the page its title without a second request, and leaves room to
-      // add a cursor later without a breaking change to the response shape.
-      const [[project], rows] = await repo.batch([
+      // One round trip for all four. Returning an envelope rather than a bare
+      // array gives the page its title without a second request, and leaves
+      // room to add a cursor later without a breaking change to the shape.
+      //
+      // The labels come back in two pieces: the project's whole set, which the
+      // filter and the picker need, and which of them sit on which task. One
+      // query each rather than one per row — a board of forty cards would
+      // otherwise be forty round trips, and D1 charges for rows read.
+      const [[project], rows, projectLabels, attached] = await repo.batch([
         repo.projects.find(projectId),
         repo.todos.listByProject(projectId, {
           status,
           sort,
+          labelId: label,
           cursor: cursor ? decodeCursor(cursor) : null,
           limit,
         }),
+        repo.labels.forProject(projectId),
+        repo.labels.forProjectTodos(projectId),
       ]);
 
       if (!project) {
@@ -526,7 +639,18 @@ const app = new Hono<{
         id: row.id,
       }));
 
-      return c.json({ project, todos: page.items, nextCursor: page.nextCursor });
+      const byTodo = new Map<number, typeof projectLabels>();
+      for (const row of attached) {
+        const { todoId, ...label } = row;
+        byTodo.set(todoId, [...(byTodo.get(todoId) ?? []), label]);
+      }
+
+      return c.json({
+        project,
+        todos: page.items.map((todo) => ({ ...todo, labels: byTodo.get(todo.id) ?? [] })),
+        labels: projectLabels,
+        nextCursor: page.nextCursor,
+      });
     },
   )
   .post(

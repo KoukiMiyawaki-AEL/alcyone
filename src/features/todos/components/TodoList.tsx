@@ -3,15 +3,15 @@ import { ListTodoIcon } from "lucide-react";
 import { EmptyState } from "@/components/app/empty-state";
 import { Separator } from "@/components/ui/separator";
 
-import type { Assignee, Todo, TodoStatus } from "../types";
+import type { Assignee, LabelledTodo, TodoStatus } from "../types";
 import { TodoRow } from "./TodoRow";
 
 type TodoListProps = {
-  todos: Todo[];
+  todos: LabelledTodo[];
   assignees: Assignee[];
   today: string;
   onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
-  onEdit: (todo: Todo) => void;
+  onEdit: (todo: LabelledTodo) => void;
   onDelete: (id: number) => Promise<void>;
 };
 

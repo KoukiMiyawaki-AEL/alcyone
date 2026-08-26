@@ -340,6 +340,10 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
   **省略は「変えない」、`null`は「空にする」** —— 同じ扱いにすると「期限を外す」が表現できない
   （[ADR 0024](./docs/adr/0024-todo-status-instead-of-completed.md)。zodの`.transform()`が
   `undefined`を畳んで実際に踏んだ）。
+- **ラベルはプロジェクトに属し、タスクを触れる人なら誰でも作れる**（`accessibleProjectIds()`）。
+  付与は`PUT /api/todos/:id/labels`で**集合の置き換え**（差分ではない）。挿入は
+  insert-from-selectで**タスクとラベルが同じプロジェクトかをJOINで検査する** ——
+  外部キーは存在を検査するのであって所属ではない（[ADR 0035](./docs/adr/0035-labels.md)）。
 - **行の`status`と一覧の絞り込みを同じ型にしない。** `all` / `active` はstatusではなく
   「statusを名指ししない方法」で、`active`は「`done`以外」。型も`TodoStatus` / `TodoFilter`で分けてある。
 - **読み取りは`deletedAt IS NULL`でも絞る。** Project/Todoは論理削除で、忘れると削除済みの行が
@@ -371,8 +375,14 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 E2E側は`globalSetup`のwarm-upが`ADMIN_EMAIL`で作る。用意し忘れると、そのファイルが最初に
 サインアップしたユーザーが全権限を持ち、**所有スコープのテストが何も証明せずに緑になる**。
 
-**プロジェクト名のリンクはサイドバーにも出る。** E2Eで`getByRole("link", { name })`を
-素で書くとstrict mode違反になるので、`openProject()`（`main`に絞る）を使う。
+**E2Eの各テストのIPアドレスはテスト名のハッシュから引く**（`test/e2e/fixtures.ts`）。
+モジュールスコープのカウンタだった頃、Playwrightがモジュールを読み直すたびに1へ戻り、
+15個のテストが同じアドレスを共有して**認証のレート制限にまとめて当たっていた**。
+症状は「後続のspecが軒並み落ちる」で、直前に入れた機能のせいにしか見えない。
+
+**同じ画面に同じラベルのコントロールを2つ置かない。** `getByRole`の`name`は部分一致で、
+`form`に`aria-label`を付けるときは**中のフィールドと同じ文字列にしない**（両方が同じ名前で
+引っかかる）。設定画面の2つのフォームは「新しいラベル」「参加者を追加」で区別している。
 
 E2Eは`pnpm run test:e2e`（`check`にも含まれる）。専用DB（`.wrangler/e2e-state`）で毎回空から
 起動するので、**devサーバが5173で動いていると失敗する**（開発用DBを守るための意図的な挙動）。

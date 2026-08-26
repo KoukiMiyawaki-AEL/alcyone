@@ -18,7 +18,7 @@ export const isoFromDayNumber = (day: number): string =>
   new Date(day * MS_PER_DAY).toISOString().slice(0, 10);
 
 /** A task placed on the timeline: which day it starts, and how many it spans. */
-export type Bar = { todo: Todo; offset: number; length: number };
+export type Bar<T extends Todo = Todo> = { todo: T; offset: number; length: number };
 
 /** How wide the axis is, independent of what is on it. */
 export type TimelineWindow = { minDays?: number; maxDays?: number; leadDays?: number };
@@ -32,14 +32,14 @@ export const MAX_DAYS = 180;
 /** Days drawn before today, so the recent past has somewhere to be. */
 export const LEAD_DAYS = 7;
 
-export type Timeline = {
+export type Timeline<T extends Todo = Todo> = {
   /** Inclusive first day of the axis. */
   from: number;
   /** Number of columns. */
   days: number;
-  bars: Bar[];
+  bars: Bar<T>[];
   /** Tasks with no dates at all — they have no place on an axis of dates. */
-  unscheduled: Todo[];
+  unscheduled: T[];
   /** Column index of today, or null when today is off the axis. */
   todayOffset: number | null;
   /** True when the range was clipped to `maxDays`. */
@@ -54,11 +54,15 @@ export type Timeline = {
  * chose. A task with neither is not on the axis at all, and is handed back
  * separately so the caller can say so rather than quietly dropping it.
  */
-export function buildTimeline(
-  todos: Todo[],
+// Generic over the row so that whatever the caller passes in comes back out
+// unchanged. The layout cares about two date columns and nothing else, and
+// narrowing to `Todo` here would strip the labels off every bar on the way
+// through a function that never looks at them.
+export function buildTimeline<T extends Todo>(
+  todos: T[],
   today: string,
   { minDays = MIN_DAYS, maxDays = MAX_DAYS, leadDays = LEAD_DAYS }: TimelineWindow = {},
-): Timeline {
+): Timeline<T> {
   const scheduled = todos.filter((todo) => todo.startAt || todo.dueAt);
   const unscheduled = todos.filter((todo) => !todo.startAt && !todo.dueAt);
 

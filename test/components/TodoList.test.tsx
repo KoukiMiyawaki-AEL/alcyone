@@ -3,9 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { TodoList } from "@/features/todos/components/TodoList";
-import type { Todo } from "@/features/todos/types";
+import type { LabelledTodo } from "@/features/todos/types";
 
-const todo = (over: Partial<Todo> = {}): Todo => ({
+const todo = (over: Partial<LabelledTodo> = {}): LabelledTodo => ({
   id: 1,
   title: "Write tests",
   status: "todo",
@@ -19,6 +19,7 @@ const todo = (over: Partial<Todo> = {}): Todo => ({
   dueAt: null,
   description: null,
   priority: 0,
+  labels: [],
   ...over,
 });
 
@@ -200,5 +201,31 @@ describe("TodoList", () => {
     await user.click(within(menu).getByRole("menuitem", { name: "削除" }));
 
     expect(onDelete).toHaveBeenCalledExactlyOnceWith(2);
+  });
+});
+
+describe("labels on a row", () => {
+  it("shows each label the task carries", async () => {
+    renderList({
+      todos: [
+        todo({
+          labels: [
+            { id: 7, name: "要調査", color: "red", projectId: 1, createdAt: "2026-08-24" },
+            { id: 8, name: "リリース待ち", color: "blue", projectId: 1, createdAt: "2026-08-24" },
+          ],
+        }),
+      ],
+    });
+
+    expect(await screen.findByText("要調査")).toBeInTheDocument();
+    expect(screen.getByText("リリース待ち")).toBeInTheDocument();
+  });
+
+  it("shows nothing at all when a task has none", async () => {
+    // An empty row of chips is a gap the eye stops at for no reason.
+    const { container } = renderList({ todos: [todo({ title: "裸のタスク" })] });
+
+    await screen.findByText("裸のタスク");
+    expect(container.querySelectorAll("[class*='rounded-full'][class*='border']")).toHaveLength(0);
   });
 });

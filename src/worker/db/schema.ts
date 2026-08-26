@@ -258,6 +258,70 @@ export const todoLinksTable = sqliteTable(
   ],
 );
 
+/**
+ * The colours a label can be.
+ *
+ * A fixed set rather than free-form hex, for two reasons. A palette keeps the
+ * board readable — arbitrary colours from twelve different people produce
+ * twelve shades of the same muddy blue — and each name maps to a design token
+ * that already has a light and a dark value, so labels stay legible in both
+ * themes without anyone picking twice.
+ */
+export const LABEL_COLORS = ["slate", "red", "amber", "green", "blue", "violet"] as const;
+export type LabelColor = (typeof LABEL_COLORS)[number];
+
+/**
+ * A label belongs to a project, not to the account that made it.
+ *
+ * Anyone who can work on the project's tasks can make one: a label is a way of
+ * organising the work, and needing an owner's permission to name a category
+ * would make it a piece of administration instead.
+ */
+export const labelsTable = sqliteTable(
+  "labels",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    projectId: int()
+      .notNull()
+      .references(() => projectsTable.id),
+    name: text().notNull(),
+    color: text().notNull().$type<LabelColor>(),
+    createdAt: text().notNull(),
+  },
+  (t) => [
+    // Two labels with the same name in one project are two ways to say the same
+    // thing, and nobody can tell them apart on a chip.
+    uniqueIndex("labels_project_name_uidx").on(t.projectId, t.name),
+    index("labels_project_idx").on(t.projectId),
+    check("labels_color_known", sql`${t.color} in ('slate','red','amber','green','blue','violet')`),
+  ],
+);
+
+/**
+ * Which labels are on which task.
+ *
+ * A join table because the relationship is many-to-many in both directions —
+ * the thing a status column cannot express, and the reason labels exist
+ * alongside status rather than instead of it.
+ */
+export const todoLabelsTable = sqliteTable(
+  "todo_labels",
+  {
+    id: int().primaryKey({ autoIncrement: true }),
+    todoId: int()
+      .notNull()
+      .references(() => todosTable.id),
+    labelId: int()
+      .notNull()
+      .references(() => labelsTable.id),
+  },
+  (t) => [
+    uniqueIndex("todo_labels_pair_uidx").on(t.todoId, t.labelId),
+    index("todo_labels_todo_idx").on(t.todoId),
+    index("todo_labels_label_idx").on(t.labelId),
+  ],
+);
+
 export const attachmentsTable = sqliteTable(
   "attachments",
   {

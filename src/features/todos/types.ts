@@ -1,11 +1,24 @@
 import type {
+  LabelColor,
   TodoStatus,
+  labelsTable,
   todoCommentsTable,
   todoEventsTable,
   todosTable,
 } from "@/worker/db/schema";
 
 export type Todo = typeof todosTable.$inferSelect;
+
+export type Label = typeof labelsTable.$inferSelect;
+
+/**
+ * A task with the labels attached to it.
+ *
+ * Resolved by one query for the whole list rather than one per row — a board of
+ * forty cards would otherwise be forty round trips, and D1 charges for rows
+ * read.
+ */
+export type LabelledTodo = Todo & { labels: Label[] };
 
 /**
  * A task seen from outside its project, as the assigned-tasks endpoint returns
@@ -23,7 +36,7 @@ export type TodoComment = Omit<typeof todoCommentsTable.$inferSelect, "deletedAt
 };
 export type TodoEvent = typeof todoEventsTable.$inferSelect & { actorName: string };
 
-export type { TodoStatus };
+export type { LabelColor, TodoStatus };
 
 /** What a caller may change. `null` clears; omitted leaves alone. */
 export type TodoFields = {

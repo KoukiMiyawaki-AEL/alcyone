@@ -9,6 +9,12 @@
   --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-label-slate: var(--label-slate);
+  --color-label-red: var(--label-red);
+  --color-label-amber: var(--label-amber);
+  --color-label-green: var(--label-green);
+  --color-label-blue: var(--label-blue);
+  --color-label-violet: var(--label-violet);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
@@ -81,6 +87,23 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /*
+    Label colours. A fixed palette rather than free-form hex: arbitrary colours
+    from a dozen people produce a dozen shades of the same muddy blue, and a
+    chip nobody can read is worse than no colour at all.
+
+    Each is a foreground colour; the chip derives its fill and border from it,
+    so a label keeps one identity and the two themes only have to agree on
+    contrast. Chosen at a lightness that reads on `--background`; the dark block
+    below lifts them rather than inverting them.
+  */
+  --label-slate: oklch(0.45 0.02 260);
+  --label-red: oklch(0.52 0.19 25);
+  --label-amber: oklch(0.55 0.13 75);
+  --label-green: oklch(0.5 0.13 150);
+  --label-blue: oklch(0.52 0.16 250);
+  --label-violet: oklch(0.5 0.18 300);
 }
 
 .dark {
@@ -115,6 +138,14 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* Lifted, not inverted: the same hue, light enough to read on a dark card. */
+  --label-slate: oklch(0.75 0.02 260);
+  --label-red: oklch(0.72 0.17 25);
+  --label-amber: oklch(0.78 0.12 75);
+  --label-green: oklch(0.75 0.13 150);
+  --label-blue: oklch(0.72 0.14 250);
+  --label-violet: oklch(0.72 0.16 300);
 }
 
 @layer base {

@@ -17,19 +17,20 @@ import { TODO_STATUSES } from "@/worker/db/schema";
 import { assigneeName } from "../assignee";
 import { DUE_LABEL, DUE_TEXT, dueState } from "../due";
 import {
+  type Assignee,
+  type LabelledTodo,
   PRIORITY_LABELS,
   STATUS_LABELS,
-  type Assignee,
-  type Todo,
   type TodoStatus,
 } from "../types";
+import { LabelChip } from "./LabelChip";
 
 type TodoBoardProps = {
-  todos: Todo[];
+  todos: LabelledTodo[];
   assignees: Assignee[];
   today: string;
   onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
-  onEdit: (todo: Todo) => void;
+  onEdit: (todo: LabelledTodo) => void;
   /** True when the fetch was capped, so the board is not showing everything. */
   truncated: boolean;
 };
@@ -157,10 +158,10 @@ function BoardCard({
   onEdit,
   onStatusChange,
 }: {
-  todo: Todo;
+  todo: LabelledTodo;
   assignees: Assignee[];
   today: string;
-  onEdit: (todo: Todo) => void;
+  onEdit: (todo: LabelledTodo) => void;
   onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
 }) {
   const due = dueState(todo, today);
@@ -195,6 +196,16 @@ function BoardCard({
 
       {todo.description ? (
         <p className="line-clamp-2 text-xs text-muted-foreground">{todo.description}</p>
+      ) : null}
+
+      {/* Directly under the title: on a board, what a task *is* is the first
+          thing scanned, and the dates below are the second. */}
+      {todo.labels.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {todo.labels.map((label) => (
+            <LabelChip key={label.id} label={label} />
+          ))}
+        </div>
       ) : null}
 
       {assigneeName(todo.assigneeId, assignees) ? (

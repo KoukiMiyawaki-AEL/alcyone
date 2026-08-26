@@ -40,6 +40,7 @@
 | [0032](./0032-inviting-by-email-and-bootstrapping-the-admin.md) | メールアドレスで招待し、最初のアカウントを管理者にする（0031の残った穴を塞ぐ） | Accepted |
 | [0033](./0033-project-as-context-not-a-sidebar-item.md) | プロジェクトを「文脈」として扱う（サイドバーの項目から外し、ヘッダーとダッシュボードへ） | Accepted |
 | [0034](./0034-three-account-roles-and-a-screen-that-creates-them.md) | アカウントの権限を3段階にし、作成する画面を持つ | Accepted |
+| [0035](./0035-labels.md) | ラベルを入れる（ステータスでも担当者でも表せない軸） | Accepted |
 
 ## ルール
 

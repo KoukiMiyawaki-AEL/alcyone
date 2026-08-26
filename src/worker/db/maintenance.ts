@@ -3,6 +3,8 @@ import { drizzle } from "drizzle-orm/d1";
 
 import {
   attachmentsTable,
+  labelsTable,
+  todoLabelsTable,
   todoLinksTable,
   projectsTable,
   sharesTable,
@@ -92,6 +94,7 @@ export function createMaintenance(binding: D1Database) {
               inArray(todoLinksTable.toTodoId, expiredTodoIds),
             ),
           ),
+        db.delete(todoLabelsTable).where(inArray(todoLabelsTable.todoId, expiredTodoIds)),
         db.delete(todoCommentsTable).where(inArray(todoCommentsTable.todoId, expiredTodoIds)),
         db.delete(todoEventsTable).where(inArray(todoEventsTable.todoId, expiredTodoIds)),
         // Detach children whose parent is going, and children of a surviving
@@ -110,6 +113,18 @@ export function createMaintenance(binding: D1Database) {
         db.delete(sharesTable).where(
           inArray(
             sharesTable.projectId,
+            db
+              .select({ id: projectsTable.id })
+              .from(projectsTable)
+              .where(and(isNotNull(projectsTable.deletedAt), lt(projectsTable.deletedAt, before))),
+          ),
+        ),
+        // A project's labels, after its todos are gone — `todo_labels` points at
+        // both, and the same NO ACTION foreign key that has taken this batch
+        // down twice would take it down again.
+        db.delete(labelsTable).where(
+          inArray(
+            labelsTable.projectId,
             db
               .select({ id: projectsTable.id })
               .from(projectsTable)

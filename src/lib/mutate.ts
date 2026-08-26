@@ -40,3 +40,28 @@ export async function mutate(
     return false;
   }
 }
+
+/**
+ * The same contract, for a mutation whose result the caller needs.
+ *
+ * `mutate` answers "did it work", which is all most callers want. Creating
+ * something is the exception: the next step usually needs the id, and the only
+ * alternative is re-fetching a list to look for a row that was just made.
+ *
+ * Failure is still `null`, and still reported in exactly one place.
+ */
+export async function mutateFor<T>(
+  request: () => Promise<{ ok: boolean; status?: number; json: () => Promise<unknown> }>,
+  errorMessage: string,
+): Promise<T | null> {
+  let body: unknown;
+  const ok = await mutate(async () => {
+    const res = await request();
+    // Read inside, so a body that fails to parse is a failed mutation rather
+    // than an exception thrown past the one place that reports these.
+    if (res.ok) body = await res.json();
+    return res;
+  }, errorMessage);
+
+  return ok ? (body as T) : null;
+}

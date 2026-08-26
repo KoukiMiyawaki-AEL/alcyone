@@ -3,9 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { TodoBoard } from "@/features/todos/components/TodoBoard";
-import type { Todo } from "@/features/todos/types";
+import type { LabelledTodo } from "@/features/todos/types";
 
-const todo = (over: Partial<Todo> = {}): Todo => ({
+const todo = (over: Partial<LabelledTodo> = {}): LabelledTodo => ({
   id: 1,
   title: "Write tests",
   status: "todo",
@@ -19,6 +19,7 @@ const todo = (over: Partial<Todo> = {}): Todo => ({
   dueAt: null,
   description: null,
   priority: 0,
+  labels: [],
   ...over,
 });
 

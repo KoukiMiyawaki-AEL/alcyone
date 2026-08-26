@@ -1,10 +1,11 @@
 import { apiClient } from "@/lib/api-client";
-import { mutate } from "@/lib/mutate";
+import { mutate, mutateFor } from "@/lib/mutate";
 
-import type { TodoFields } from "./types";
+import type { Label, LabelColor, Todo, TodoFields } from "./types";
 
+/** Resolves to the created task, because the caller usually needs its id. */
 export const addTodo = (projectId: string, fields: { title: string } & TodoFields) =>
-  mutate(
+  mutateFor<Todo>(
     () =>
       apiClient.api.projects[":projectId"].todos.$post({
         param: { projectId },
@@ -80,4 +81,39 @@ export const removeLink = (id: number) =>
   mutate(
     () => apiClient.api.links[":id"].$delete({ param: { id: String(id) } }),
     "関連づけの解除に失敗しました。",
+  );
+
+/**
+ * Replaces the whole set of labels on a task.
+ *
+ * A set rather than add/remove calls: the screen knows what the task should end
+ * up with, and sending that means two people editing at once cannot interleave
+ * into a state neither of them chose.
+ */
+export const setTodoLabels = (todoId: number, labelIds: number[]) =>
+  mutateFor<{ labels: Label[] }>(
+    () =>
+      apiClient.api.todos[":id"].labels.$put({
+        param: { id: String(todoId) },
+        json: { labelIds },
+      }),
+    "ラベルを更新できませんでした。",
+  );
+
+export const addLabel = (projectId: string, values: { name: string; color: LabelColor }) =>
+  mutate(
+    () => apiClient.api.projects[":projectId"].labels.$post({ param: { projectId }, json: values }),
+    "ラベルを追加できませんでした。同じ名前が既にあるかもしれません。",
+  );
+
+export const updateLabel = (id: number, values: { name?: string; color?: LabelColor }) =>
+  mutate(
+    () => apiClient.api.labels[":labelId"].$patch({ param: { labelId: String(id) }, json: values }),
+    "ラベルを更新できませんでした。",
+  );
+
+export const deleteLabel = (id: number) =>
+  mutate(
+    () => apiClient.api.labels[":labelId"].$delete({ param: { labelId: String(id) } }),
+    "ラベルを削除できませんでした。",
   );

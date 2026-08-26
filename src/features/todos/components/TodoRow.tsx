@@ -26,17 +26,18 @@ import {
   PRIORITY_LABELS,
   STATUS_LABELS,
   type Assignee,
-  type Todo,
+  type LabelledTodo,
   type TodoStatus,
 } from "../types";
+import { LabelChip } from "./LabelChip";
 
 type TodoRowProps = {
-  todo: Todo;
+  todo: LabelledTodo;
   assignees: Assignee[];
   /** Today, as a calendar date. Passed in so a row is a pure function of it. */
   today: string;
   onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
-  onEdit: (todo: Todo) => void;
+  onEdit: (todo: LabelledTodo) => void;
   onDelete: (id: number) => Promise<void>;
 };
 
@@ -108,6 +109,18 @@ export function TodoRow({
         */}
         {todo.description ? (
           <p className="truncate text-xs text-muted-foreground">{todo.description}</p>
+        ) : null}
+        {/*
+          Under the title rather than beside the dates: labels are about what a
+          task *is*, and the right-hand column is about where it stands. Mixing
+          the two makes both harder to scan.
+        */}
+        {todo.labels.length > 0 ? (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {todo.labels.map((label) => (
+              <LabelChip key={label.id} label={label} />
+            ))}
+          </div>
         ) : null}
       </div>
 

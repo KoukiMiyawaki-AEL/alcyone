@@ -13,6 +13,8 @@ import {
 } from "./helpers";
 
 const sidebar = (page: import("@playwright/test").Page) => page.getByRole("navigation").first();
+const memberForm = (page: import("@playwright/test").Page) =>
+  page.getByRole("form", { name: "参加者を追加" });
 
 test.describe("sidebar", () => {
   test("offers the views only while a project is open", async ({ page }) => {
@@ -101,7 +103,7 @@ test.describe("project members", () => {
     await expect(page.getByLabel("一覧から追加")).toBeHidden();
 
     await page.getByLabel("メールアドレスで追加").fill(guestEmail);
-    await page.getByRole("button", { name: "追加", exact: true }).click();
+    await memberForm(page).getByRole("button", { name: "追加", exact: true }).click();
 
     await expect(page.getByText(guestEmail)).toBeVisible();
 
@@ -118,7 +120,7 @@ test.describe("project members", () => {
     await sidebar(page).getByRole("link", { name: "設定" }).click();
 
     await page.getByLabel("メールアドレスで追加").fill("nobody@example.com");
-    await page.getByRole("button", { name: "追加", exact: true }).click();
+    await memberForm(page).getByRole("button", { name: "追加", exact: true }).click();
 
     await expect(page.getByText("見つかりませんでした", { exact: false })).toBeVisible();
     await expect(page.getByText("まだ誰も参加していません", { exact: false })).toBeVisible();
@@ -155,7 +157,11 @@ test.describe("project members", () => {
     await expect(guest.getByText("参加者を変更できるのは", { exact: false })).toBeVisible();
     // The server says who may manage; the client does not re-derive the rule,
     // which is how a UI ends up offering a button the API refuses.
-    await expect(guest.getByRole("button", { name: "追加" })).toBeHidden();
+    //
+    // Scoped to the members form: the labels card on the same screen is a
+    // member's to use, deliberately — organising the work is not the same
+    // permission as handing out access to it.
+    await expect(memberForm(guest)).toBeHidden();
 
     await guestContext.close();
   });

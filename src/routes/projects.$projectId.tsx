@@ -10,20 +10,30 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Project } from "@/features/projects/types";
 import { ShareCard } from "@/features/share/ShareCard";
-import { addTodo, deleteTodo, restoreTodo, updateTodo } from "@/features/todos/api";
+import { addTodo, deleteTodo, restoreTodo, setTodoLabels, updateTodo } from "@/features/todos/api";
 import { TodoBoard } from "@/features/todos/components/TodoBoard";
 import { TodoDetailDialog, type TodoEditor } from "@/features/todos/components/TodoDetailDialog";
 import { TodoFilters } from "@/features/todos/components/TodoFilters";
 import { TodoList } from "@/features/todos/components/TodoList";
 import { TodoTimeline } from "@/features/todos/components/TodoTimeline";
-import type { Assignee, Todo, TodoFields, TodoStatus } from "@/features/todos/types";
+import { sameLabels } from "@/features/todos/labels";
+import type {
+  Assignee,
+  Label,
+  LabelledTodo,
+  Todo,
+  TodoFields,
+  TodoStatus,
+} from "@/features/todos/types";
 import { apiClient } from "@/lib/api-client";
 import { toastUndo } from "@/lib/undo-toast";
 
 type LoaderData = {
   project: Project | null;
-  todos: Todo[];
+  todos: LabelledTodo[];
   assignees: Assignee[];
+  /** Every label defined in this project — the filter's options and the picker's. */
+  labels: Label[];
   shareToken: string | null;
   error: string | null;
 };
@@ -49,6 +59,11 @@ const searchSchema = z.object({
   // URL rather than behind a separate route: a link to a filtered board is
   // still a link to this project's tasks.
   view: z.enum(["list", "board", "timeline"]).default("list").catch("list"),
+  // A label id, or nothing. In the URL for the same reasons the others are:
+  // linkable, survives a reload, and re-runs the loader so the narrowing
+  // happens in SQL. `optional` rather than `default`, because "no label" is
+  // the absence of a filter and not a value of one.
+  label: z.coerce.number().int().positive().optional().catch(undefined),
 });
 
 export type TodoListSearch = z.infer<typeof searchSchema>;
@@ -75,7 +90,9 @@ export const Route = createFileRoute("/projects/$projectId")({
         param: { projectId: params.projectId },
         query:
           deps.view === "list"
-            ? { status: deps.status, sort: deps.sort }
+            ? // A query string carries text; the id is a number everywhere else,
+              // and `undefined` here means the parameter is simply absent.
+              { status: deps.status, sort: deps.sort, label: deps.label?.toString() }
             : {
                 // A board shows every column at once, so narrowing to one
                 // status would empty three of them — its columns *are* the
@@ -83,6 +100,10 @@ export const Route = createFileRoute("/projects/$projectId")({
                 // blocked, and when" is a real question to ask of a calendar.
                 status: deps.view === "board" ? "all" : deps.status,
                 sort: deps.sort,
+                // Unlike status, the label filter survives into every view: it
+                // narrows *which* tasks, not how they are arranged, so a
+                // board of one label is a coherent thing to ask for.
+                label: deps.label?.toString(),
                 // Neither of these has a "load more", so both stop at one page.
                 // A project with more live tasks shows only the first
                 // WHOLE_VIEW_LIMIT, which they say out loud rather than leaving
@@ -93,7 +114,14 @@ export const Route = createFileRoute("/projects/$projectId")({
     } catch {
       // Network failure is transient — show the inline Retry card, not a
       // hard "not found". The project may well exist.
-      return { project: null, todos: [], assignees: [], shareToken: null, error: TRANSIENT };
+      return {
+        project: null,
+        todos: [],
+        assignees: [],
+        labels: [],
+        shareToken: null,
+        error: TRANSIENT,
+      };
     }
 
     // Everything below is outside the catch on purpose: both `redirect()` and
@@ -108,9 +136,16 @@ export const Route = createFileRoute("/projects/$projectId")({
     if (res.status === 404 || res.status === 400) throw notFound();
 
     if (!res.ok)
-      return { project: null, todos: [], assignees: [], shareToken: null, error: TRANSIENT };
+      return {
+        project: null,
+        todos: [],
+        assignees: [],
+        labels: [],
+        shareToken: null,
+        error: TRANSIENT,
+      };
 
-    const { project, todos } = await res.json();
+    const { project, todos, labels } = await res.json();
 
     // Who tasks here can be assigned to. One person today, because a project
     // has one owner — asked for rather than assumed, so the answer can change
@@ -139,7 +174,14 @@ export const Route = createFileRoute("/projects/$projectId")({
       // un-shared state, and enabling is idempotent so nothing is lost.
     }
 
-    return { project, todos, assignees, shareToken, error: null };
+    return {
+      project,
+      todos: todos as LabelledTodo[],
+      assignees,
+      labels: labels as Label[],
+      shareToken,
+      error: null,
+    };
   },
   pendingComponent: TodosPending,
   component: ProjectTodosComponent,
@@ -193,12 +235,12 @@ function ProjectNotFound() {
 function ProjectTodosComponent() {
   const router = useRouter();
   const { projectId } = Route.useParams();
-  const { status, sort, view } = Route.useSearch();
+  const { status, sort, view, label } = Route.useSearch();
   // Read once per render rather than inside the timeline, so the view stays a
   // pure function of its inputs and its layout can be tested without a clock.
   const today = new Date().toISOString().slice(0, 10);
   const navigate = Route.useNavigate();
-  const { project, todos, assignees, shareToken, error } = Route.useLoaderData();
+  const { project, todos, assignees, labels, shareToken, error } = Route.useLoaderData();
 
   // What the detail dialog is working on — a new task or an existing row. Held
   // as the row itself rather than an id so the dialog opens with values already
@@ -206,15 +248,36 @@ function ProjectTodosComponent() {
   // wrong one.
   const [editor, setEditor] = useState<TodoEditor | null>(null);
 
-  async function handleSave(fields: TodoFields, todo: Todo | null) {
-    const saved = todo
-      ? await updateTodo(todo.id, fields)
+  // What each task carries now, so a save can tell whether the labels actually
+  // changed rather than rewriting them on every keystroke's worth of edit.
+  const labelsById = new Map(todos.map((todo) => [todo.id, todo.labels.map((l) => l.id)]));
+
+  async function handleSave(fields: TodoFields, todo: Todo | null, labelIds: number[]) {
+    // The id is needed either way, and on create it only exists once the row
+    // does — which is why `addTodo` resolves to the task rather than a boolean.
+    const id = todo
+      ? (await updateTodo(todo.id, fields)) && todo.id
       : // `title` is required on create and the form enforces it, but the type
         // cannot know that, so the fallback is here rather than a cast.
-        await addTodo(projectId, { ...fields, title: fields.title ?? "" });
+        ((await addTodo(projectId, { ...fields, title: fields.title ?? "" }))?.id ?? false);
 
-    if (saved) await router.invalidate();
-    return saved;
+    if (id === false) return false;
+
+    // A second request, deliberately. Labels are a set on a join table and the
+    // task's own fields are columns; folding them into one endpoint would mean
+    // a partial update that sometimes replaces a collection wholesale, which is
+    // two different meanings of PATCH in one place.
+    //
+    // Skipped when nothing changed, so a save that only touched the title does
+    // not rewrite the label rows and does not fail on a task whose labels the
+    // caller never saw.
+    const before = todo ? (labelsById.get(todo.id) ?? []) : [];
+    if (!sameLabels(before, labelIds)) {
+      if (!(await setTodoLabels(id, labelIds))) return false;
+    }
+
+    await router.invalidate();
+    return true;
   }
 
   async function handleReschedule(
@@ -269,6 +332,7 @@ function ProjectTodosComponent() {
         editor={editor}
         assignees={assignees}
         siblings={todos}
+        labels={labels}
         onOpenChange={(open) => setEditor(open ? editor : null)}
         onSave={handleSave}
       />
@@ -283,6 +347,8 @@ function ProjectTodosComponent() {
           <TodoFilters
             status={status}
             sort={sort}
+            labels={labels}
+            label={label}
             showStatus={view === "list"}
             // Merging into the existing search keeps the other control's value
             // when one of them changes.

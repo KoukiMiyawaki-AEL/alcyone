@@ -7,6 +7,7 @@ import {
   openProject,
   signIn,
   signUp,
+  switchProject,
   uniqueEmail,
 } from "./helpers";
 
@@ -17,30 +18,32 @@ test.describe("sidebar", () => {
     await signUp(page);
 
     // Nothing to switch the view of yet.
-    await expect(sidebar(page).getByRole("link", { name: "ボード" })).toBeHidden();
+    await expect(sidebar(page).getByRole("link", { name: "ボード", exact: true })).toBeHidden();
 
     await createProject(page, "Sidebar");
     await openProject(page, "Sidebar");
 
     await expect(sidebar(page).getByRole("link", { name: "一覧" })).toBeVisible();
-    await sidebar(page).getByRole("link", { name: "ボード" }).click();
+    await sidebar(page).getByRole("link", { name: "ボード", exact: true }).click();
     await expect(page).toHaveURL(/view=board/);
 
     await sidebar(page).getByRole("link", { name: "タイムライン" }).click();
     await expect(page).toHaveURL(/view=timeline/);
   });
 
-  test("switches between projects from the sidebar", async ({ page }) => {
-    // The views are premised on a project being open, so choosing which one
-    // has to be reachable from the same place — not only from the list page.
+  test("switches between projects from the header, not the sidebar", async ({ page }) => {
+    // The sidebar answers "what can I do here". Which project "here" is comes
+    // from the switcher above it — a project is the context, not one of the
+    // things inside it.
     await signUp(page);
     await createProject(page, "Ichi");
     await createProject(page, "Ni");
 
-    await sidebar(page).getByRole("link", { name: "Ichi" }).click();
+    await openProject(page, "Ichi");
     await expect(page.getByRole("heading", { level: 1, name: "Ichi" })).toBeVisible();
+    await expect(sidebar(page).getByRole("link", { name: "Ni" })).toBeHidden();
 
-    await sidebar(page).getByRole("link", { name: "Ni" }).click();
+    await switchProject(page, "Ni");
     await expect(page.getByRole("heading", { level: 1, name: "Ni" })).toBeVisible();
   });
 
@@ -51,11 +54,11 @@ test.describe("sidebar", () => {
     await createProject(page, "Ichi");
     await createProject(page, "Ni");
 
-    await sidebar(page).getByRole("link", { name: "Ichi" }).click();
+    await openProject(page, "Ichi");
     await page.getByRole("button", { name: "未完了" }).click();
     await expect(page).toHaveURL(/status=active/);
 
-    await sidebar(page).getByRole("link", { name: "Ni" }).click();
+    await switchProject(page, "Ni");
     await expect(page).not.toHaveURL(/status=active/);
   });
 

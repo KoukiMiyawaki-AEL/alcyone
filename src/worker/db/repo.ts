@@ -43,6 +43,16 @@ import {
 const now = () => new Date().toISOString();
 
 /**
+ * Today's calendar day, in UTC.
+ *
+ * `startAt` and `dueAt` are calendar days, not instants, and every comparison
+ * on them is closed in UTC (ADR 0026). Reading "today" from the local clock
+ * would move the boundary for users west of Greenwich only — and invisibly to
+ * whoever wrote the code.
+ */
+export const todayInUtc = () => new Date().toISOString().slice(0, 10);
+
+/**
  * Identifies one save.
  *
  * `crypto.randomUUID`, not a timestamp: two saves in the same millisecond would
@@ -857,6 +867,59 @@ export function createRepo(
 
     restore: (id: number) =>
       db.update(projectsTable).set({ deletedAt: null }).where(eq(projectsTable.id, id)).returning(),
+
+    /**
+     * Every reachable project with its task counts, for the dashboard.
+     *
+     * One statement with a LEFT JOIN rather than a list followed by a count per
+     * project: the second shape costs a round trip per row and reports a
+     * project's total from a moment after its name was read.
+     *
+     * `today` is passed in rather than read from the database, because the
+     * calendar day these dates live on is decided in UTC and in one place
+     * (ADR 0026) — `date('now')` would quietly introduce a second opinion.
+     */
+    summaries: (today: string) =>
+      db
+        .select({
+          id: projectsTable.id,
+          name: projectsTable.name,
+          ownerId: projectsTable.ownerId,
+          createdAt: projectsTable.createdAt,
+          deletedAt: projectsTable.deletedAt,
+          total: sql<number>`count(${todosTable.id})`,
+          done: sql<number>`
+            sum(case when ${todosTable.status} = 'done' then 1 else 0 end)
+          `,
+          overdue: sql<number>`
+            sum(case
+                  when ${todosTable.status} <> 'done'
+                   and ${todosTable.dueAt} is not null
+                   and ${todosTable.dueAt} < ${today}
+                  then 1 else 0
+                end)
+          `,
+          dueToday: sql<number>`
+            sum(case
+                  when ${todosTable.status} <> 'done' and ${todosTable.dueAt} = ${today}
+                  then 1 else 0
+                end)
+          `,
+        })
+        .from(projectsTable)
+        // The join carries `deletedAt IS NULL`, not the WHERE: in the WHERE it
+        // would turn the outer join back into an inner one and drop every
+        // project that has no tasks at all — which is exactly the project a
+        // dashboard most needs to show.
+        .leftJoin(
+          todosTable,
+          and(eq(todosTable.projectId, projectsTable.id), isNull(todosTable.deletedAt)),
+        )
+        .where(
+          and(inArray(projectsTable.id, accessibleProjectIds()), isNull(projectsTable.deletedAt)),
+        )
+        .groupBy(projectsTable.id)
+        .orderBy(asc(projectsTable.id)),
   };
 
   const todos = {
@@ -892,6 +955,41 @@ export function createRepo(
         // date or priority can swap places between requests, which looks like
         // the list is shuffling itself.
         .orderBy(...sortOrder(options.sort), asc(todosTable.id)),
+
+    /**
+     * Everything assigned to this account, across every project it can reach.
+     *
+     * The project's name comes back with each row: without it the list is a
+     * pile of titles with no way to tell which project a task belongs to, and
+     * looking each one up afterwards is a query per row.
+     *
+     * Unfinished only, ordered by due date with the undated last — this answers
+     * "what is on me", and a task that is done is not.
+     */
+    assignedTo: (userId: string) =>
+      db
+        .select({
+          todo: todosTable,
+          projectName: projectsTable.name,
+        })
+        .from(todosTable)
+        .innerJoin(projectsTable, eq(projectsTable.id, todosTable.projectId))
+        .where(
+          and(
+            eq(todosTable.assigneeId, userId),
+            ne(todosTable.status, "done"),
+            isNull(todosTable.deletedAt),
+            isNull(projectsTable.deletedAt),
+            inArray(todosTable.projectId, accessibleProjectIds()),
+          ),
+        )
+        // `dueAt IS NULL` sorts first in SQLite, and an undated task is the
+        // least urgent thing here, not the most.
+        .orderBy(
+          sql`case when ${todosTable.dueAt} is null then 1 else 0 end`,
+          asc(todosTable.dueAt),
+          asc(todosTable.id),
+        ),
 
     create: (values: TodoFields & { title: string; projectId: number }) => {
       const timestamp = now();

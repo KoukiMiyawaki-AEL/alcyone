@@ -28,7 +28,16 @@ export async function signUp(page: Page, email = uniqueEmail()): Promise<string>
   await page.getByLabel("Name").fill("E2E user");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
+  // Watch the request itself. Without this a rejected sign-up reports only
+  // "the Projects heading never appeared", which reads like a routing bug and
+  // has sent this suite chasing the wrong thing more than once.
+  const responded = page.waitForResponse((res) => res.url().includes("/api/auth/sign-up/email"));
   await page.getByRole("button", { name: "Create account" }).click();
+
+  const res = await responded;
+  if (!res.ok()) {
+    throw new Error(`sign-up failed (${res.status()}): ${await res.text()}`);
+  }
 
   // The assertion is the point: signing up has to actually land somewhere.
   await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
@@ -64,6 +73,17 @@ export async function openProject(page: Page, name: string | RegExp) {
 }
 
 /**
+ * Changes which project everything else is about, from the header.
+ *
+ * The switcher lives there rather than in the sidebar because it is not one of
+ * the things a project offers — it decides which project is offering them.
+ */
+export async function switchProject(page: Page, name: string) {
+  await page.getByRole("button", { name: "プロジェクトを切り替える" }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name }).click();
+}
+
+/**
  * Creates a task through the only route there is: the detail form.
  *
  * There used to be a title-only field on the page, and this helper used it.
@@ -78,6 +98,9 @@ export async function createTodo(page: Page, title: string) {
     .getByRole("button", { name: "追加" })
     .click();
   await expect(page.getByRole("dialog", { name: "タスクを追加" })).toBeHidden();
+  // The overlay outlives the dialog by one closing animation, and while it is
+  // there it intercepts the next click — which then fails somewhere unrelated.
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toBeHidden();
   await expect(page.getByText(title)).toBeVisible();
 }
 

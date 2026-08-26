@@ -15,7 +15,7 @@ test.describe("display name", () => {
     // their comments.
     await expect(page.getByRole("button", { name: "アカウント: 設計担当" })).toBeVisible();
 
-    await page.getByRole("link", { name: "プロジェクト" }).click();
+    await page.getByRole("link", { name: "ダッシュボード" }).click();
     await createProject(page, "Naming");
     await openProject(page, "Naming");
     await createTodo(page, "誰かのタスク");
@@ -63,7 +63,7 @@ test.describe("assignment", () => {
     await page.getByLabel("表示名").fill("実装担当");
     await page.getByRole("button", { name: "保存" }).click();
 
-    await page.getByRole("link", { name: "プロジェクト" }).click();
+    await page.getByRole("link", { name: "ダッシュボード" }).click();
     await createProject(page, "Assigning");
     await openProject(page, "Assigning");
     await createTodo(page, "割り当てるタスク");
@@ -84,7 +84,7 @@ test.describe("assignment", () => {
     await page.getByLabel("表示名").fill("改名後");
     await page.getByRole("button", { name: "保存" }).click();
 
-    await page.getByRole("link", { name: "プロジェクト" }).click();
+    await page.getByRole("link", { name: "ダッシュボード" }).click();
     await openProject(page, "Assigning");
     await expect(page.getByLabel("担当: 改名後")).toBeVisible();
   });

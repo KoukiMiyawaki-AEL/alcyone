@@ -9,7 +9,7 @@ import { createAuth } from "./auth";
 import { exportKey, type ExportManifest, type ExportParams } from "./data-export";
 import { USER_ROLES, type UserRole } from "./db/auth-schema";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, paginate } from "./db/cursor";
-import { createRepo, todoCursorValue, type Repo } from "./db/repo";
+import { createRepo, todayInUtc, todoCursorValue, type Repo } from "./db/repo";
 import { TODO_LINK_KINDS, TODO_STATUSES } from "./db/schema";
 import { bookmarkCookie, openSession } from "./db/session";
 import {
@@ -425,6 +425,27 @@ const app = new Hono<{
     // that later would have broken every caller — the exact one-way door the
     // readiness map recorded as D8.
     return c.json(paginate(rows, limit, (row) => ({ value: row.id, id: row.id })));
+  })
+  /**
+   * The dashboard's one request: every reachable project with its counts.
+   *
+   * Separate from `GET /api/projects` because that one paginates and this one
+   * aggregates — folding them together would mean either a page of counts or
+   * counts over a page, and neither is what a dashboard means.
+   */
+  .get("/api/dashboard", async (c) => {
+    const rows = await c.get("repo").projects.summaries(todayInUtc());
+    return c.json({ projects: rows });
+  })
+  /**
+   * What is on this account, wherever it lives.
+   *
+   * Not under `/api/projects/...` on purpose: the question crosses projects,
+   * and nesting it under one would make the path claim otherwise.
+   */
+  .get("/api/todos/assigned", async (c) => {
+    const rows = await c.get("repo").todos.assignedTo(c.get("userId"));
+    return c.json({ items: rows.map((row) => ({ ...row.todo, projectName: row.projectName })) });
   })
   .post("/api/projects", validate("json", createProjectSchema), async (c) => {
     const { name } = c.req.valid("json");

@@ -6,6 +6,13 @@ import type {
 } from "@/worker/db/schema";
 
 export type Todo = typeof todosTable.$inferSelect;
+
+/**
+ * A task seen from outside its project, as the assigned-tasks endpoint returns
+ * it: the row plus the project's name, resolved by a join. A cross-project list
+ * without it is a pile of titles with nothing to place them.
+ */
+export type AssignedTodo = Todo & { projectName: string };
 /**
  * As the activity endpoint returns them: the stored row plus the person's name,
  * resolved by a join rather than looked up on the client. `deletedAt` is not

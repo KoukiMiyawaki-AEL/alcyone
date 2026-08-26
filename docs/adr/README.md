@@ -38,6 +38,7 @@
 | [0030](./0030-put-adding-and-sharing-behind-buttons.md) | タスク追加と共有をボタンの後ろに置く（0025の「速い経路」を覆す） | Accepted |
 | [0031](./0031-project-membership-and-roles.md) | プロジェクトに参加者を持たせ、管理者ロールを導入する（0014の単独所有を広げる） | Accepted |
 | [0032](./0032-inviting-by-email-and-bootstrapping-the-admin.md) | メールアドレスで招待し、最初のアカウントを管理者にする（0031の残った穴を塞ぐ） | Accepted |
+| [0033](./0033-project-as-context-not-a-sidebar-item.md) | プロジェクトを「文脈」として扱う（サイドバーの項目から外し、ヘッダーとダッシュボードへ） | Accepted |
 
 ## ルール
 

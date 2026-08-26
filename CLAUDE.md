@@ -228,6 +228,11 @@ shadcn/uiコンポーネントを追加・変更したら、ここに使用例�
 TanStack Queryはまだ導入していない。データ取得はTanStack Routerの`loader`を使い、
 mutation後は`router.invalidate()`で再取得する（`src/routes/index.tsx`参照）。
 
+**プロジェクトは「どの画面か」ではなく「どの文脈か」。** 選択はヘッダーの切り替えに置き、
+サイドバーは開いているプロジェクトで**できること**だけを並べる。プロジェクト間の移動では
+search paramsを引き継がない——絞り込みは離れる側のもので、持ち込むと移った先で黙って行が消える
+（[ADR 0033](./docs/adr/0033-project-as-context-not-a-sidebar-item.md)）。
+
 **一覧の状態（絞り込み・並び替え）はURLのsearch paramsに置く。** コンポーネントのstateにしない。
 リンクで共有でき、リロードでも残り、`loaderDeps`経由でloaderが再実行されるのでSQL側で絞れる
 （クライアントが取得済みの行を隠すのではなく）。スキーマは`.default()`で「無い場合」を、
@@ -259,7 +264,8 @@ loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catch�
 （未知のパスは`index.html`にフォールバックし、TanStack Routerがクライアント側で描画する）。
 APIのパスは必ず`/api/`配下に置くこと。
 
-画面は `/`（Project一覧）、`/projects/$projectId`（Todo。一覧/ボード/タイムラインを`view`で切り替え）、
+画面は `/`（ダッシュボード。プロジェクトごとの進捗）、`/my`（担当タスク。プロジェクト横断）、
+`/projects/$projectId`（Todo。一覧/ボード/タイムラインを`view`で切り替え）、
 `/projects/$projectId/settings`（参加者）、`/admin`（ユーザー管理。管理者のみ）、
 `/search`、`/account`、`/s/$token`（公開共有）、`/dev/design-system`。
 動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。

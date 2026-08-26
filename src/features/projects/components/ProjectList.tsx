@@ -1,13 +1,12 @@
 import { FolderIcon } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
-import { Separator } from "@/components/ui/separator";
 
-import type { Project } from "../types";
-import { ProjectRow } from "./ProjectRow";
+import type { ProjectSummary } from "../types";
+import { ProjectCard } from "./ProjectCard";
 
 type ProjectListProps = {
-  projects: Project[];
+  projects: ProjectSummary[];
   onDelete: (id: number) => Promise<void>;
 };
 
@@ -22,13 +21,13 @@ export function ProjectList({ projects, onDelete }: ProjectListProps) {
     );
   }
 
+  // A grid rather than rows: each project now carries its own progress and
+  // counts, and stacking those full width makes a short list look like a long
+  // one.
   return (
-    <div className="rounded-lg border border-border">
-      {projects.map((project, index) => (
-        <div key={project.id}>
-          {index > 0 ? <Separator /> : null}
-          <ProjectRow project={project} onDelete={onDelete} />
-        </div>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {projects.map((project) => (
+        <ProjectCard key={project.id} project={project} onDelete={onDelete} />
       ))}
     </div>
   );

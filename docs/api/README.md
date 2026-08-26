@@ -25,6 +25,8 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 |---|---|---|---|---|---|
 | GET | `/api/health` | ヘルスチェック（**認証不要**） | — | `{ ok: true }` | — |
 | * | `/api/auth/*` | Better Auth（サインアップ/イン/アウト等） | — | — | `403` Origin不正 |
+| GET | `/api/dashboard` | 到達できる全プロジェクト + タスク件数 | 到達できる人 | `{ projects }` | — |
+| GET | `/api/todos/assigned` | 自分の担当（未完了・全プロジェクト） | 本人 | `{ items }` | — |
 | GET | `/api/projects` | Project一覧（id昇順） | クエリ: `cursor`、`limit`（1〜100、既定50） | `{ items: Project[], nextCursor }` | `400` |
 | POST | `/api/projects` | Project作成 | `{ name: string }`（1〜100文字） | `201` `Project` | `400` |
 | DELETE | `/api/projects/:projectId` | Project削除（**論理削除**。配下のTodoも同時に） | — | `204` (body無し) | `400`, `404` |

@@ -4,19 +4,23 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProjectList } from "@/features/projects/components/ProjectList";
-import type { Project } from "@/features/projects/types";
+import type { ProjectSummary } from "@/features/projects/types";
 
-const project = (over: Partial<Project> = {}): Project => ({
+const project = (over: Partial<ProjectSummary> = {}): ProjectSummary => ({
   id: 1,
   name: "Alcyone",
   createdAt: "2026-08-24T00:00:00.000Z",
   ownerId: "user_1",
   deletedAt: null,
+  total: 0,
+  done: 0,
+  overdue: 0,
+  dueToday: 0,
   ...over,
 });
 
 /**
- * ProjectRow renders a `<Link>`, which needs a router in context. A memory
+ * ProjectCard renders a `<Link>`, which needs a router in context. A memory
  * router around the component under test keeps this a component test — no
  * route files, no loaders, no fetch.
  */
@@ -34,7 +38,7 @@ describe("ProjectList", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("renders one linked row per project", async () => {
+  it("renders one linked card per project", async () => {
     renderInRouter(
       <ProjectList projects={[project(), project({ id: 2, name: "Second" })]} onDelete={vi.fn()} />,
     );
@@ -46,7 +50,7 @@ describe("ProjectList", () => {
     expect(screen.getByRole("link", { name: /Second/ })).toHaveAttribute("href", "/projects/2");
   });
 
-  it("deletes the right project from its row menu", async () => {
+  it("deletes the right project from its own menu", async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn().mockResolvedValue(undefined);
     renderInRouter(
@@ -61,5 +65,35 @@ describe("ProjectList", () => {
     await user.click(within(menu).getByRole("menuitem", { name: "Delete" }));
 
     expect(onDelete).toHaveBeenCalledExactlyOnceWith(2);
+  });
+});
+
+describe("ProjectCard progress", () => {
+  it("reports how much of the project is done", async () => {
+    renderInRouter(<ProjectList projects={[project({ total: 4, done: 3 })]} onDelete={vi.fn()} />);
+
+    expect(await screen.findByText("3 / 4 完了（75%）")).toBeInTheDocument();
+  });
+
+  it("says a project has no tasks rather than showing it as 0% done", async () => {
+    // A bar pinned at zero reads as failure. An empty project has not failed
+    // at anything, it has not started.
+    renderInRouter(<ProjectList projects={[project()]} onDelete={vi.fn()} />);
+
+    expect(await screen.findByText("まだタスクがありません")).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("shows overdue and due-today counts only when there are any", async () => {
+    renderInRouter(
+      <ProjectList
+        projects={[project({ total: 5, done: 1, overdue: 2, dueToday: 0 })]}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("期限切れ 2")).toBeInTheDocument();
+    // A row of zeroes is noise that has to be read before it can be dismissed.
+    expect(screen.queryByText(/本日期限/)).not.toBeInTheDocument();
   });
 });

@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { addProject, deleteProject, restoreProject } from "@/features/projects/api";
 import { ProjectForm } from "@/features/projects/components/ProjectForm";
 import { ProjectList } from "@/features/projects/components/ProjectList";
-import type { Project } from "@/features/projects/types";
+import type { ProjectSummary } from "@/features/projects/types";
 import { apiClient } from "@/lib/api-client";
 import { toastUndo } from "@/lib/undo-toast";
 
@@ -26,10 +26,10 @@ export const Route = createFileRoute("/")({
       throw redirect({ to: "/login", search: { redirect: location.href } });
     }
   },
-  loader: async (): Promise<{ projects: Project[]; error: string | null }> => {
+  loader: async (): Promise<{ projects: ProjectSummary[]; error: string | null }> => {
     let res;
     try {
-      res = await apiClient.api.projects.$get({ query: {} });
+      res = await apiClient.api.dashboard.$get();
     } catch {
       // Network failure only. Anything status-shaped is handled below, outside
       // the catch — `redirect()` works by throwing, so raising it in here would
@@ -40,10 +40,11 @@ export const Route = createFileRoute("/")({
     if (res.status === 401) throw redirect({ to: "/login", search: { redirect: "/" } });
     if (!res.ok) return { projects: [], error: TRANSIENT };
 
-    // Only the first page is shown. There is no "load more" yet, so a user
-    // with more projects than the default page size would not see them all —
-    // recorded rather than hidden. See the readiness map, 3-4.
-    return { projects: (await res.json()).items, error: null };
+    // Not paginated, unlike `GET /api/projects`: a dashboard that shows the
+    // first page of projects and calls it an overview is worse than one that
+    // shows all of them. The cost is a query proportional to how many projects
+    // an account can reach, recorded in the readiness map (3-4).
+    return { projects: (await res.json()).projects as ProjectSummary[], error: null };
   },
   pendingComponent: ProjectsPending,
   component: IndexComponent,
@@ -52,7 +53,7 @@ export const Route = createFileRoute("/")({
 function ProjectsPending() {
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Projects" description="Group your tasks by project" />
+      <PageHeader title="Projects" description="進行中のプロジェクトと、その進み具合" />
       <Card>
         <CardHeader>
           <CardTitle>Projects</CardTitle>
@@ -88,7 +89,7 @@ function IndexComponent() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Projects" description="Group your tasks by project" />
+      <PageHeader title="Projects" description="進行中のプロジェクトと、その進み具合" />
 
       <Card>
         <CardHeader>

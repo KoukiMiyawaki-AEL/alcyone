@@ -1,8 +1,22 @@
 import { sql } from "drizzle-orm";
 
-/** What an account may do beyond its own data. */
-export const USER_ROLES = ["member", "admin"] as const;
+/**
+ * What an account may do beyond its own data, weakest first.
+ *
+ * The order is the rank, and the rank is the rule: an account may only change
+ * accounts below its own, and only to a role below its own — the one exception
+ * being that an owner may appoint another owner. Written as an ordered list so
+ * that "below" is a comparison rather than a table of special cases.
+ *
+ * `owner` is the instance's owner, not a project's. A project's owner is the
+ * account that created it (`projects.ownerId`) and is a different thing at a
+ * different scope; the screens say プロジェクトの作成者 for that one.
+ */
+export const USER_ROLES = ["member", "admin", "owner"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
+
+/** How far up the list a role sits. Higher outranks lower. */
+export const roleRank = (role: UserRole): number => USER_ROLES.indexOf(role);
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
@@ -52,8 +66,9 @@ export const user = sqliteTable(
      * request. The role is not the user's to set.
      *
      * `member` is the default and the overwhelming majority. An admin can reach
-     * project membership everywhere, which is the one power the distinction
-     * exists to grant.
+     * project membership everywhere and manage accounts below their own rank.
+     * An owner is an admin who can also appoint and remove admins and owners,
+     * and the last one of whom cannot be removed at all.
      */
     role: text("role").notNull().default("member").$type<UserRole>(),
     createdAt: integer("created_at", { mode: "timestamp_ms" })

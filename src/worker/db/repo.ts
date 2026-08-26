@@ -21,6 +21,7 @@ import {
   TODO_STATUSES,
   attachmentsTable,
   projectMembersTable,
+  roleRank,
   type UserRole,
   todoLinksTable,
   type TodoLinkKind,
@@ -235,7 +236,12 @@ export function createRepo(
   // Read once. Threading the role through every subquery would put the same
   // decision in fourteen places, which is the shape that lets one of them
   // disagree.
-  const isAdmin = role === "admin";
+  //
+  // An owner is an admin with more: everything below is written in terms of
+  // "reaches every project", and an owner does. What the two do not share is
+  // which accounts they may change, and that lives in `roles` alone.
+  const isAdmin = role === "admin" || role === "owner";
+  const isOwner = role === "owner";
   const db = drizzle(binding as D1Database);
 
   /**
@@ -570,49 +576,70 @@ export function createRepo(
         .returning({ id: projectMembersTable.id }),
   };
 
+  /** No rows, and no statement that could accidentally match one. */
+  const refuse = () =>
+    db
+      .select({ id: user.id })
+      .from(user)
+      .where(sql`0 = 1`);
+
   const roles = {
     /**
-     * Changes what an account may do. Administrators only.
+     * Changes what an account may do.
      *
-     * Refuses to remove the last administrator: the role can only be granted by
-     * someone who holds it, so an installation with none has no way back short
-     * of a database console. The check and the write are one statement, because
-     * two would leave a window where both of the last two admins demote each
-     * other.
+     * Two rules, both in the statement rather than in the handler:
+     *
+     * 1. **Rank.** An account may only change accounts below its own, and only
+     *    to a role below its own — except an owner, who may also appoint
+     *    another owner. Otherwise an admin could promote themselves past the
+     *    people who appointed them.
+     * 2. **The last owner stays.** The role can only be granted by someone who
+     *    holds it, so an installation with none has no way back short of a
+     *    database console.
+     *
+     * The check and the write are one statement, because two would leave a
+     * window where the last two owners demote each other.
      */
-    set: (userId: string, role: UserRole) => {
-      if (!isAdmin)
-        return db
-          .select({ id: user.id })
-          .from(user)
-          .where(sql`0 = 1`);
+    /**
+     * Whether this caller may hand out that role at all.
+     *
+     * The same rank rule `set` enforces in SQL, asked before a row exists —
+     * account creation has nothing to guard with a WHERE.
+     */
+    mayGrant: (next: UserRole) => isAdmin && (isOwner || roleRank(next) < roleRank("owner")),
 
-      // Only demotion can strip the last one, and only if the target holds the
-      // role now. Written as a builder rather than raw SQL because SQLite
-      // rejects a qualified column on the left of `SET`, which is what
+    set: (userId: string, next: UserRole) => {
+      // Named `next` rather than `role`, which is already the caller's own —
+      // shadowing it here would make every line below ambiguous about whose
+      // role it means.
+      if (!isAdmin) return refuse();
+
+      // An admin may move accounts between the roles below `owner`, and may
+      // not touch an owner at all. Otherwise an admin could promote themselves
+      // past the people who appointed them, or demote them.
+      if (!isOwner && roleRank(next) >= roleRank("owner")) return refuse();
+      const rankGuard = isOwner ? undefined : ne(user.role, "owner");
+
+      // Only a demotion can remove the last owner, and only if the target
+      // holds the role now. Written as a builder rather than raw SQL because
+      // SQLite rejects a qualified column on the left of `SET`, which is what
       // interpolating the column into a template produces.
       const survives =
-        role === "admin"
+        next === "owner"
           ? undefined
           : or(
-              ne(user.role, "admin"),
-              sql`(select count(*) from ${user} where ${user.role} = 'admin') > 1`,
+              ne(user.role, "owner"),
+              sql`(select count(*) from ${user} where ${user.role} = 'owner') > 1`,
             );
 
       return db
         .update(user)
-        .set({ role })
-        .where(and(eq(user.id, userId), survives))
+        .set({ role: next })
+        .where(and(eq(user.id, userId), rankGuard, survives))
         .returning({ id: user.id });
     },
   };
 
-  /**
-   * Accounts that can be invited.
-   *
-   * Only an administrator sees this: handing every user a list of every other
-   * user's name and address is a directory, and nobody asked for one.
-   */
   const directory = {
     list: () =>
       isAdmin

@@ -72,7 +72,7 @@ export async function signUp(email: string, name = "Test user"): Promise<Headers
   return headers;
 }
 
-/** The account `resetAll` seeds so that no test's own user becomes the admin. */
+/** The account `resetAll` seeds so that no test's own user becomes the owner. */
 export const SEED_ADMIN_ID = "seed-admin";
 
 export const PASSWORD = "correct horse battery";
@@ -80,11 +80,11 @@ export const PASSWORD = "correct horse battery";
 /**
  * Clears every table these tests touch, children before parents.
  *
- * Then seeds one account, because the first one to exist becomes the
- * administrator (src/worker/auth.ts). Without the seed, whichever user a test
- * happened to sign up first would silently hold every permission, and an
- * isolation test would pass while proving nothing. Pass `seedAdmin: false` only
- * to test the bootstrap itself.
+ * Then seeds one account, because the first one to exist becomes the owner
+ * (src/worker/auth.ts). Without the seed, whichever user a test happened to
+ * sign up first would silently hold every permission, and an isolation test
+ * would pass while proving nothing. Pass `seedAdmin: false` only to test the
+ * bootstrap itself.
  */
 export async function resetAll({ seedAdmin = true } = {}) {
   // Order matters: attachments -> todos -> projects -> user. D1 enforces the
@@ -119,7 +119,7 @@ export async function resetAll({ seedAdmin = true } = {}) {
   if (seedAdmin) {
     await env.DB.prepare(
       `INSERT INTO user (id, name, email, email_verified, role, created_at, updated_at)
-       VALUES (?, 'Seed', 'seed@example.invalid', 0, 'admin', ?, ?)`,
+       VALUES (?, 'Seed', 'seed@example.invalid', 0, 'owner', ?, ?)`,
     )
       .bind(SEED_ADMIN_ID, Date.now(), Date.now())
       .run();

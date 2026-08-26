@@ -5,6 +5,7 @@ import {
   createTodo,
   currentUserId,
   openProject,
+  PASSWORD,
   signIn,
   signUp,
   switchProject,
@@ -172,9 +173,9 @@ test.describe("administrators", () => {
     await expect(page.getByText("権限がありません")).toBeVisible();
   });
 
-  test("the first account holds the role and can pass it on", async ({ browser, page }) => {
+  test("the first account is the owner and can pass the role on", async ({ browser, page }) => {
     // The warm-up created it before any test ran, because the first account to
-    // exist is the administrator.
+    // exist is the owner.
     const memberEmail = uniqueEmail("promoted");
     const memberContext = await browser.newContext({
       extraHTTPHeaders: { "CF-Connecting-IP": "198.51.100.41" },
@@ -187,20 +188,67 @@ test.describe("administrators", () => {
 
     await sidebar(page).getByRole("link", { name: "ユーザー管理" }).click();
     const row = page.getByRole("listitem").filter({ hasText: memberEmail });
-    await expect(row.getByText("一般")).toBeVisible();
 
-    await row.getByRole("button", { name: "管理者にする" }).click();
-    await expect(row.getByText("管理者")).toBeVisible();
+    await row.getByRole("combobox").click();
+    await page.getByRole("option", { name: "管理者" }).click();
+    await expect(row.getByRole("combobox")).toContainText("管理者");
 
     // And the newly promoted account now sees the screen for itself.
     await member.reload();
     await expect(sidebar(member).getByRole("link", { name: "ユーザー管理" })).toBeVisible();
 
-    // Put it back, so the run does not leave two administrators behind for
+    // Put it back, so the run does not leave an extra administrator behind for
     // whichever spec happens to look at the directory next.
-    await row.getByRole("button", { name: "管理者を解除" }).click();
-    await expect(row.getByText("一般")).toBeVisible();
+    await row.getByRole("combobox").click();
+    await page.getByRole("option", { name: "ユーザー" }).click();
+    await expect(row.getByRole("combobox")).toContainText("ユーザー");
 
     await memberContext.close();
+  });
+
+  test("the owner is the only role that cannot be taken away", async ({ page }) => {
+    // The role can only be granted by someone who holds it, so an installation
+    // with none has no way back.
+    await signIn(page, ADMIN_EMAIL);
+    await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
+
+    await sidebar(page).getByRole("link", { name: "ユーザー管理" }).click();
+    const own = page.getByRole("listitem").filter({ hasText: ADMIN_EMAIL });
+
+    await expect(own.getByText("オーナー")).toBeVisible();
+    await expect(own.getByRole("combobox")).toBeHidden();
+  });
+
+  test("an owner creates an account with a role already on it", async ({ browser, page }) => {
+    const created = uniqueEmail("created");
+
+    await signIn(page, ADMIN_EMAIL);
+    await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
+    await sidebar(page).getByRole("link", { name: "ユーザー管理" }).click();
+
+    await page.getByLabel("名前").fill("作られた人");
+    await page.getByLabel("メールアドレス").fill(created);
+    await page.getByLabel("初期パスワード").fill(PASSWORD);
+    // Exact: every row below has a "<name> の権限" select of its own.
+    await page.getByLabel("権限", { exact: true }).click();
+    await page.getByRole("option", { name: "管理者" }).click();
+    await page.getByRole("button", { name: "追加" }).click();
+
+    const row = page.getByRole("listitem").filter({ hasText: created });
+    await expect(row).toBeVisible();
+    await expect(row.getByRole("combobox")).toContainText("管理者");
+
+    // The point of setting a password rather than sending an invitation: the
+    // account can actually be signed in to.
+    const theirs = await browser.newContext({
+      extraHTTPHeaders: { "CF-Connecting-IP": "198.51.100.51" },
+    });
+    const them = await theirs.newPage();
+    await signIn(them, created);
+    await expect(them.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
+    await theirs.close();
+
+    // And the caller is still themselves, not the account they just made.
+    await expect(page.getByRole("button", { name: /^アカウント: Warm up/ })).toBeVisible();
   });
 });

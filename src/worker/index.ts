@@ -59,6 +59,15 @@ const commentSchema = z.object({ body: z.string().trim().min(1).max(4000) });
 // Either an id, which an administrator picks from the directory, or an address,
 // which an owner already knows. A union rather than two optional fields: "both"
 // and "neither" are not states this endpoint should have to interpret.
+const createUserSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  email: z.string().trim().toLowerCase().pipe(z.email()),
+  // The same floor Better Auth is configured with. Stated here too so the
+  // failure is a field error rather than a rejected request with no field.
+  password: z.string().min(12).max(200),
+  role: z.enum(USER_ROLES),
+});
+
 const memberSchema = z.union([
   z.object({ userId: z.string().min(1).max(200) }),
   z.object({ email: z.string().trim().toLowerCase().pipe(z.email()) }),
@@ -681,6 +690,50 @@ const app = new Hono<{
   // Only an administrator sees this. Handing every user a list of every other
   // user's name and address is a directory, and nobody asked for one.
   .get("/api/users", async (c) => c.json(await c.get("repo").directory.list()))
+  /**
+   * Creates an account with a role already on it.
+   *
+   * There is no email to invite through (ADR 0013), so an administrator types
+   * the initial password and hands it over — the alternative is an account
+   * nobody can sign in to. Recorded rather than dressed up: an initial password
+   * chosen by someone else is a real weakness, and the fix is email delivery,
+   * not a cleverer form.
+   *
+   * Better Auth's own sign-up path is used rather than an INSERT, so the
+   * password is hashed by the same code that verifies it. Its response carries
+   * a session for the new account; nothing here forwards those headers, so the
+   * administrator stays signed in as themselves.
+   */
+  .post("/api/users", validate("json", createUserSchema), async (c) => {
+    const repo = c.get("repo");
+    if (!repo.isAdmin) return c.json({ error: "Not found" }, 404);
+
+    const { name, email, password, role } = c.req.valid("json");
+    // Checked before the account exists, so a refused role does not leave a
+    // half-made account behind at the default one.
+    if (!repo.roles.mayGrant(role)) return c.json({ error: "Not found" }, 404);
+
+    let created;
+    try {
+      created = await createAuth(c.env, c.get("db")).api.signUpEmail({
+        body: { name, email, password },
+        // The new account's session must not become the caller's.
+        asResponse: false,
+      });
+    } catch {
+      // Almost always a duplicate address. The message is not forwarded — it
+      // is Better Auth's, and this endpoint answers in this API's shape.
+      return c.json({ error: "Bad Request" }, 400);
+    }
+
+    // The bootstrap hook gives every account after the first `member`, so the
+    // role is a second statement. Safe here in a way it is not for a change:
+    // nothing else can be looking at an account that did not exist a moment
+    // ago.
+    if (role !== "member") await repo.roles.set(created.user.id, role);
+
+    return c.json({ id: created.user.id }, 201);
+  })
   .patch(
     "/api/users/:userId/role",
     validate("param", z.object({ userId: z.string().min(1).max(200) })),

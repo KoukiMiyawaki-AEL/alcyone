@@ -131,7 +131,35 @@ describe("migrations", () => {
       "todos_fts_delete",
       "todos_fts_insert",
       "todos_fts_update",
+      // Not the search index, but here for the same reason: a trigger nothing
+      // else in the schema mentions. These two are the domain of `user.role`,
+      // which cannot be a CHECK without rebuilding a table whose children
+      // cascade on delete (migration 0019).
+      "user_role_known_insert",
+      "user_role_known_update",
     ]);
+  });
+
+  it("refuses a role the application does not know", async () => {
+    await expect(
+      env.DB.prepare(
+        `INSERT INTO user (id, name, email, email_verified, role, created_at, updated_at)
+         VALUES ('x', 'X', 'x@example.invalid', 0, 'superuser', 0, 0)`,
+      ).run(),
+    ).rejects.toThrow();
+
+    // Against a row that exists: an UPDATE matching nothing fires no trigger,
+    // and would pass here while proving the opposite of what it claims.
+    await env.DB.prepare(
+      `INSERT INTO user (id, name, email, email_verified, role, created_at, updated_at)
+       VALUES ('role-probe', 'X', 'role-probe@example.invalid', 0, 'member', 0, 0)`,
+    ).run();
+
+    await expect(
+      env.DB.prepare("UPDATE user SET role = 'superuser' WHERE id = 'role-probe'").run(),
+    ).rejects.toThrow();
+
+    await env.DB.prepare("DELETE FROM user WHERE id = 'role-probe'").run();
   });
 
   it("refuses a status the application does not know", async () => {

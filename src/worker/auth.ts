@@ -37,7 +37,7 @@ export function createAuth(env: CloudflareBindings, db: D1Database | D1DatabaseS
       user: {
         create: {
           /**
-           * The first account to exist becomes the administrator.
+           * The first account to exist becomes the owner.
            *
            * Someone has to be able to grant the role, and nobody can until one
            * exists. The alternatives were worse: an endpoint that grants it is
@@ -54,7 +54,7 @@ export function createAuth(env: CloudflareBindings, db: D1Database | D1DatabaseS
               n: number;
             }>();
 
-            return { data: { ...user, role: existing?.n === 0 ? "admin" : "member" } };
+            return { data: { ...user, role: existing?.n === 0 ? "owner" : "member" } };
           },
         },
       },

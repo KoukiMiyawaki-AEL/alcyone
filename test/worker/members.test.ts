@@ -345,7 +345,7 @@ describe("administrators", () => {
     expect(await roleOf(otherId)).toBe("member");
   });
 
-  it("refuses to remove the last administrator", async () => {
+  it("refuses to remove the last owner", async () => {
     // The role can only be granted by someone who holds it, so an installation
     // with none has no way back short of a database console. Reset without the
     // seed so that the account signed up here really is the only one.
@@ -356,13 +356,13 @@ describe("administrators", () => {
     const res = await setRole(only, onlyId, "member");
 
     expect(res.status).toBe(404);
-    expect(await roleOf(onlyId)).toBe("admin");
+    expect(await roleOf(onlyId)).toBe("owner");
   });
 
-  it("does not block demoting a member while only one administrator exists", async () => {
-    // The guard is about losing the last administrator, not about the count on
-    // its own — demoting someone who is already a member must not trip it. The
-    // seed is dropped so the count really is one.
+  it("does not block demoting a member while only one owner exists", async () => {
+    // The guard is about losing the last owner, not about the count on its own
+    // — demoting someone who is already a member must not trip it. The seed is
+    // dropped so the count really is one.
     await resetAll({ seedAdmin: false });
     const only = await signUp("only@example.com", "Only");
     const other = await signUp("other@example.com", "Other");
@@ -374,15 +374,17 @@ describe("administrators", () => {
     expect(await roleOf(otherId)).toBe("member");
   });
 
-  it("lets the second-to-last administrator step down", async () => {
-    const other = await signUp("other@example.com", "Other");
-    const otherId = await userId(other);
-    await setRole(admin, otherId, "admin");
+  it("lets the second-to-last owner step down", async () => {
+    await resetAll({ seedAdmin: false });
+    const first = await signUp("first@example.com", "First");
+    const second = await signUp("second@example.com", "Second");
+    const secondId = await userId(second);
+    await setRole(first, secondId, "owner");
 
-    const res = await setRole(admin, await userId(admin), "member");
+    const res = await setRole(first, await userId(first), "member");
 
     expect(res.status).toBe(204);
-    expect(await roleOf(otherId)).toBe("admin");
+    expect(await roleOf(secondId)).toBe("owner");
   });
 
   it("is not a role a member can hand themselves", async () => {
@@ -394,13 +396,171 @@ describe("administrators", () => {
 });
 
 describe("the first account", () => {
-  it("becomes the administrator, because nobody else can grant it", async () => {
+  it("becomes the owner, because nobody else can grant it", async () => {
     await resetAll({ seedAdmin: false });
 
     const first = await signUp("first@example.com", "First");
     const second = await signUp("second@example.com", "Second");
 
-    expect(await roleOf(await userId(first))).toBe("admin");
+    expect(await roleOf(await userId(first))).toBe("owner");
     expect(await roleOf(await userId(second))).toBe("member");
+  });
+});
+
+describe("creating accounts", () => {
+  let owner: Headers;
+  let admin: Headers;
+  let plain: Headers;
+
+  beforeEach(async () => {
+    await resetAll({ seedAdmin: false });
+    owner = await signUp("owner-of-all@example.com", "Owner");
+    admin = await signUp("an-admin@example.com", "Admin");
+    plain = await signUp("plain@example.com", "Plain");
+    await setRole(owner, await userId(admin), "admin");
+  });
+
+  async function createAccount(headers: Headers, body: Record<string, unknown>) {
+    return app.request(
+      "/api/users",
+      { method: "POST", headers: jsonHeaders(headers, uniqueIp()), body: JSON.stringify(body) },
+      env,
+    );
+  }
+
+  const account = (over: Record<string, unknown> = {}) => ({
+    name: "New",
+    email: `new-${Math.random().toString(36).slice(2)}@example.com`,
+    password: "correct horse battery",
+    role: "member",
+    ...over,
+  });
+
+  it("makes an account with the role already on it", async () => {
+    const body = account({ role: "admin" });
+    const res = await createAccount(admin, body);
+
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    expect(await roleOf(id)).toBe("admin");
+  });
+
+  it("leaves the caller signed in as themselves", async () => {
+    // Better Auth's sign-up returns a session for the new account. Forwarding
+    // those headers would swap the administrator for the person they created.
+    const res = await createAccount(admin, account());
+
+    // The D1 bookmark cookie is this API's own and rides on every response;
+    // what must not be here is a session for the account just created.
+    expect(res.headers.get("set-cookie") ?? "").not.toContain("session_token");
+
+    const still = await app.request("/api/auth/get-session", { headers: admin }, env);
+    expect(((await still.json()) as { user: { email: string } }).user.email).toBe(
+      "an-admin@example.com",
+    );
+  });
+
+  it("lets the new account sign in with the password it was given", async () => {
+    const body = account();
+    await createAccount(admin, body);
+
+    const res = await app.request(
+      "/api/auth/sign-in/email",
+      {
+        method: "POST",
+        headers: jsonHeaders(undefined, uniqueIp()),
+        body: JSON.stringify({ email: body.email, password: body.password }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses an ordinary account entirely", async () => {
+    const res = await createAccount(plain, account());
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses an administrator who tries to make an owner", async () => {
+    // Checked before the account exists, so a refused role does not leave a
+    // half-made account behind at the default one.
+    const body = account({ role: "owner" });
+
+    const res = await createAccount(admin, body);
+
+    expect(res.status).toBe(404);
+    const row = await env.DB.prepare("SELECT id FROM user WHERE email = ?")
+      .bind(body.email)
+      .first();
+    expect(row).toBeNull();
+  });
+
+  it("lets an owner make another owner", async () => {
+    const res = await createAccount(owner, account({ role: "owner" }));
+
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    expect(await roleOf(id)).toBe("owner");
+  });
+
+  it("rejects an address that already has an account", async () => {
+    const body = account();
+    expect((await createAccount(admin, body)).status).toBe(201);
+    expect((await createAccount(admin, body)).status).toBe(400);
+  });
+
+  it("rejects a password shorter than the sign-up form's own floor", async () => {
+    const res = await createAccount(admin, account({ password: "short" }));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("the rank between roles", () => {
+  let owner: Headers;
+  let admin: Headers;
+  let plain: Headers;
+
+  beforeEach(async () => {
+    await resetAll({ seedAdmin: false });
+    owner = await signUp("owner-of-all@example.com", "Owner");
+    admin = await signUp("an-admin@example.com", "Admin");
+    plain = await signUp("plain@example.com", "Plain");
+    await setRole(owner, await userId(admin), "admin");
+  });
+
+  it("lets an administrator move accounts between member and admin", async () => {
+    const plainId = await userId(plain);
+
+    expect((await setRole(admin, plainId, "admin")).status).toBe(204);
+    expect((await setRole(admin, plainId, "member")).status).toBe(204);
+  });
+
+  it("does not let an administrator appoint an owner", async () => {
+    const plainId = await userId(plain);
+
+    const res = await setRole(admin, plainId, "owner");
+
+    expect(res.status).toBe(404);
+    expect(await roleOf(plainId)).toBe("member");
+  });
+
+  it("does not let an administrator demote the owner who appointed them", async () => {
+    const ownerId = await userId(owner);
+
+    const res = await setRole(admin, ownerId, "member");
+
+    expect(res.status).toBe(404);
+    expect(await roleOf(ownerId)).toBe("owner");
+  });
+
+  it("lets an owner appoint and remove another owner", async () => {
+    const plainId = await userId(plain);
+
+    expect((await setRole(owner, plainId, "owner")).status).toBe(204);
+    expect(await roleOf(plainId)).toBe("owner");
+
+    expect((await setRole(owner, plainId, "member")).status).toBe(204);
+    expect(await roleOf(plainId)).toBe("member");
   });
 });

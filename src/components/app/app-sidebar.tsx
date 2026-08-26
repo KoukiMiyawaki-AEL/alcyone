@@ -123,7 +123,7 @@ export function AppSidebar() {
 
       <p className={headingClass}>その他</p>
       <ul className="flex flex-col gap-1">
-        {user?.role === "admin" ? (
+        {user?.role === "admin" || user?.role === "owner" ? (
           <li>
             <Link to="/admin" className={linkClass} activeProps={{ className: activeClass }}>
               <ShieldIcon className="size-4" />

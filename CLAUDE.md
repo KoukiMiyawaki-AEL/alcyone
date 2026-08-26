@@ -320,7 +320,14 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 - **ロールはBetter Authの`additionalFields`として宣言する（`input: false`付き）。** 宣言しないと
   Better Authが知らないフィールドを落とすので、`databaseHooks`が返した値も保存されない。
   `input: false`があるのでサインアップにも`update-user`にも渡せない。
-  **最初に作られたアカウントが管理者になる**（[ADR 0032](./docs/adr/0032-inviting-by-email-and-bootstrapping-the-admin.md)）。
+  **最初に作られたアカウントがオーナーになる**（[ADR 0032](./docs/adr/0032-inviting-by-email-and-bootstrapping-the-admin.md) /
+  [ADR 0034](./docs/adr/0034-three-account-roles-and-a-screen-that-creates-them.md)）。
+- **権限は`owner` / `admin` / `member`の3段階で、`USER_ROLES`の配列順が強さ。** 管理者はオーナーに
+  手を出せず、最後のオーナーは降ろせない。**`owner`はインスタンスのオーナーで、プロジェクトの
+  作成者（`projects.ownerId`）とは別物** —— 画面では後者を「プロジェクトの作成者」と呼ぶ。
+- **`user`テーブルは作り直さない。** `session`と`account`が`ON DELETE CASCADE`で参照しているので、
+  古いテーブルを落とした時点で全セッションと全資格情報が消える。値域の制約が要るなら
+  CHECKではなくトリガー（`user_role_known_*`。migration 0019）。
 - **権限や人数の条件はWHEREに入れて1文にする。** 「最後の管理者は降格できない」を
   「数える→更新する」の2文にすると、最後の2人が同時に互いを降格できる隙間ができる。
 - **DBアクセスは`createRepo(binding, ownerId, role)`経由で、返るメソッドは全てスコープ済み。**

@@ -1,6 +1,7 @@
 import { Link, useMatchRoute, useRouterState } from "@tanstack/react-router";
 import {
   CalendarRangeIcon,
+  GaugeIcon,
   KanbanIcon,
   LayoutDashboardIcon,
   ListIcon,
@@ -34,6 +35,7 @@ const globalItems = [
  * list they act on.
  */
 const projectViews = [
+  { view: "overview", label: "概要", icon: GaugeIcon },
   { view: "list", label: "一覧", icon: ListIcon },
   { view: "board", label: "ボード", icon: KanbanIcon },
   { view: "timeline", label: "タイムライン", icon: CalendarRangeIcon },

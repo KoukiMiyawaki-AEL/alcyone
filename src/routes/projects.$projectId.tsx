@@ -15,6 +15,7 @@ import { TodoBoard } from "@/features/todos/components/TodoBoard";
 import { TodoDetailDialog, type TodoEditor } from "@/features/todos/components/TodoDetailDialog";
 import { TodoFilters } from "@/features/todos/components/TodoFilters";
 import { TodoList } from "@/features/todos/components/TodoList";
+import { TodoOverview } from "@/features/todos/components/TodoOverview";
 import { TodoTimeline } from "@/features/todos/components/TodoTimeline";
 import { sameLabels } from "@/features/todos/labels";
 import type {
@@ -58,7 +59,7 @@ const searchSchema = z.object({
   // The board reads the same rows a different way, so it belongs in the same
   // URL rather than behind a separate route: a link to a filtered board is
   // still a link to this project's tasks.
-  view: z.enum(["list", "board", "timeline"]).default("list").catch("list"),
+  view: z.enum(["overview", "list", "board", "timeline"]).default("list").catch("list"),
   // A label id, or nothing. In the URL for the same reasons the others are:
   // linkable, survives a reload, and re-runs the loader so the narrowing
   // happens in SQL. `optional` rather than `default`, because "no label" is
@@ -96,9 +97,10 @@ export const Route = createFileRoute("/projects/$projectId")({
             : {
                 // A board shows every column at once, so narrowing to one
                 // status would empty three of them — its columns *are* the
-                // status filter. The timeline keeps it, because "what is
-                // blocked, and when" is a real question to ask of a calendar.
-                status: deps.view === "board" ? "all" : deps.status,
+                // status filter. The overview counts every status by
+                // definition. The timeline keeps it, because "what is blocked,
+                // and when" is a real question to ask of a calendar.
+                status: deps.view === "timeline" ? deps.status : "all",
                 sort: deps.sort,
                 // Unlike status, the label filter survives into every view: it
                 // narrows *which* tasks, not how they are arranged, so a
@@ -339,21 +341,27 @@ function ProjectTodosComponent() {
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-medium text-muted-foreground">タスク</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">
+            {view === "overview" ? "概要" : "タスク"}
+          </h2>
           {/*
-            The status filter is the list's; the board's columns already are
-            one, so offering both would let the two disagree on screen.
+            No filters on the overview: it is a summary of the project, and a
+            summary of a filtered subset answers a question nobody asked. The
+            status filter is the list's; the board's columns already are one, so
+            offering both would let the two disagree on screen.
           */}
-          <TodoFilters
-            status={status}
-            sort={sort}
-            labels={labels}
-            label={label}
-            showStatus={view === "list"}
-            // Merging into the existing search keeps the other control's value
-            // when one of them changes.
-            onChange={(next) => navigate({ search: (prev) => ({ ...prev, ...next }) })}
-          />
+          {view === "overview" ? null : (
+            <TodoFilters
+              status={status}
+              sort={sort}
+              labels={labels}
+              label={label}
+              showStatus={view === "list"}
+              // Merging into the existing search keeps the other control's value
+              // when one of them changes.
+              onChange={(next) => navigate({ search: (prev) => ({ ...prev, ...next }) })}
+            />
+          )}
         </div>
         {error ? (
           <EmptyState
@@ -374,6 +382,15 @@ function ProjectTodosComponent() {
             truncated={todos.length >= WHOLE_VIEW_LIMIT}
             onEdit={(todo) => setEditor({ mode: "edit", todo })}
             onReschedule={handleReschedule}
+          />
+        ) : view === "overview" ? (
+          <TodoOverview
+            todos={todos}
+            labels={labels}
+            assignees={assignees}
+            today={today}
+            truncated={todos.length >= WHOLE_VIEW_LIMIT}
+            onOpen={(todo) => setEditor({ mode: "edit", todo })}
           />
         ) : view === "board" ? (
           <TodoBoard

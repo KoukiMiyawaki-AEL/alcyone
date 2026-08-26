@@ -71,3 +71,42 @@ test.describe("my tasks", () => {
     await expect(page.getByText("担当しているタスクはありません")).toBeVisible();
   });
 });
+
+test.describe("project overview", () => {
+  test("summarises the project the sidebar is scoped to", async ({ page }) => {
+    await signUp(page);
+    await createProject(page, "Summed");
+    await openProject(page, "Summed");
+    await createTodo(page, "ひとつめ");
+    await createTodo(page, "ふたつめ");
+    await page.getByRole("checkbox", { name: "「ひとつめ」を完了にする" }).click();
+    await expect(page.getByRole("checkbox", { name: "「ひとつめ」を未完了に戻す" })).toBeVisible();
+
+    await page.getByRole("navigation").first().getByRole("link", { name: "概要" }).click();
+
+    await expect(page).toHaveURL(/view=overview/);
+    await expect(page.getByText("1 / 2 完了（50%）")).toBeVisible();
+    // A summary of a filtered subset answers a question nobody asked.
+    await expect(page.getByRole("group", { name: "並び替え" })).toBeHidden();
+  });
+
+  test("says what needs attention, and opens it", async ({ page }) => {
+    await signUp(page);
+    await createProject(page, "Late");
+    await openProject(page, "Late");
+    await createTodo(page, "遅れているタスク");
+
+    await page.getByRole("button", { name: "「遅れているタスク」の操作" }).click();
+    await page.getByRole("menuitem", { name: "詳細を編集" }).click();
+    await page.getByLabel("期限日").fill("2020-01-01");
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeHidden();
+
+    await page.getByRole("navigation").first().getByRole("link", { name: "概要" }).click();
+
+    const overdue = page.getByRole("button", { name: /遅れているタスク/ });
+    await expect(overdue).toBeVisible();
+    await overdue.click();
+    await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeVisible();
+  });
+});

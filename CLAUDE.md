@@ -265,7 +265,7 @@ loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catch�
 APIのパスは必ず`/api/`配下に置くこと。
 
 画面は `/`（ダッシュボード。プロジェクトごとの進捗）、`/my`（担当タスク。プロジェクト横断）、
-`/projects/$projectId`（Todo。一覧/ボード/タイムラインを`view`で切り替え）、
+`/projects/$projectId`（Todo。概要/一覧/ボード/タイムラインを`view`で切り替え）、
 `/projects/$projectId/settings`（参加者）、`/admin`（ユーザー管理。管理者のみ）、
 `/search`、`/account`、`/s/$token`（公開共有）、`/dev/design-system`。
 動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。

@@ -245,8 +245,23 @@ export function createRepo(
   // An owner is an admin with more: everything below is written in terms of
   // "reaches every project", and an owner does. What the two do not share is
   // which accounts they may change, and that lives in `roles` alone.
-  const isAdmin = role === "admin" || role === "owner";
-  const isOwner = role === "owner";
+  //
+  // Three actors, and they are not a ladder of the same power:
+  //
+  //   owner   administers the system. Every project, every account.
+  //   admin   administers the *settings of the projects they are on*. Sees all.
+  //   member  works on the projects they are on.
+  //
+  // `seesEverything` and `isSystemOwner` are therefore separate: an
+  // administrator can open any project, and can change the settings of the ones
+  // they participate in. Being handed the role is not the same as being handed
+  // every project (ADR 0036).
+  const isSystemOwner = role === "owner";
+  const seesEverything = role === "admin" || role === "owner";
+  // Kept under its old name where the question really is "admin or above":
+  // reading the account directory, and creating accounts.
+  const isAdmin = seesEverything;
+  const isOwner = isSystemOwner;
   const db = drizzle(binding as D1Database);
 
   /**
@@ -258,13 +273,32 @@ export function createRepo(
    * someone else the keys, and collapsing the two would quietly hand every
    * member that power.
    */
+  /** Projects this account has a membership row on. Both scopes ask for it. */
+  const joinedProjectIds = () =>
+    db
+      .select({ id: projectMembersTable.projectId })
+      .from(projectMembersTable)
+      .where(eq(projectMembersTable.userId, ownerId));
+
   const ownedProjectIds = (id?: number) =>
     db
       .select({ id: projectsTable.id })
       .from(projectsTable)
       .where(
         and(
-          isAdmin ? undefined : eq(projectsTable.ownerId, ownerId),
+          isSystemOwner
+            ? // System administration: every project, including ones this
+              // account has never opened.
+              undefined
+            : or(
+                eq(projectsTable.ownerId, ownerId),
+                // An administrator administers the projects they are on. The
+                // role is not itself a way in — somebody has to add them, and
+                // that leaves a row saying who and when. Without this condition
+                // "administrator" would quietly mean "owner of every project",
+                // which is the one thing the system owner is for.
+                seesEverything ? inArray(projectsTable.id, joinedProjectIds()) : undefined,
+              ),
           isNull(projectsTable.deletedAt),
           id === undefined ? undefined : eq(projectsTable.id, id),
         ),
@@ -273,9 +307,15 @@ export function createRepo(
   /**
    * Projects whose tasks this account may read and change.
    *
-   * Owner, member, or admin. **This is the one place the boundary is drawn**,
-   * which is what made adding membership a change to one function rather than
-   * to fourteen call sites — the reason ADR 0014 put the scoping here.
+   * Creator, member, administrator or system owner. Reading is the wide scope
+   * and managing is the narrow one — the opposite way round from most systems,
+   * and deliberate: an administrator can open any project so they can find the
+   * one they were asked about, and can change the settings of the ones they are
+   * actually on (ADR 0036).
+   *
+   * **This is the one place the boundary is drawn**, which is what made adding
+   * membership a change to one function rather than to fourteen call sites —
+   * the reason ADR 0014 put the scoping here.
    */
   const accessibleProjectIds = (id?: number) =>
     db
@@ -283,18 +323,9 @@ export function createRepo(
       .from(projectsTable)
       .where(
         and(
-          isAdmin
+          seesEverything
             ? undefined
-            : or(
-                eq(projectsTable.ownerId, ownerId),
-                inArray(
-                  projectsTable.id,
-                  db
-                    .select({ id: projectMembersTable.projectId })
-                    .from(projectMembersTable)
-                    .where(eq(projectMembersTable.userId, ownerId)),
-                ),
-              ),
+            : or(eq(projectsTable.ownerId, ownerId), inArray(projectsTable.id, joinedProjectIds())),
           isNull(projectsTable.deletedAt),
           id === undefined ? undefined : eq(projectsTable.id, id),
         ),
@@ -569,16 +600,65 @@ export function createRepo(
         returning id
       `),
 
-    remove: (projectId: number, userId: string) =>
-      db
-        .delete(projectMembersTable)
+    /**
+     * Removes someone, and takes their assignments with them.
+     *
+     * A task assigned to somebody who can no longer open it is a task nobody is
+     * doing, displayed as one that somebody is. The history is written first
+     * and from the same SELECT, so the entries name the tasks that are actually
+     * about to change — reading them in the handler would leave room for a
+     * different request in between (ADR 0027).
+     *
+     * Every statement carries the same permission check, so a caller who may
+     * not do this writes nothing anywhere rather than clearing assignments and
+     * failing to remove the row.
+     */
+    removeWithAssignments: (projectId: number, userId: string) => {
+      const revisionId = newRevisionId();
+
+      /** The tasks about to lose their assignee. */
+      const affected = db
+        .select({ id: todosTable.id })
+        .from(todosTable)
         .where(
           and(
-            eq(projectMembersTable.userId, userId),
-            inArray(projectMembersTable.projectId, ownedProjectIds(projectId)),
+            eq(todosTable.assigneeId, userId),
+            isNull(todosTable.deletedAt),
+            inArray(todosTable.projectId, ownedProjectIds(projectId)),
           ),
-        )
-        .returning({ id: projectMembersTable.id }),
+        );
+
+      return [
+        db.insert(todoEventsTable).select(
+          db
+            .select({
+              id: sql<number>`null`.as("id"),
+              todoId: todosTable.id,
+              actorId: sql<string>`${ownerId}`.as("actorId"),
+              revisionId: sql<string>`${revisionId}`.as("revisionId"),
+              field: sql<string>`'assigneeId'`.as("field"),
+              fromValue: sql<string | null>`${todosTable.assigneeId}`.as("fromValue"),
+              toValue: sql<string | null>`null`.as("toValue"),
+              createdAt: sql<string>`${now()}`.as("createdAt"),
+            })
+            .from(todosTable)
+            .where(inArray(todosTable.id, affected)),
+        ),
+        db
+          .update(todosTable)
+          .set({ assigneeId: null, updatedAt: now() })
+          .where(inArray(todosTable.id, affected)),
+        db
+          .delete(projectMembersTable)
+          .where(
+            and(
+              eq(projectMembersTable.userId, userId),
+              inArray(projectMembersTable.projectId, ownedProjectIds(projectId)),
+            ),
+          )
+          .returning({ id: projectMembersTable.id }),
+      ] as unknown as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]];
+    },
   };
 
   /** No rows, and no statement that could accidentally match one. */
@@ -656,6 +736,20 @@ export function createRepo(
             .select({ id: user.id, name: user.name, email: user.email, role: user.role })
             .from(user)
             .where(sql`0 = 1`),
+
+    /**
+     * One account, by id. Not scoped, and deliberately so.
+     *
+     * The only caller names a project's owner on that project's own membership
+     * screen, which the caller can already see. Naming somebody the reader is
+     * already looking at is not a directory; handing over every account is, and
+     * that is what `list` guards.
+     */
+    find: (id: string) =>
+      db
+        .select({ id: user.id, name: user.name, email: user.email })
+        .from(user)
+        .where(eq(user.id, id)),
   };
 
   const assignees = {
@@ -1029,6 +1123,20 @@ export function createRepo(
             isNull(projectsTable.deletedAt),
           ),
         ),
+
+    /**
+     * The project, if this account may change its settings.
+     *
+     * Asked rather than re-derived: "creator, or system owner, or an
+     * administrator who is on it" is three conditions, and a client — or a
+     * handler — that reconstructs them ends up offering a button the API
+     * refuses.
+     */
+    findManageable: (id: number) =>
+      db
+        .select()
+        .from(projectsTable)
+        .where(and(eq(projectsTable.id, id), inArray(projectsTable.id, ownedProjectIds(id)))),
 
     create: (values: { name: string }) =>
       db

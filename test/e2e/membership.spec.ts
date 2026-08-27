@@ -134,20 +134,16 @@ test.describe("project members", () => {
     });
     const guest = await guestContext.newPage();
     await signUp(guest, guestEmail);
-    const guestId = await currentUserId(guest);
 
     await signUp(page);
     await createProject(page, "Together");
     await openProject(page, "Together");
     const projectId = page.url().match(/projects\/(\d+)/)![1];
 
-    // Through the endpoint the settings screen uses. The owner is not an
-    // administrator, so they have no directory to pick from — which is a real
-    // gap, recorded rather than papered over in the test.
-    const added = await page.request.post(`/api/projects/${projectId}/members`, {
-      data: { userId: guestId },
-    });
-    expect(added.status()).toBe(201);
+    await sidebar(page).getByRole("link", { name: "設定" }).click();
+    await page.getByLabel("メールアドレスで追加").fill(guestEmail);
+    await memberForm(page).getByRole("button", { name: "追加", exact: true }).click();
+    await expect(page.getByText(guestEmail)).toBeVisible();
 
     // The guest can now reach a project that was invisible a moment ago.
     await guest.goto("/");
@@ -165,9 +161,109 @@ test.describe("project members", () => {
 
     await guestContext.close();
   });
+
+  test("removing someone takes their assignments with them", async ({ browser, page }) => {
+    // A task assigned to somebody who can no longer open it is a task nobody is
+    // doing, displayed as one that somebody is.
+    const guestEmail = uniqueEmail("assigned");
+    const guestContext = await browser.newContext({
+      extraHTTPHeaders: { "CF-Connecting-IP": "198.51.100.61" },
+    });
+    const guest = await guestContext.newPage();
+    await signUp(guest, guestEmail);
+
+    await signUp(page);
+    await createProject(page, "Handover");
+    await openProject(page, "Handover");
+    await createTodo(page, "誰かの仕事");
+
+    await sidebar(page).getByRole("link", { name: "設定" }).click();
+    await page.getByLabel("メールアドレスで追加").fill(guestEmail);
+    await memberForm(page).getByRole("button", { name: "追加", exact: true }).click();
+    await expect(page.getByText(guestEmail)).toBeVisible();
+
+    await sidebar(page).getByRole("link", { name: "一覧" }).click();
+    await page.getByRole("button", { name: "「誰かの仕事」の操作" }).click();
+    await page.getByRole("menuitem", { name: "詳細を編集" }).click();
+    await page.getByRole("combobox", { name: "担当者" }).click();
+    await page.getByRole("option", { name: "E2E user" }).last().click();
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeHidden();
+    await expect(page.getByLabel(/^担当:/)).toBeVisible();
+
+    await sidebar(page).getByRole("link", { name: "設定" }).click();
+    await page.getByRole("button", { name: /を解除$/ }).click();
+    await expect(page.getByText("まだ誰も参加していません")).toBeVisible();
+
+    await sidebar(page).getByRole("link", { name: "一覧" }).click();
+    await expect(page.getByText("誰かの仕事")).toBeVisible();
+    await expect(page.getByLabel(/^担当:/)).toBeHidden();
+
+    await guestContext.close();
+  });
+
+  test("names the creator rather than calling them a role with no name", async ({ page }) => {
+    await signUp(page);
+    await createProject(page, "Named");
+    await openProject(page, "Named");
+    await sidebar(page).getByRole("link", { name: "設定" }).click();
+
+    // Everyone else on this screen is listed by name; the one person who cannot
+    // be removed should not be the exception.
+    await expect(page.getByText("作成者")).toBeVisible();
+    await expect(page.getByRole("main").getByText("E2E user")).toBeVisible();
+  });
 });
 
 test.describe("administrators", () => {
+  test("sees a project they are not on, but cannot change who is", async ({ browser, page }) => {
+    // Seeing is the wide scope and managing is the narrow one. An
+    // administrator has to be able to find the project they were asked about,
+    // and being handed the role is not the same as being handed the project.
+    //
+    // A real administrator, not the warm-up account: that one is the *owner*,
+    // which administers the whole system and would pass this test for the
+    // wrong reason.
+    const theirContext = await browser.newContext({
+      extraHTTPHeaders: { "CF-Connecting-IP": "198.51.100.71" },
+    });
+    const them = await theirContext.newPage();
+    await signUp(them, uniqueEmail("stranger"));
+    await createProject(them, "Not the admin's");
+    await openProject(them, "Not the admin's");
+    const projectId = them.url().match(/projects\/(\d+)/)![1];
+
+    const adminContext = await browser.newContext({
+      extraHTTPHeaders: { "CF-Connecting-IP": "198.51.100.72" },
+    });
+    const theAdmin = await adminContext.newPage();
+    await signUp(theAdmin, uniqueEmail("real-admin"));
+    const adminId = await currentUserId(theAdmin);
+
+    await signIn(page, ADMIN_EMAIL);
+    await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
+    const promoted = await page.request.patch(`/api/users/${adminId}/role`, {
+      data: { role: "admin" },
+    });
+    expect(promoted.status()).toBe(204);
+
+    await theAdmin.goto(`/projects/${projectId}`);
+    await expect(
+      theAdmin.getByRole("heading", { level: 1, name: "Not the admin's" }),
+    ).toBeVisible();
+
+    await theAdmin.goto(`/projects/${projectId}/settings`);
+    await expect(theAdmin.getByText("参加者を変更できるのは", { exact: false })).toBeVisible();
+    await expect(memberForm(theAdmin)).toBeHidden();
+
+    // Put the role back, so a later spec reading the directory does not find an
+    // administrator it did not make.
+    await page.request.patch(`/api/users/${adminId}/role`, { data: { role: "member" } });
+
+    await adminContext.close();
+    await theirContext.close();
+  });
+
   test("an ordinary account is not offered the screen and cannot reach it", async ({ page }) => {
     await signUp(page);
 

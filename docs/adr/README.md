@@ -41,6 +41,7 @@
 | [0033](./0033-project-as-context-not-a-sidebar-item.md) | プロジェクトを「文脈」として扱う（サイドバーの項目から外し、ヘッダーとダッシュボードへ） | Accepted |
 | [0034](./0034-three-account-roles-and-a-screen-that-creates-them.md) | アカウントの権限を3段階にし、作成する画面を持つ | Accepted |
 | [0035](./0035-labels.md) | ラベルを入れる（ステータスでも担当者でも表せない軸） | Accepted |
+| [0036](./0036-what-each-role-is-for.md) | 3つのロールが「何のためのもの」かを決める（見える範囲と、変えられる範囲を分ける） | Accepted |
 
 ## ルール
 

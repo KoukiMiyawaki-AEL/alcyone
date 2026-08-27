@@ -761,12 +761,24 @@ const app = new Hono<{
     const [project] = await repo.projects.find(projectId);
     if (!project) return c.json({ error: "Not found" }, 404);
 
+    const [owner, members, manageable] = await repo.batch([
+      repo.directory.find(project.ownerId),
+      repo.members.forProject(projectId),
+      repo.projects.findManageable(projectId),
+    ]);
+
     return c.json({
-      owner: { id: project.ownerId },
-      members: await repo.members.forProject(projectId),
-      // Whether *this* caller may change the list, rather than a rule the
-      // client re-derives and gets subtly wrong.
-      canManage: repo.isAdmin || project.ownerId === c.get("userId"),
+      // The name, so this screen does not need a second request for it.
+      project: { id: project.id, name: project.name },
+      // Named, not just an id. A membership screen that lists everyone by name
+      // except the one person who cannot be removed reads as a bug.
+      owner: owner[0] ?? { id: project.ownerId, name: "", email: "" },
+      members,
+      // Whether *this* caller may change the list, answered by the same query
+      // the write path uses rather than by a rule the client re-derives and
+      // gets subtly wrong. An administrator may change it only for a project
+      // they are on.
+      canManage: manageable.length > 0,
     });
   })
   .post(
@@ -804,9 +816,15 @@ const app = new Hono<{
     validate("param", memberParamSchema),
     async (c) => {
       const { projectId, userId } = c.req.valid("param");
-      const [removed] = await c.get("repo").members.remove(projectId, userId);
+      const repo = c.get("repo");
 
-      if (!removed) return c.json({ error: "Not found" }, 404);
+      // One batch: history, then the assignments it describes, then the row.
+      // Removing somebody while leaving their name on tasks would show work as
+      // owned by a person who can no longer open it.
+      const results = await repo.batch(repo.members.removeWithAssignments(projectId, userId));
+      const removed = results.at(-1) as { id: number }[];
+
+      if (removed.length === 0) return c.json({ error: "Not found" }, 404);
 
       return c.body(null, 204);
     },

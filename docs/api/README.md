@@ -129,9 +129,9 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 
 | Method | Path | 用途 | 誰が | 成功 | 失敗 |
 |---|---|---|---|---|---|
-| GET | `/api/projects/:projectId/members` | 参加者一覧 + `canManage` | 到達できる人 | `{ owner, members, canManage }` | `400` `404` |
-| POST | `/api/projects/:projectId/members` | 参加者を追加（`{ userId }` または `{ email }`） | 所有者 / 管理者 | `201 { id }` | `400` `404` `429` |
-| DELETE | `/api/projects/:projectId/members/:userId` | 参加者を解除 | 所有者 / 管理者 | `204` | `400` `404` |
+| GET | `/api/projects/:projectId/members` | 参加者一覧 + `canManage` | 到達できる人 | `{ project, owner, members, canManage }` | `400` `404` |
+| POST | `/api/projects/:projectId/members` | 参加者を追加（`{ userId }` または `{ email }`） | 管理できる人 | `201 { id }` | `400` `404` `429` |
+| DELETE | `/api/projects/:projectId/members/:userId` | 参加者を解除（担当も外れる） | 管理できる人 | `204` | `400` `404` |
 | GET | `/api/users` | アカウント一覧 | 管理者 / オーナー | `{ id, name, email, role }[]` | — |
 | POST | `/api/users` | アカウントを作成 | 管理者 / オーナー | `201 { id }` | `400` `404` |
 | PATCH | `/api/users/:userId/role` | 権限を変更 | 管理者 / オーナー | `204` | `400` `404` |
@@ -152,6 +152,18 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 所有者には選ぶ一覧が無く、宛先を知っている本人が打つしかない。`{ email }` は**アカウントの
 有無を1件ずつ問い合わせられる**ので、IP単位のレート制限を通す。存在しないアドレスの答えは、
 管理できないプロジェクトの答えと同じ `404` にしてある。
+
+ロールは**強さの段階ではなく役割**（[ADR 0036](../adr/0036-what-each-role-is-for.md)）。
+**見える範囲は広く、変えられる範囲は狭い。**
+
+| ロール | 見える | プロジェクトの設定を変えられる |
+|---|---|---|
+| `owner` | 全プロジェクト | 全プロジェクト |
+| `admin` | 全プロジェクト | **参加しているものだけ** |
+| `member` | 参加しているものだけ | 作成したものだけ |
+
+「管理できる人」は上の表の右列。`canManage` は**書き込み側と同じクエリ**から返すので、
+クライアントが条件を組み直す必要はない。
 
 権限は `owner` / `admin` / `member` の3段階（[ADR 0034](../adr/0034-three-account-roles-and-a-screen-that-creates-them.md)）。
 **管理者はオーナーに手を出せない**（任命も降格も）。**最後のオーナーは降ろせない** ——

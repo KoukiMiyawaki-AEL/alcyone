@@ -314,10 +314,17 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 - ルートを追加・変更したら[`docs/api/README.md`](./docs/api/)の表も更新する。
 - **`/api/*` はすべて認証が必要**（例外は `/api/health` と `/api/auth/*`）。未認証は401。
   セッション検証とリポジトリ生成は`src/worker/index.ts`の1つのミドルウェアがやる。
-- **アクセス範囲は`accessibleProjectIds()`、管理権限は`ownedProjectIds()`の2つだけ。** 前者は
-  「所有者 または 参加者 または 管理者」、後者は「所有者 または 管理者」。**タスクを触るのが前者、
-  プロジェクトを消す・共有する・参加者を変えるのが後者**で、混ぜると参加者が鍵を配れるようになる
-  （[ADR 0031](./docs/adr/0031-project-membership-and-roles.md)）。
+- **アクセス範囲は`accessibleProjectIds()`、管理権限は`ownedProjectIds()`の2つだけ。**
+  **タスクを触るのが前者、プロジェクトを消す・共有する・参加者を変えるのが後者**で、
+  混ぜると参加者が鍵を配れるようになる（[ADR 0031](./docs/adr/0031-project-membership-and-roles.md)）。
+- **ロールは強さの段階ではなく役割。見える範囲は広く、変えられる範囲は狭い**
+  （[ADR 0036](./docs/adr/0036-what-each-role-is-for.md)）。
+  `owner`=システム管理（全部見えて全部変えられる）／`admin`=**参加している**プロジェクトの設定管理
+  （全部見えるが、変えられるのは参加しているものだけ）／`member`=参加したプロジェクトで作業。
+  **管理者は「探せる必要がある」から全部見え、「ロールは入口ではない」から参加していないものは
+  変えられない** —— 参加には必ず行が要り、その行が誰がいつを残す。
+- **「変えられるか」はサーバが答える**（`projects.findManageable`）。条件が3つあるので、
+  クライアントが組み直すと**APIが拒むボタンをUIが出す**。
 - **ロールはBetter Authの`additionalFields`として宣言する（`input: false`付き）。** 宣言しないと
   Better Authが知らないフィールドを落とすので、`databaseHooks`が返した値も保存されない。
   `input: false`があるのでサインアップにも`update-user`にも渡せない。

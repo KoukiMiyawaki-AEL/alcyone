@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,7 +17,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { addMember, addMemberByEmail, removeMember } from "@/features/projects/members-api";
-import type { Project } from "@/features/projects/types";
 import { LabelManager } from "@/features/todos/components/LabelManager";
 // Aliased: `Label` is already the form-label component in this file.
 import type { Label as TaskLabel } from "@/features/todos/types";
@@ -28,9 +28,10 @@ type Member = { id: number; userId: string; name: string; email: string };
 type Account = { id: string; name: string; email: string; role: string };
 
 type LoaderData = {
-  project: Project | null;
+  project: { id: number; name: string } | null;
   labels: TaskLabel[];
-  owner: { id: string } | null;
+  /** Named, not just an id — this is the one person the list cannot remove. */
+  owner: { id: string; name: string; email: string } | null;
   members: Member[];
   /** Whether *this* caller may change the list, as reported by the server. */
   canManage: boolean;
@@ -85,25 +86,17 @@ export const Route = createFileRoute("/projects_/$projectId/settings")({
       };
     }
 
-    const { owner, members, canManage } = await res.json();
+    const { project, owner, members, canManage } = await res.json();
 
     // Two more requests, both optional: the page is about the member list and
-    // works without either. The project is fetched for its name, the directory
-    // only matters to whoever may actually change the list.
-    const [projectAndLabels, directory] = await Promise.all([
-      loadProject(params.projectId),
+    // works without either. The labels come from the task endpoint, and the
+    // directory only matters to whoever may actually change the list.
+    const [labels, directory] = await Promise.all([
+      loadLabels(params.projectId),
       canManage ? loadDirectory() : Promise.resolve([]),
     ]);
 
-    return {
-      project: projectAndLabels.project,
-      labels: projectAndLabels.labels,
-      owner,
-      members,
-      canManage,
-      directory,
-      error: null,
-    };
+    return { project, labels, owner, members, canManage, directory, error: null };
   },
   component: ProjectSettingsComponent,
   notFoundComponent: () => (
@@ -116,26 +109,21 @@ export const Route = createFileRoute("/projects_/$projectId/settings")({
 });
 
 /**
- * The project's name and its labels, from one request.
+ * The project's labels.
  *
- * `limit: 1` because neither is about the tasks — the endpoint returns the
- * project and the whole label set alongside whatever page of tasks was asked
- * for, and one row is the smallest page there is.
+ * `limit: 1` because none of this is about the tasks — the endpoint returns the
+ * whole label set alongside whatever page of tasks was asked for, and one row
+ * is the smallest page there is.
  */
-async function loadProject(
-  projectId: string,
-): Promise<{ project: Project | null; labels: TaskLabel[] }> {
+async function loadLabels(projectId: string): Promise<TaskLabel[]> {
   try {
     const res = await apiClient.api.projects[":projectId"].todos.$get({
       param: { projectId },
       query: { limit: "1" },
     });
-    if (!res.ok) return { project: null, labels: [] };
-
-    const body = await res.json();
-    return { project: body.project as Project, labels: body.labels as TaskLabel[] };
+    return res.ok ? ((await res.json()).labels as TaskLabel[]) : [];
   } catch {
-    return { project: null, labels: [] };
+    return [];
   }
 }
 
@@ -206,14 +194,17 @@ function ProjectSettingsComponent() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <ul className="flex flex-col gap-2">
-            <li className="flex items-center gap-3 text-sm">
-              <span className="font-medium">オーナー</span>
+            <li className="flex flex-wrap items-center gap-3 text-sm">
+              <span>{owner?.name}</span>
+              <span className="truncate text-xs text-muted-foreground">{owner?.email}</span>
               {/*
-                Named as a role rather than listed among the members: their
-                access comes from the project, not from a row that could be
-                removed.
+                A role, not a row. Their access comes from the project itself, so
+                there is nothing here to remove — which is why this line has a
+                badge where every other line has a button.
               */}
-              <span className="text-muted-foreground">プロジェクトの作成者</span>
+              <Badge variant="secondary" className="ml-auto">
+                作成者
+              </Badge>
             </li>
             {members.map((member) => (
               <li key={member.id} className="flex items-center gap-3 text-sm">
@@ -330,7 +321,8 @@ function ProjectSettingsComponent() {
             </div>
           ) : (
             <p className="border-t border-border pt-4 text-sm text-muted-foreground">
-              参加者を変更できるのは、プロジェクトのオーナーと管理者だけです。
+              参加者を変更できるのは、プロジェクトの作成者と、このプロジェクトに参加している管理者、
+              そしてシステムのオーナーだけです。
             </p>
           )}
         </CardContent>

@@ -54,6 +54,14 @@ async function addMember(headers: Headers, projectId: number, who: string) {
   );
 }
 
+async function removeMember(headers: Headers, projectId: number, who: string) {
+  return app.request(
+    `/api/projects/${projectId}/members/${who}`,
+    { method: "DELETE", headers },
+    env,
+  );
+}
+
 async function setRole(headers: Headers, target: string, role: string) {
   return app.request(
     `/api/users/${target}/role`,
@@ -143,6 +151,180 @@ describe("membership", () => {
       env,
     );
     expect(res.status).toBe(404);
+  });
+
+  it("takes the removed member's assignments with them", async () => {
+    // A task assigned to somebody who can no longer open it is a task nobody is
+    // doing, displayed as one that somebody is.
+    const guestId = await userId(guest);
+    await addMember(owner, projectId, guestId);
+
+    const todo = (await addTodo(owner, projectId, "theirs")).id;
+    await app.request(
+      `/api/todos/${todo}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(owner),
+        body: JSON.stringify({ assigneeId: guestId }),
+      },
+      env,
+    );
+
+    await removeMember(owner, projectId, guestId);
+
+    const row = await env.DB.prepare("SELECT assigneeId FROM todos WHERE id = ?")
+      .bind(todo)
+      .first<{ assigneeId: string | null }>();
+    expect(row?.assigneeId).toBeNull();
+  });
+
+  it("records the unassignment rather than performing it silently", async () => {
+    const guestId = await userId(guest);
+    await addMember(owner, projectId, guestId);
+    const todo = (await addTodo(owner, projectId, "theirs")).id;
+    await app.request(
+      `/api/todos/${todo}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(owner),
+        body: JSON.stringify({ assigneeId: guestId }),
+      },
+      env,
+    );
+
+    await removeMember(owner, projectId, guestId);
+
+    const res = await app.request(`/api/todos/${todo}/activity`, { headers: owner }, env);
+    const { events } = (await res.json()) as {
+      events: { field: string; fromValue: string | null; toValue: string | null }[];
+    };
+    const last = events.at(-1);
+    expect(last).toMatchObject({ field: "assigneeId", fromValue: guestId, toValue: null });
+  });
+
+  it("leaves other people's assignments alone", async () => {
+    const guestId = await userId(guest);
+    const ownerId = await userId(owner);
+    await addMember(owner, projectId, guestId);
+
+    const mine = (await addTodo(owner, projectId, "mine")).id;
+    await app.request(
+      `/api/todos/${mine}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(owner),
+        body: JSON.stringify({ assigneeId: ownerId }),
+      },
+      env,
+    );
+
+    await removeMember(owner, projectId, guestId);
+
+    const row = await env.DB.prepare("SELECT assigneeId FROM todos WHERE id = ?")
+      .bind(mine)
+      .first<{ assigneeId: string | null }>();
+    expect(row?.assigneeId).toBe(ownerId);
+  });
+
+  it("takes the removed member's assignments with them", async () => {
+    // A task assigned to somebody who can no longer open it is a task nobody is
+    // doing, displayed as one that somebody is.
+    const guestId = await userId(guest);
+    await addMember(owner, projectId, guestId);
+
+    const todo = (await addTodo(owner, projectId, "theirs")).id;
+    await app.request(
+      `/api/todos/${todo}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(owner),
+        body: JSON.stringify({ assigneeId: guestId }),
+      },
+      env,
+    );
+
+    await removeMember(owner, projectId, guestId);
+
+    const row = await env.DB.prepare("SELECT assigneeId FROM todos WHERE id = ?")
+      .bind(todo)
+      .first<{ assigneeId: string | null }>();
+    expect(row?.assigneeId).toBeNull();
+  });
+
+  it("records the unassignment rather than performing it silently", async () => {
+    const guestId = await userId(guest);
+    await addMember(owner, projectId, guestId);
+    const todo = (await addTodo(owner, projectId, "theirs")).id;
+    await app.request(
+      `/api/todos/${todo}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(owner),
+        body: JSON.stringify({ assigneeId: guestId }),
+      },
+      env,
+    );
+
+    await removeMember(owner, projectId, guestId);
+
+    const res = await app.request(`/api/todos/${todo}/activity`, { headers: owner }, env);
+    const { events } = (await res.json()) as {
+      events: { field: string; fromValue: string | null; toValue: string | null }[];
+    };
+    expect(events.at(-1)).toMatchObject({
+      field: "assigneeId",
+      fromValue: guestId,
+      toValue: null,
+    });
+  });
+
+  it("leaves everyone else's assignments alone", async () => {
+    const guestId = await userId(guest);
+    const ownerUserId = await userId(owner);
+    await addMember(owner, projectId, guestId);
+
+    const mine = (await addTodo(owner, projectId, "mine")).id;
+    await app.request(
+      `/api/todos/${mine}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(owner),
+        body: JSON.stringify({ assigneeId: ownerUserId }),
+      },
+      env,
+    );
+
+    await removeMember(owner, projectId, guestId);
+
+    const row = await env.DB.prepare("SELECT assigneeId FROM todos WHERE id = ?")
+      .bind(mine)
+      .first<{ assigneeId: string | null }>();
+    expect(row?.assigneeId).toBe(ownerUserId);
+  });
+
+  it("writes nothing at all when the caller may not remove anyone", async () => {
+    // Every statement in the batch carries the same check, so a refused caller
+    // does not clear assignments and then fail to remove the row.
+    const guestId = await userId(guest);
+    await addMember(owner, projectId, guestId);
+    const todo = (await addTodo(owner, projectId, "theirs")).id;
+    await app.request(
+      `/api/todos/${todo}`,
+      {
+        method: "PATCH",
+        headers: jsonHeaders(owner),
+        body: JSON.stringify({ assigneeId: guestId }),
+      },
+      env,
+    );
+
+    const res = await removeMember(guest, projectId, guestId);
+
+    expect(res.status).toBe(404);
+    const row = await env.DB.prepare("SELECT assigneeId FROM todos WHERE id = ?")
+      .bind(todo)
+      .first<{ assigneeId: string | null }>();
+    expect(row?.assigneeId).toBe(guestId);
   });
 
   it("takes access away again when the member is removed", async () => {
@@ -290,13 +472,52 @@ describe("administrators", () => {
     projectId = await createProject(owner, "Someone else's");
   });
 
-  it("can control who is on a project they do not own", async () => {
+  it("can open a project they are not on", async () => {
+    // An administrator has to be able to find the project they were asked
+    // about. Seeing is the wide scope here; changing it is the narrow one.
+    const res = await app.request(`/api/projects/${projectId}/todos`, { headers: admin }, env);
+
+    expect(res.status).toBe(200);
+    expect(await projectsOf(admin)).toEqual(["Someone else's"]);
+  });
+
+  it("cannot change the settings of a project they are not on", async () => {
+    // The role is not itself a way in. Somebody has to add them, and that
+    // leaves a row saying who and when.
+    const guest = await signUp("guest@example.com", "Guest");
+
+    const res = await addMember(admin, projectId, await userId(guest));
+
+    expect(res.status).toBe(404);
+    expect(await projectsOf(guest)).toEqual([]);
+  });
+
+  it("says so, rather than offering a control the API refuses", async () => {
+    const res = await app.request(`/api/projects/${projectId}/members`, { headers: admin }, env);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ canManage: false });
+  });
+
+  it("administers the settings once they are on the project", async () => {
+    await addMember(owner, projectId, await userId(admin));
     const guest = await signUp("guest@example.com", "Guest");
 
     const res = await addMember(admin, projectId, await userId(guest));
 
     expect(res.status).toBe(201);
     expect(await projectsOf(guest)).toEqual(["Someone else's"]);
+  });
+
+  it("cannot delete a project they are not on", async () => {
+    const res = await app.request(
+      `/api/projects/${projectId}`,
+      { method: "DELETE", headers: admin },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await projectsOf(owner)).toEqual(["Someone else's"]);
   });
 
   it("is the only role that can see the directory of accounts", async () => {

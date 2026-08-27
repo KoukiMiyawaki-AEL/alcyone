@@ -6,10 +6,21 @@ import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
 import { jsonHeaders, resetAll, signUp } from "./auth-helper";
 
-async function createProject(headers: Headers, name: string): Promise<number> {
+let keyCounter = 0;
+
+async function createProject(
+  headers: Headers,
+  name: string,
+  extra: Record<string, unknown> = {},
+): Promise<number> {
+  keyCounter += 1;
   const res = await app.request(
     "/api/projects",
-    { method: "POST", headers: jsonHeaders(headers), body: JSON.stringify({ name }) },
+    {
+      method: "POST",
+      headers: jsonHeaders(headers),
+      body: JSON.stringify({ name, key: `K${keyCounter}`, ...extra }),
+    },
     env,
   );
   return ((await res.json()) as Project).id;
@@ -221,5 +232,166 @@ describe("cross-user isolation", () => {
     );
     expect(res.status).toBe(404);
     expect(await countTodos(aliceProject)).toBe(1);
+  });
+});
+
+describe("project settings", () => {
+  let alice: Headers;
+
+  beforeEach(async () => {
+    await resetAll();
+    alice = await signUp("alice@example.com", "Alice");
+  });
+
+  async function create(body: Record<string, unknown>) {
+    return app.request(
+      "/api/projects",
+      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify(body) },
+      env,
+    );
+  }
+
+  async function patch(id: number, body: Record<string, unknown>) {
+    return app.request(
+      `/api/projects/${id}`,
+      { method: "PATCH", headers: jsonHeaders(alice), body: JSON.stringify(body) },
+      env,
+    );
+  }
+
+  async function read(id: number): Promise<Project> {
+    const res = await app.request(`/api/projects/${id}/members`, { headers: alice }, env);
+    return ((await res.json()) as { project: Project }).project;
+  }
+
+  it("keeps the settings it was created with", async () => {
+    const res = await create({
+      name: "Alcyone",
+      key: "ALC",
+      description: "the proving ground",
+      color: "violet",
+      startAt: "2026-09-01",
+      dueAt: "2026-12-31",
+    });
+
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({
+      name: "Alcyone",
+      key: "ALC",
+      description: "the proving ground",
+      color: "violet",
+      startAt: "2026-09-01",
+      dueAt: "2026-12-31",
+      archivedAt: null,
+    });
+  });
+
+  it("uppercases a key rather than refusing it", async () => {
+    const res = await create({ name: "Lower", key: "low" });
+
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ key: "LOW" });
+  });
+
+  it("refuses a key that is already taken", async () => {
+    expect((await create({ name: "First", key: "DUP" })).status).toBe(201);
+    expect((await create({ name: "Second", key: "DUP" })).status).toBe(400);
+  });
+
+  it("refuses a key with characters nobody can read out loud", async () => {
+    expect((await create({ name: "Bad", key: "a b" })).status).toBe(400);
+    expect((await create({ name: "Bad", key: "TOOMANYCHARS" })).status).toBe(400);
+  });
+
+  it("refuses a colour outside the palette", async () => {
+    expect((await create({ name: "Bad", key: "BAD1", color: "chartreuse" })).status).toBe(400);
+  });
+
+  it("refuses a span that ends before it starts", async () => {
+    const res = await create({
+      name: "Backwards",
+      key: "BACK",
+      startAt: "2026-12-31",
+      dueAt: "2026-01-01",
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("edits the settings, and leaves the key alone", async () => {
+    const id = await createProject(alice, "Editable");
+    const before = await read(id);
+
+    const res = await patch(id, {
+      name: "Renamed",
+      description: "now with a note",
+      color: "green",
+    });
+
+    expect(res.status).toBe(200);
+    const after = await read(id);
+    expect(after).toMatchObject({
+      name: "Renamed",
+      description: "now with a note",
+      color: "green",
+      // The key is in every reference anyone has written down, so there is no
+      // path that changes it — not even one that ignores the field quietly.
+      key: before.key,
+    });
+  });
+
+  it("clears a field with null rather than leaving it alone", async () => {
+    const id = await createProject(alice, "Datedish", { dueAt: "2026-10-01" });
+
+    await patch(id, { dueAt: null });
+
+    expect((await read(id)).dueAt).toBeNull();
+  });
+
+  it("refuses an edit that would put the span backwards", async () => {
+    const id = await createProject(alice, "Spanned", { startAt: "2026-06-01" });
+
+    const res = await patch(id, { dueAt: "2026-01-01" });
+
+    expect(res.status).toBe(400);
+    expect((await read(id)).dueAt).toBeNull();
+  });
+
+  it("archives and brings back, without deleting anything", async () => {
+    const id = await createProject(alice, "Finished");
+
+    expect((await patch(id, { archived: true })).status).toBe(200);
+    expect((await read(id)).archivedAt).not.toBeNull();
+
+    expect((await patch(id, { archived: false })).status).toBe(200);
+    expect((await read(id)).archivedAt).toBeNull();
+  });
+
+  it("takes an archived project out of the list, and gives it its own", async () => {
+    const kept = await createProject(alice, "Ongoing");
+    const done = await createProject(alice, "Finished");
+    await patch(done, { archived: true });
+
+    const live = await app.request("/api/projects", { headers: alice }, env);
+    expect(((await live.json()) as { items: Project[] }).items.map((p) => p.id)).toEqual([kept]);
+
+    const dash = await app.request("/api/dashboard?archived=1", { headers: alice }, env);
+    expect(((await dash.json()) as { projects: Project[] }).projects.map((p) => p.id)).toEqual([
+      done,
+    ]);
+  });
+
+  it("is not another account's to edit", async () => {
+    const id = await createProject(alice, "Hers");
+    const bob = await signUp("bob@example.com", "Bob");
+
+    const res = await app.request(
+      `/api/projects/${id}`,
+      { method: "PATCH", headers: jsonHeaders(bob), body: JSON.stringify({ name: "Theirs" }) },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect((await read(id)).name).toBe("Hers");
   });
 });

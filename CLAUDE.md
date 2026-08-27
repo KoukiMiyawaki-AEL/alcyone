@@ -341,6 +341,13 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 - **DBアクセスは`createRepo(binding, ownerId, role)`経由で、返るメソッドは全てスコープ済み。**
   ハンドラがスコープされていないクエリを受け取ることがないので、絞り込みを忘れられない。
   ここに新しいメソッドを足すときは、必ず`ownerId`で絞ること（[ADR 0014](./docs/adr/0014-user-owned-projects.md)）。
+- **プロジェクトは `key` を持ち、タスクは `ALC-12` として表示される。** キーは**作成時のみ**で
+  変更経路が無い（書き留められた参照の中にあるため）。番号はプロジェクト内連番ではなく行のid
+  なので飛ぶ（[ADR 0037](./docs/adr/0037-project-settings.md)）。
+- **`archivedAt` と `deletedAt` は別物。** アーカイブは一覧から消えて永久に読める、削除は30日で
+  完全に消える。読み取りは既定でアーカイブ済みを除く。
+- **`projects`テーブルは作り直さない。** 4つのテーブルから参照されているので、値域の制約が要るなら
+  CHECKではなくトリガー（`projects_valid_*`。migration 0022）。`user`と同じ事情。
 - **暦日（`startAt` / `dueAt`）の計算はUTCで閉じる。** `new Date(y, m, d)`と`toLocaleDateString`を
   使わない —— ローカル変換はグリニッジより西の利用者にだけ日付を1日ずらし、**作った側には見えない**
   （[ADR 0026](./docs/adr/0026-timeline-not-a-gantt-chart.md)。`src/features/todos/timeline.ts`が純粋関数）。

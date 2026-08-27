@@ -29,9 +29,10 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 | PATCH | `/api/labels/:labelId` | 名前・色を変更 | 到達できる人 | `204` | `400` `404` |
 | DELETE | `/api/labels/:labelId` | ラベルを削除（全タスクから外す） | 到達できる人 | `204` | `400` `404` |
 | PUT | `/api/todos/:id/labels` | タスクのラベルを**置き換え** | 到達できる人 | `{ labels }` | `400` `404` |
-| GET | `/api/dashboard` | 到達できる全プロジェクト + タスク件数 | 到達できる人 | `{ projects }` | — |
+| GET | `/api/dashboard` | 到達できる全プロジェクト + タスク件数（`?archived=1`でアーカイブ済み） | 到達できる人 | `{ projects }` | — |
 | GET | `/api/todos/assigned` | 自分の担当（未完了・全プロジェクト） | 本人 | `{ items }` | — |
 | GET | `/api/projects` | Project一覧（id昇順） | クエリ: `cursor`、`limit`（1〜100、既定50） | `{ items: Project[], nextCursor }` | `400` |
+| PATCH | `/api/projects/:projectId` | 設定を変更（`key`は不可） | 管理できる人 | `200` | `400` `404` |
 | POST | `/api/projects` | Project作成 | `{ name: string }`（1〜100文字） | `201` `Project` | `400` |
 | DELETE | `/api/projects/:projectId` | Project削除（**論理削除**。配下のTodoも同時に） | — | `204` (body無し) | `400`, `404` |
 | POST | `/api/projects/:projectId/restore` | Projectの復元（配下のTodoも同時に） | — | `200` `Project` | `400`, `404` |
@@ -152,6 +153,11 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 所有者には選ぶ一覧が無く、宛先を知っている本人が打つしかない。`{ email }` は**アカウントの
 有無を1件ずつ問い合わせられる**ので、IP単位のレート制限を通す。存在しないアドレスの答えは、
 管理できないプロジェクトの答えと同じ `404` にしてある。
+
+プロジェクトは `name` / `key` / `description` / `color` / `startAt` / `dueAt` / `archivedAt` を持つ
+（[ADR 0037](../adr/0037-project-settings.md)）。**`key` は作成時のみ**——書き留められた参照の中に
+あるので、変更経路を用意していない。**アーカイブは削除ではない**: 一覧から消えて永久に読める。
+`PATCH` は `archived: boolean` を取り、行には instant を書く。
 
 ロールは**強さの段階ではなく役割**（[ADR 0036](../adr/0036-what-each-role-is-for.md)）。
 **見える範囲は広く、変えられる範囲は狭い。**

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
 import { recordServerError, recordShareView } from "../../src/worker/analytics";
-import { jsonHeaders, resetAll, signUp, uniqueIp } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, uniqueIp, uniqueKey } from "./auth-helper";
 
 /**
  * Records what would have been written.
@@ -111,7 +111,11 @@ describe("events the running Worker emits", () => {
   async function shareAProject(): Promise<string> {
     const created = await app.request(
       "/api/projects",
-      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({ name: "P" }) },
+      {
+        method: "POST",
+        headers: jsonHeaders(alice),
+        body: JSON.stringify({ name: "P", key: uniqueKey() }),
+      },
       env,
     );
     const { id } = (await created.json()) as { id: number };

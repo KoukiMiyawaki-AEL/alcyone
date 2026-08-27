@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
-import { PASSWORD, jsonHeaders, resetAll, signUp } from "./auth-helper";
+import { jsonHeaders, PASSWORD, resetAll, signUp, uniqueKey } from "./auth-helper";
 
 type Attachment = { id: number; filename: string; contentType: string; size: number; key: string };
 
@@ -10,7 +10,11 @@ async function createTodo(headers: Headers): Promise<number> {
   const project = (await (
     await app.request(
       "/api/projects",
-      { method: "POST", headers: jsonHeaders(headers), body: JSON.stringify({ name: "P" }) },
+      {
+        method: "POST",
+        headers: jsonHeaders(headers),
+        body: JSON.stringify({ name: "P", key: uniqueKey() }),
+      },
       env,
     )
   ).json()) as { id: number };

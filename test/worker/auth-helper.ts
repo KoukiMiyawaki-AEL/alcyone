@@ -75,6 +75,20 @@ export async function signUp(email: string, name = "Test user"): Promise<Headers
 /** The account `resetAll` seeds so that no test's own user becomes the owner. */
 export const SEED_ADMIN_ID = "seed-admin";
 
+let keyCounter = 0;
+
+/**
+ * A project key nothing else in the suite is using.
+ *
+ * Keys are unique across the instance, so a fixed one would make the second
+ * project in any file fail with a 400 — which reads as the endpoint being
+ * broken rather than as the test asking for something impossible.
+ */
+export function uniqueKey(): string {
+  keyCounter += 1;
+  return `K${keyCounter}`;
+}
+
 export const PASSWORD = "correct horse battery";
 
 /**

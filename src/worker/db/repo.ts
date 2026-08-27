@@ -6,6 +6,7 @@ import {
   getTableColumns,
   gt,
   inArray,
+  isNotNull,
   isNull,
   ne,
   or,
@@ -111,6 +112,16 @@ export type TodoFields = {
 };
 
 export type TodoSort = "created" | "due" | "priority" | "start";
+/** What a caller may set on a project. Absent means "leave alone". */
+export type ProjectFields = {
+  description?: string | null;
+  color?: LabelColor;
+  startAt?: string | null;
+  dueAt?: string | null;
+  /** An ISO instant to archive, `null` to bring it back. */
+  archivedAt?: string | null;
+};
+
 export type TodoListOptions = {
   status?: TodoFilter;
   sort?: TodoSort;
@@ -1090,7 +1101,7 @@ export function createRepo(
   };
 
   const projects = {
-    list: (options: { cursor?: Cursor | null; limit?: number } = {}) =>
+    list: (options: { cursor?: Cursor | null; limit?: number; archived?: boolean } = {}) =>
       db
         .select()
         .from(projectsTable)
@@ -1101,6 +1112,12 @@ export function createRepo(
             // concerned, and hiding it would leave no way in.
             inArray(projectsTable.id, accessibleProjectIds()),
             isNull(projectsTable.deletedAt),
+            // Archived projects are finished, not gone. They leave the switcher
+            // and the dashboard, and are asked for explicitly — which is the
+            // line Asana and Backlog both draw.
+            options.archived
+              ? isNotNull(projectsTable.archivedAt)
+              : isNull(projectsTable.archivedAt),
             options.cursor ? gt(projectsTable.id, options.cursor.id) : undefined,
           ),
         )
@@ -1138,10 +1155,31 @@ export function createRepo(
         .from(projectsTable)
         .where(and(eq(projectsTable.id, id), inArray(projectsTable.id, ownedProjectIds(id)))),
 
-    create: (values: { name: string }) =>
+    create: (values: ProjectFields & { name: string; key: string }) =>
       db
         .insert(projectsTable)
         .values({ ...values, ownerId, createdAt: now() })
+        .returning(),
+
+    /**
+     * Partial update, scoped to projects this account may administer.
+     *
+     * `key` is not here on purpose. Jira refuses to change one once a project
+     * has issues and Backlog advises against it, for the same reason: the key
+     * is in every reference anyone has written down. There is no rename path at
+     * all rather than one with a warning attached.
+     */
+    update: (id: number, values: ProjectFields & { name?: string }) =>
+      db
+        .update(projectsTable)
+        .set(values)
+        .where(
+          and(
+            eq(projectsTable.id, id),
+            inArray(projectsTable.id, ownedProjectIds(id)),
+            isNull(projectsTable.deletedAt),
+          ),
+        )
         .returning(),
 
     /** Soft delete. The row stays so it can be restored. */
@@ -1173,11 +1211,17 @@ export function createRepo(
      * calendar day these dates live on is decided in UTC and in one place
      * (ADR 0026) — `date('now')` would quietly introduce a second opinion.
      */
-    summaries: (today: string) =>
+    summaries: (today: string, archived = false) =>
       db
         .select({
           id: projectsTable.id,
           name: projectsTable.name,
+          key: projectsTable.key,
+          description: projectsTable.description,
+          color: projectsTable.color,
+          startAt: projectsTable.startAt,
+          dueAt: projectsTable.dueAt,
+          archivedAt: projectsTable.archivedAt,
           ownerId: projectsTable.ownerId,
           createdAt: projectsTable.createdAt,
           deletedAt: projectsTable.deletedAt,
@@ -1210,7 +1254,11 @@ export function createRepo(
           and(eq(todosTable.projectId, projectsTable.id), isNull(todosTable.deletedAt)),
         )
         .where(
-          and(inArray(projectsTable.id, accessibleProjectIds()), isNull(projectsTable.deletedAt)),
+          and(
+            inArray(projectsTable.id, accessibleProjectIds()),
+            isNull(projectsTable.deletedAt),
+            archived ? isNotNull(projectsTable.archivedAt) : isNull(projectsTable.archivedAt),
+          ),
         )
         .groupBy(projectsTable.id)
         .orderBy(asc(projectsTable.id)),

@@ -170,7 +170,7 @@ test.describe("project members", () => {
       extraHTTPHeaders: { "CF-Connecting-IP": "198.51.100.61" },
     });
     const guest = await guestContext.newPage();
-    await signUp(guest, guestEmail);
+    await signUp(guest, guestEmail, "外れる人");
 
     await signUp(page);
     await createProject(page, "Handover");
@@ -186,7 +186,7 @@ test.describe("project members", () => {
     await page.getByRole("button", { name: "「誰かの仕事」の操作" }).click();
     await page.getByRole("menuitem", { name: "詳細を編集" }).click();
     await page.getByRole("combobox", { name: "担当者" }).click();
-    await page.getByRole("option", { name: "E2E user" }).last().click();
+    await page.getByRole("option", { name: "外れる人" }).click();
     await page.getByRole("button", { name: "保存" }).click();
     await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeHidden();
     await expect(page.getByLabel(/^担当:/)).toBeVisible();

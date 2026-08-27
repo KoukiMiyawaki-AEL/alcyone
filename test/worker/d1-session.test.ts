@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
 import { BOOKMARK_COOKIE, bookmarkCookie, readBookmark } from "../../src/worker/db/session";
-import { jsonHeaders, resetAll, signUp } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
 
 /**
  * Adds the bookmark to the existing Cookie header rather than appending a
@@ -153,7 +153,11 @@ describe("D1 sessions across requests", () => {
     // it would in production — it pins the wiring, not the consistency model.
     const created = await app.request(
       "/api/projects",
-      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({ name: "Just made" }) },
+      {
+        method: "POST",
+        headers: jsonHeaders(alice),
+        body: JSON.stringify({ name: "Just made", key: uniqueKey() }),
+      },
       env,
     );
     const bookmark = bookmarkFrom(created)!;

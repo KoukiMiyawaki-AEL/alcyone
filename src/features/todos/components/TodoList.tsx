@@ -8,6 +8,7 @@ import { TodoRow } from "./TodoRow";
 
 type TodoListProps = {
   todos: LabelledTodo[];
+  projectKey: string;
   assignees: Assignee[];
   today: string;
   onStatusChange: (id: number, status: TodoStatus) => Promise<void>;
@@ -17,6 +18,7 @@ type TodoListProps = {
 
 export function TodoList({
   todos,
+  projectKey,
   assignees,
   today,
   onStatusChange,
@@ -58,6 +60,7 @@ export function TodoList({
         <div key={todo.id} className={depth > 0 ? "pl-6" : undefined}>
           {index > 0 ? <Separator /> : null}
           <TodoRow
+            projectKey={projectKey}
             todo={todo}
             assignees={assignees}
             today={today}

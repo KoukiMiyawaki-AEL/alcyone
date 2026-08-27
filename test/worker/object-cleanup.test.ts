@@ -9,7 +9,7 @@ import {
   type CleanupMessage,
 } from "../../src/worker/object-cleanup";
 import { RETENTION_DAYS, purgeExpiredDeletions } from "../../src/worker/scheduled";
-import { resetAll, signUp } from "./auth-helper";
+import { resetAll, signUp, uniqueKey } from "./auth-helper";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -151,9 +151,9 @@ describe("purging todos that have attachments", () => {
   async function seedExpiredTodoWithAttachment(key: string) {
     const expired = new Date(Date.now() - (RETENTION_DAYS + 1) * DAY).toISOString();
     const { meta: p } = await env.DB.prepare(
-      "INSERT INTO projects (name, createdAt, ownerId, deletedAt) VALUES ('p', ?, ?, ?)",
+      "INSERT INTO projects (name, key, createdAt, ownerId, deletedAt) VALUES ('p', ?, ?, ?, ?)",
     )
-      .bind(expired, ownerId, expired)
+      .bind(uniqueKey(), expired, ownerId, expired)
       .run();
     const { meta: t } = await env.DB.prepare(
       "INSERT INTO todos (title, createdAt, updatedAt, projectId, deletedAt) VALUES ('with file', ?, ?, ?, ?)",
@@ -202,9 +202,9 @@ describe("purging todos that have attachments", () => {
   it("leaves attachments of todos that are still within retention", async () => {
     const recent = new Date(Date.now() - DAY).toISOString();
     const { meta: p } = await env.DB.prepare(
-      "INSERT INTO projects (name, createdAt, ownerId, deletedAt) VALUES ('p', ?, ?, ?)",
+      "INSERT INTO projects (name, key, createdAt, ownerId, deletedAt) VALUES ('p', ?, ?, ?, ?)",
     )
-      .bind(recent, ownerId, recent)
+      .bind(uniqueKey(), recent, ownerId, recent)
       .run();
     const { meta: t } = await env.DB.prepare(
       "INSERT INTO todos (title, createdAt, updatedAt, projectId, deletedAt) VALUES ('recent', ?, ?, ?, ?)",

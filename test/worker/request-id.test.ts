@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { app } from "../../src/worker";
-import { resetAll, signUp } from "./auth-helper";
+import { resetAll, signUp, uniqueKey } from "./auth-helper";
 
 describe("request id", () => {
   beforeEach(resetAll);
@@ -61,7 +61,7 @@ describe("request id", () => {
       {
         method: "POST",
         headers,
-        body: JSON.stringify({ name: "a name that must not be logged" }),
+        body: JSON.stringify({ name: "a name that must not be logged", key: uniqueKey() }),
       },
       {} as typeof env,
     );

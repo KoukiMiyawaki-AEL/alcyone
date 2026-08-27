@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useProjects } from "@/features/projects/use-projects";
+import { LabelSwatch } from "@/features/todos/components/LabelChip";
 
 /**
  * Which project everything else is about.
@@ -41,7 +42,11 @@ export function ProjectSwitcher() {
             className="max-w-[16rem] gap-2"
             aria-label="プロジェクトを切り替える"
           >
-            <FolderIcon className="size-4 shrink-0" />
+            {current ? (
+              <LabelSwatch color={current.color} />
+            ) : (
+              <FolderIcon className="size-4 shrink-0" />
+            )}
             <span className="truncate">
               {/*
                 A project that is open but not in the list is one this account
@@ -75,7 +80,9 @@ export function ProjectSwitcher() {
               <CheckIcon
                 className={`size-4 ${String(project.id) === currentId ? "" : "opacity-0"}`}
               />
+              <LabelSwatch color={project.color} />
               <span className="truncate">{project.name}</span>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">{project.key}</span>
             </DropdownMenuItem>
           ))
         )}

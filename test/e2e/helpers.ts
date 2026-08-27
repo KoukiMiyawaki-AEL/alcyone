@@ -15,6 +15,20 @@ export const ADMIN_EMAIL = "warm-up-admin@example.com";
 
 let counter = 0;
 
+/**
+ * A project key nothing else in this run is using.
+ *
+ * Not a counter: this module is reloaded partway through a run (see
+ * fixtures.ts), so a counter restarts and starts handing out keys that already
+ * exist.
+ */
+export function uniqueKey(): string {
+  return `K${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 10);
+}
+
 /** Unique per call — the E2E database persists across tests within a run. */
 export function uniqueEmail(prefix = "e2e"): string {
   counter += 1;
@@ -22,10 +36,17 @@ export function uniqueEmail(prefix = "e2e"): string {
 }
 
 /** Signs up through the UI and waits for the app to let us in. */
-export async function signUp(page: Page, email = uniqueEmail()): Promise<string> {
+export async function signUp(
+  page: Page,
+  email = uniqueEmail(),
+  // Named, because a test with two accounts cannot tell them apart otherwise —
+  // and a picker showing "E2E user" twice will hand back whichever one the
+  // locator happened to reach.
+  name = "E2E user",
+): Promise<string> {
   await page.goto("/login");
   await page.getByRole("button", { name: "アカウントを作る" }).click();
-  await page.getByLabel("Name").fill("E2E user");
+  await page.getByLabel("Name").fill(name);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   // Watch the request itself. Without this a rejected sign-up reports only
@@ -57,8 +78,18 @@ export async function signOut(page: Page) {
 }
 
 export async function createProject(page: Page, name: string) {
-  await page.getByLabel("New project name").fill(name);
-  await page.getByRole("button", { name: "Add Project" }).click();
+  await page.getByRole("button", { name: "プロジェクトを追加" }).click();
+  await page.getByLabel("プロジェクト名").fill(name);
+  // Typed rather than left to follow the name: keys are unique across the
+  // instance and the E2E database lives for the whole run, so two tests both
+  // creating a "Board" would collide — and the second would fail somewhere
+  // that says nothing about keys.
+  await page.getByLabel("プロジェクトキー").fill(uniqueKey());
+  await page.getByRole("dialog").getByRole("button", { name: "追加" }).click();
+  // `exact`, because a toast is also a dialog and the failure message starts
+  // with these same words.
+  await expect(page.getByRole("dialog", { name: "プロジェクトを追加", exact: true })).toBeHidden();
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toBeHidden();
   await expect(page.getByRole("main").getByRole("link", { name: new RegExp(name) })).toBeVisible();
 }
 

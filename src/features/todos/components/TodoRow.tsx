@@ -33,6 +33,8 @@ import { LabelChip } from "./LabelChip";
 
 type TodoRowProps = {
   todo: LabelledTodo;
+  /** The project's key, so a row reads as `ALC-12` rather than as a title. */
+  projectKey: string;
   assignees: Assignee[];
   /** Today, as a calendar date. Passed in so a row is a pure function of it. */
   today: string;
@@ -66,6 +68,7 @@ const STATUS_VARIANT: Record<TodoStatus, "secondary" | "outline" | "destructive"
  */
 export function TodoRow({
   todo,
+  projectKey,
   assignees,
   today,
   onStatusChange,
@@ -100,6 +103,14 @@ export function TodoRow({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <span className={cn("truncate text-sm", done && "text-muted-foreground line-through")}>
+          {/*
+            Before the title, in a fixed width font: this is the string people
+            paste into chat and say out loud, and it is only useful if it is in
+            the same place on every row.
+          */}
+          <span className="mr-2 font-mono text-xs text-muted-foreground">
+            {projectKey}-{todo.id}
+          </span>
           {todo.title}
         </span>
         {/*

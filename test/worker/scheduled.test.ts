@@ -8,16 +8,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import worker from "../../src/worker";
 import { RETENTION_DAYS, purgeExpiredDeletions } from "../../src/worker/scheduled";
-import { resetAll, signUp } from "./auth-helper";
+import { resetAll, signUp, uniqueKey } from "./auth-helper";
 
 const DAY = 24 * 60 * 60 * 1000;
 
 /** Inserts a project directly so its `deletedAt` can be backdated. */
 async function seedProject(ownerId: string, name: string, deletedAt: string | null) {
   const { meta } = await env.DB.prepare(
-    "INSERT INTO projects (name, createdAt, ownerId, deletedAt) VALUES (?, ?, ?, ?)",
+    "INSERT INTO projects (name, key, createdAt, ownerId, deletedAt) VALUES (?, ?, ?, ?, ?)",
   )
-    .bind(name, new Date().toISOString(), ownerId, deletedAt)
+    .bind(name, uniqueKey(), new Date().toISOString(), ownerId, deletedAt)
     .run();
   return meta.last_row_id;
 }

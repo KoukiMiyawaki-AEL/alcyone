@@ -24,8 +24,45 @@ import { purgeExpiredDeletions } from "./scheduled";
 import { getSharedView, newShareToken, purgeSharedView } from "./share";
 import { validate } from "./validator";
 
-const createProjectSchema = z.object({
+/** A calendar day, or an explicit "no date". Same shape the todo fields use. */
+const dayField = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .nullable();
+
+/**
+ * The settings a project carries, checked against the tools that have them.
+ *
+ * Jira's project details are name, key, lead, default assignee and description;
+ * Asana's are name, description, colour, dates and archived; Backlog's are name,
+ * project key and archived. This is their intersection.
+ */
+const projectFieldsSchema = z.object({
+  description: z.string().trim().max(2000).nullable().optional(),
+  color: z.enum(LABEL_COLORS).optional(),
+  startAt: dayField.optional(),
+  dueAt: dayField.optional(),
+});
+
+const createProjectSchema = projectFieldsSchema.extend({
   name: z.string().trim().min(1).max(100),
+  /**
+   * Uppercase letters, digits and underscores — the alphabet Backlog uses, and
+   * the one that survives being read out loud. Ten characters rather than
+   * Backlog's twenty-five: it prefixes every task id on screen.
+   */
+  key: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9_]{1,10}$/),
+});
+
+/** Editing. `key` is absent on purpose — see `projects.update`. */
+const updateProjectSchema = projectFieldsSchema.extend({
+  name: z.string().trim().min(1).max(100).optional(),
+  /** True archives, false brings it back. The instant is the server's to set. */
+  archived: z.boolean().optional(),
 });
 
 const idParamSchema = z.object({
@@ -451,10 +488,15 @@ const app = new Hono<{
    * aggregates — folding them together would mean either a page of counts or
    * counts over a page, and neither is what a dashboard means.
    */
-  .get("/api/dashboard", async (c) => {
-    const rows = await c.get("repo").projects.summaries(todayInUtc());
-    return c.json({ projects: rows });
-  })
+  .get(
+    "/api/dashboard",
+    validate("query", z.object({ archived: z.enum(["0", "1"]).default("0") })),
+    async (c) => {
+      const archived = c.req.valid("query").archived === "1";
+      const rows = await c.get("repo").projects.summaries(todayInUtc(), archived);
+      return c.json({ projects: rows });
+    },
+  )
   /**
    * What is on this account, wherever it lives.
    *
@@ -562,10 +604,52 @@ const app = new Hono<{
     },
   )
   .post("/api/projects", validate("json", createProjectSchema), async (c) => {
-    const { name } = c.req.valid("json");
-    const [project] = await c.get("repo").projects.create({ name });
+    const values = c.req.valid("json");
+
+    let project;
+    try {
+      [project] = await c.get("repo").projects.create(values);
+    } catch {
+      // The unique index on `key`, or the domain trigger. Both mean the same
+      // thing to the caller: this project cannot be created as described.
+      return c.json({ error: "Bad Request" }, 400);
+    }
+
     return c.json(project, 201);
   })
+  .patch(
+    "/api/projects/:projectId",
+    validate("param", projectIdParamSchema),
+    validate("json", updateProjectSchema),
+    async (c) => {
+      const { projectId } = c.req.valid("param");
+      const { archived, ...fields } = c.req.valid("json");
+
+      // `archived` is a boolean on the wire and an instant in the row: the API
+      // asks a question a person can answer, and the server keeps the fact of
+      // when. Only the two-way conversion lives here.
+      const values = {
+        ...fields,
+        ...(archived === undefined
+          ? {}
+          : { archivedAt: archived ? new Date().toISOString() : null }),
+      };
+      if (Object.keys(values).length === 0) return c.json({ error: "Bad Request" }, 400);
+
+      let updated;
+      try {
+        [updated] = await c.get("repo").projects.update(projectId, values);
+      } catch {
+        return c.json({ error: "Bad Request" }, 400);
+      }
+
+      // No row means it is not this caller's to change — the same answer an
+      // unknown project gives.
+      if (!updated) return c.json({ error: "Not found" }, 404);
+
+      return c.json(updated);
+    },
+  )
   .delete("/api/projects/:projectId", validate("param", projectIdParamSchema), async (c) => {
     const { projectId } = c.req.valid("param");
     const repo = c.get("repo");
@@ -768,8 +852,9 @@ const app = new Hono<{
     ]);
 
     return c.json({
-      // The name, so this screen does not need a second request for it.
-      project: { id: project.id, name: project.name },
+      // The whole row: this endpoint backs the project's own settings screen,
+      // which is about the project, not only about who is on it.
+      project,
       // Named, not just an id. A membership screen that lists everyone by name
       // except the one person who cannot be removed reads as a bug.
       owner: owner[0] ?? { id: project.ownerId, name: "", email: "" },

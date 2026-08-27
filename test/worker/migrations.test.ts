@@ -131,6 +131,11 @@ describe("migrations", () => {
       "SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
     ).all<{ name: string }>();
     expect(results.map((r) => r.name)).toEqual([
+      // The project domain, for the same reason `user.role` uses triggers:
+      // `projects` is referenced by four tables, so it cannot be rebuilt to
+      // carry a CHECK (migration 0022).
+      "projects_valid_insert",
+      "projects_valid_update",
       "todos_fts_delete",
       "todos_fts_insert",
       "todos_fts_update",
@@ -287,5 +292,22 @@ describe("giving an installation an owner", () => {
     await seed([]);
 
     await expect(runBackfill()).resolves.not.toThrow();
+  });
+});
+
+describe("the project domain", () => {
+  it("refuses a colour, a key or a span the application would never write", async () => {
+    const insert = (columns: string, values: string) =>
+      env.DB.prepare(
+        `INSERT INTO projects (name, ownerId, createdAt, ${columns})
+         VALUES ('p', (SELECT id FROM user LIMIT 1), '2026-01-01', ${values})`,
+      ).run();
+
+    await expect(insert("key, color", "'OK1', 'chartreuse'")).rejects.toThrow();
+    // Lowercase and spaces do not survive being read out loud.
+    await expect(insert("key", "'lower case'")).rejects.toThrow();
+    await expect(
+      insert("key, startAt, dueAt", "'OK2', '2026-12-31', '2026-01-01'"),
+    ).rejects.toThrow();
   });
 });

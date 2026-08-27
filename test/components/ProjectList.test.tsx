@@ -12,6 +12,12 @@ const project = (over: Partial<ProjectSummary> = {}): ProjectSummary => ({
   createdAt: "2026-08-24T00:00:00.000Z",
   ownerId: "user_1",
   deletedAt: null,
+  key: "ALC",
+  description: null,
+  color: "slate",
+  startAt: null,
+  dueAt: null,
+  archivedAt: null,
   total: 0,
   done: 0,
   overdue: 0,
@@ -32,7 +38,9 @@ function renderInRouter(ui: React.ReactNode) {
 
 describe("ProjectList", () => {
   it("renders an empty state instead of an empty box", async () => {
-    renderInRouter(<ProjectList projects={[]} onDelete={vi.fn()} />);
+    renderInRouter(
+      <ProjectList projects={[]} onDelete={vi.fn()} onEdit={vi.fn()} onArchive={vi.fn()} />,
+    );
 
     expect(await screen.findByText("No projects yet")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
@@ -40,7 +48,12 @@ describe("ProjectList", () => {
 
   it("renders one linked card per project", async () => {
     renderInRouter(
-      <ProjectList projects={[project(), project({ id: 2, name: "Second" })]} onDelete={vi.fn()} />,
+      <ProjectList
+        projects={[project(), project({ id: 2, name: "Second" })]}
+        onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
+      />,
     );
 
     expect(await screen.findByRole("link", { name: /Alcyone/ })).toHaveAttribute(
@@ -57,6 +70,8 @@ describe("ProjectList", () => {
       <ProjectList
         projects={[project(), project({ id: 2, name: "Second" })]}
         onDelete={onDelete}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
       />,
     );
 
@@ -70,7 +85,14 @@ describe("ProjectList", () => {
 
 describe("ProjectCard progress", () => {
   it("reports how much of the project is done", async () => {
-    renderInRouter(<ProjectList projects={[project({ total: 4, done: 3 })]} onDelete={vi.fn()} />);
+    renderInRouter(
+      <ProjectList
+        projects={[project({ total: 4, done: 3 })]}
+        onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
+      />,
+    );
 
     expect(await screen.findByText("3 / 4 完了（75%）")).toBeInTheDocument();
   });
@@ -78,7 +100,14 @@ describe("ProjectCard progress", () => {
   it("says a project has no tasks rather than showing it as 0% done", async () => {
     // A bar pinned at zero reads as failure. An empty project has not failed
     // at anything, it has not started.
-    renderInRouter(<ProjectList projects={[project()]} onDelete={vi.fn()} />);
+    renderInRouter(
+      <ProjectList
+        projects={[project()]}
+        onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
+      />,
+    );
 
     expect(await screen.findByText("まだタスクがありません")).toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
@@ -89,6 +118,8 @@ describe("ProjectCard progress", () => {
       <ProjectList
         projects={[project({ total: 5, done: 1, overdue: 2, dueToday: 0 })]}
         onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
       />,
     );
 

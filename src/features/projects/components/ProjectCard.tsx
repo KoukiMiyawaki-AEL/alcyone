@@ -1,11 +1,15 @@
 import { Link } from "@tanstack/react-router";
 import {
   AlertTriangleIcon,
+  ArchiveIcon,
+  ArchiveRestoreIcon,
   CalendarClockIcon,
   EllipsisVerticalIcon,
+  PencilIcon,
   TrashIcon,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -15,16 +19,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
+import { LabelSwatch } from "@/features/todos/components/LabelChip";
 
 import type { ProjectSummary } from "../types";
 
 type ProjectCardProps = {
   project: ProjectSummary;
   onDelete: (id: number) => Promise<void>;
+  onEdit: (project: ProjectSummary) => void;
+  onArchive: (id: number, archived: boolean) => Promise<void>;
 };
 
-export function ProjectCard({ project, onDelete }: ProjectCardProps) {
+export function ProjectCard({ project, onDelete, onEdit, onArchive }: ProjectCardProps) {
   const { total, done, overdue, dueToday } = project;
+  const archived = project.archivedAt !== null;
   // An empty project is not 0% finished, it is not started — and showing a bar
   // stuck at zero reads as failure rather than as an empty page.
   const percent = total === 0 ? 0 : Math.round((done / total) * 100);
@@ -33,6 +41,8 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     <Card>
       <CardContent className="flex flex-col gap-4">
         <div className="flex items-start gap-2">
+          {/* The colour, so the card is recognisable before it is read. */}
+          <LabelSwatch color={project.color} />
           <Link
             to="/projects/$projectId"
             params={{ projectId: String(project.id) }}
@@ -41,6 +51,9 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
           >
             {project.name}
           </Link>
+          <Badge variant="outline" className="shrink-0 font-mono text-[0.7rem]">
+            {project.key}
+          </Badge>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -55,6 +68,14 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
               }
             />
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onEdit(project)}>
+                <PencilIcon />
+                設定を編集
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onArchive(project.id, !archived)}>
+                {archived ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
+                {archived ? "アーカイブから戻す" : "アーカイブする"}
+              </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onClick={() => onDelete(project.id)}>
                 <TrashIcon />
                 Delete
@@ -62,6 +83,16 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {project.description ? (
+          <p className="line-clamp-2 text-xs text-muted-foreground">{project.description}</p>
+        ) : null}
+
+        {project.startAt || project.dueAt ? (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {project.startAt ?? "—"} 〜 {project.dueAt ?? "—"}
+          </p>
+        ) : null}
 
         {total === 0 ? (
           <p className="text-xs text-muted-foreground">まだタスクがありません</p>

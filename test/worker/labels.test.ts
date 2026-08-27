@@ -2,14 +2,18 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
 
 type Label = { id: number; name: string; color: string; projectId: number };
 
 async function createProject(headers: Headers, name: string): Promise<number> {
   const res = await app.request(
     "/api/projects",
-    { method: "POST", headers: jsonHeaders(headers), body: JSON.stringify({ name }) },
+    {
+      method: "POST",
+      headers: jsonHeaders(headers),
+      body: JSON.stringify({ name, key: uniqueKey() }),
+    },
     env,
   );
   return ((await res.json()) as { id: number }).id;

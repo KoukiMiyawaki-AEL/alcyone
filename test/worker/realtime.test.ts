@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { app } from "../../src/worker";
 import type { UserChannel } from "../../src/worker/realtime";
 import { notifyUser } from "../../src/worker/realtime";
-import { jsonHeaders, resetAll, signUp } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
 
 /** Reaches into a user's channel the way the Worker addresses it. */
 function channelOf(userId: string) {
@@ -111,7 +111,11 @@ describe("realtime channel", () => {
     const ctx = createExecutionContext();
     const res = await app.request(
       "/api/projects",
-      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({ name: "Work" }) },
+      {
+        method: "POST",
+        headers: jsonHeaders(alice),
+        body: JSON.stringify({ name: "Work", key: uniqueKey() }),
+      },
       env,
       ctx,
     );

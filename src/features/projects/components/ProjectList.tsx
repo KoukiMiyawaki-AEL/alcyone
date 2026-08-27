@@ -8,15 +8,17 @@ import { ProjectCard } from "./ProjectCard";
 type ProjectListProps = {
   projects: ProjectSummary[];
   onDelete: (id: number) => Promise<void>;
+  onEdit: (project: ProjectSummary) => void;
+  onArchive: (id: number, archived: boolean) => Promise<void>;
 };
 
-export function ProjectList({ projects, onDelete }: ProjectListProps) {
+export function ProjectList({ projects, onDelete, onEdit, onArchive }: ProjectListProps) {
   if (projects.length === 0) {
     return (
       <EmptyState
         icon={FolderIcon}
         title="No projects yet"
-        description="上のフォームから最初のプロジェクトを追加してください。"
+        description="「プロジェクトを追加」から最初のプロジェクトを作ってください。"
       />
     );
   }
@@ -27,7 +29,13 @@ export function ProjectList({ projects, onDelete }: ProjectListProps) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {projects.map((project) => (
-        <ProjectCard key={project.id} project={project} onDelete={onDelete} />
+        <ProjectCard
+          key={project.id}
+          project={project}
+          onDelete={onDelete}
+          onEdit={onEdit}
+          onArchive={onArchive}
+        />
       ))}
     </div>
   );

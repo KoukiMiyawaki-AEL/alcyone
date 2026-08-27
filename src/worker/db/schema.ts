@@ -56,11 +56,53 @@ export type TodoEventField = (typeof TODO_EVENT_FIELDS)[number];
 export const TODO_STATUSES = ["todo", "in_progress", "blocked", "done"] as const;
 export type TodoStatus = (typeof TODO_STATUSES)[number];
 
+/**
+ * The colours a label can be.
+ *
+ * A fixed set rather than free-form hex, for two reasons. A palette keeps the
+ * board readable — arbitrary colours from twelve different people produce
+ * twelve shades of the same muddy blue — and each name maps to a design token
+ * that already has a light and a dark value, so labels stay legible in both
+ * themes without anyone picking twice.
+ */
+export const LABEL_COLORS = ["slate", "red", "amber", "green", "blue", "violet"] as const;
+export type LabelColor = (typeof LABEL_COLORS)[number];
+
 export const projectsTable = sqliteTable(
   "projects",
   {
     id: int().primaryKey({ autoIncrement: true }),
     name: text().notNull(),
+    /**
+     * The short identifier tasks are named by: `ALC-12`.
+     *
+     * Uppercase letters, digits and underscores. Every tool that people quote
+     * task numbers out loud in has one — Jira, Backlog, Linear — and the reason
+     * is the same in all of them: "ALC-12" survives being said in a meeting and
+     * pasted into a chat, and a bare row id does not.
+     *
+     * Set once, at creation. Jira refuses to change a key once a project has
+     * issues and Backlog advises against it, both for the same reason: the key
+     * is in every reference anyone has written down. So there is no rename path
+     * here at all, rather than one with a warning attached.
+     *
+     * The empty default exists because SQLite cannot add a NOT NULL column to a
+     * table that already has rows without one. Nothing ever writes it.
+     */
+    key: text().notNull().default(""),
+    description: text(),
+    /** From the same palette as labels, so the two never disagree on a colour. */
+    color: text().notNull().default("slate").$type<LabelColor>(),
+    /** The project's own span, as calendar days. Both optional, both UTC. */
+    startAt: text(),
+    dueAt: text(),
+    /**
+     * Finished, but kept. Distinct from `deletedAt`: an archived project drops
+     * out of the dashboard and the switcher and stays readable forever, while a
+     * deleted one is restorable for thirty days and then gone (ADR 0015).
+     * Asana and Backlog both draw the line in the same place.
+     */
+    archivedAt: text(),
     createdAt: text().notNull(),
     // No `onDelete`: `projects` is referenced by `todos`, and D1 cannot disable
     // foreign key enforcement, so a cascade from `user` would silently delete
@@ -257,18 +299,6 @@ export const todoLinksTable = sqliteTable(
     check("todo_links_distinct", sql`${t.fromTodoId} <> ${t.toTodoId}`),
   ],
 );
-
-/**
- * The colours a label can be.
- *
- * A fixed set rather than free-form hex, for two reasons. A palette keeps the
- * board readable — arbitrary colours from twelve different people produce
- * twelve shades of the same muddy blue — and each name maps to a design token
- * that already has a light and a dark value, so labels stay legible in both
- * themes without anyone picking twice.
- */
-export const LABEL_COLORS = ["slate", "red", "amber", "green", "blue", "violet"] as const;
-export type LabelColor = (typeof LABEL_COLORS)[number];
 
 /**
  * A label belongs to a project, not to the account that made it.

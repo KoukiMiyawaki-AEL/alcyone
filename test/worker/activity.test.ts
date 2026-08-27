@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
 
 type Comment = {
   id: number;
@@ -23,7 +23,11 @@ type Event = {
 async function createProject(headers: Headers, name = "P"): Promise<number> {
   const res = await app.request(
     "/api/projects",
-    { method: "POST", headers: jsonHeaders(headers), body: JSON.stringify({ name }) },
+    {
+      method: "POST",
+      headers: jsonHeaders(headers),
+      body: JSON.stringify({ name, key: uniqueKey() }),
+    },
     env,
   );
   return ((await res.json()) as { id: number }).id;

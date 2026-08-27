@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
 import { exportKey, type ExportManifest } from "../../src/worker/data-export";
-import { jsonHeaders, resetAll, signUp } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
 
 /**
  * The claim ADR 0020 made for choosing Workflows over a queue was that a
@@ -22,7 +22,11 @@ describe("a data export whose step fails", () => {
 
     await app.request(
       "/api/projects",
-      { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({ name: "Work" }) },
+      {
+        method: "POST",
+        headers: jsonHeaders(alice),
+        body: JSON.stringify({ name: "Work", key: uniqueKey() }),
+      },
       env,
     );
   });

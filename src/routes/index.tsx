@@ -1,21 +1,36 @@
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
-import { TriangleAlertIcon } from "lucide-react";
+import { Link, createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { ArchiveIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
+import { useState } from "react";
+import { z } from "zod";
 
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { addProject, deleteProject, restoreProject } from "@/features/projects/api";
-import { ProjectForm } from "@/features/projects/components/ProjectForm";
+import { addProject, deleteProject, restoreProject, updateProject } from "@/features/projects/api";
+import {
+  ProjectFormDialog,
+  type ProjectEditor,
+} from "@/features/projects/components/ProjectFormDialog";
 import { ProjectList } from "@/features/projects/components/ProjectList";
-import type { ProjectSummary } from "@/features/projects/types";
+import type { Project, ProjectSummary } from "@/features/projects/types";
 import { apiClient } from "@/lib/api-client";
 import { toastUndo } from "@/lib/undo-toast";
 
 const TRANSIENT = "プロジェクトの取得に失敗しました。";
 
+/**
+ * Which shelf is on screen. In the URL like every other list state: a link to
+ * the archive is a link somebody can send.
+ */
+const searchSchema = z.object({
+  archived: z.boolean().default(false).catch(false),
+});
+
 export const Route = createFileRoute("/")({
+  validateSearch: searchSchema,
+  loaderDeps: ({ search }) => search,
   // The guard lives here rather than on the root route so that /login itself
   // stays reachable. `isPending` must not count as signed-out, or a hard reload
   // would bounce a signed-in user to the login screen before the session
@@ -26,10 +41,10 @@ export const Route = createFileRoute("/")({
       throw redirect({ to: "/login", search: { redirect: location.href } });
     }
   },
-  loader: async (): Promise<{ projects: ProjectSummary[]; error: string | null }> => {
+  loader: async ({ deps }): Promise<{ projects: ProjectSummary[]; error: string | null }> => {
     let res;
     try {
-      res = await apiClient.api.dashboard.$get();
+      res = await apiClient.api.dashboard.$get({ query: { archived: deps.archived ? "1" : "0" } });
     } catch {
       // Network failure only. Anything status-shaped is handled below, outside
       // the catch — `redirect()` works by throwing, so raising it in here would
@@ -71,11 +86,29 @@ function ProjectsPending() {
 function IndexComponent() {
   const router = useRouter();
   const { projects, error } = Route.useLoaderData();
+  const { archived } = Route.useSearch();
+  const [editor, setEditor] = useState<ProjectEditor | null>(null);
 
-  async function handleAdd(name: string) {
-    const added = await addProject(name);
-    if (added) await router.invalidate();
-    return added;
+  async function handleSave(values: Parameters<typeof addProject>[0], project: Project | null) {
+    const saved = project
+      ? // The key is not editable, so it is not sent. Passing it would be
+        // asking the server to ignore a field, which is a worse contract than
+        // not having one.
+        await updateProject(project.id, {
+          name: values.name,
+          description: values.description,
+          color: values.color,
+          startAt: values.startAt,
+          dueAt: values.dueAt,
+        })
+      : await addProject(values);
+
+    if (saved) await router.invalidate();
+    return saved;
+  }
+
+  async function handleArchive(id: number, archived: boolean) {
+    if (await updateProject(id, { archived })) await router.invalidate();
   }
 
   async function handleDelete(id: number) {
@@ -91,17 +124,33 @@ function IndexComponent() {
     <div className="flex flex-col gap-6">
       <PageHeader title="Projects" description="進行中のプロジェクトと、その進み具合" />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Add a project</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ProjectForm onAdd={handleAdd} />
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-medium text-muted-foreground">
+          {archived ? "アーカイブ済み" : "Projects"}
+        </h2>
+        <div className="flex items-center gap-2">
+          {/*
+            Archived projects are finished, not gone: they leave this list and
+            stay one link away. The link is in the URL so it can be shared.
+          */}
+          <Button
+            size="sm"
+            variant="outline"
+            render={<Link to="/" search={{ archived: !archived }} />}
+          >
+            <ArchiveIcon className="size-4" />
+            {archived ? "進行中を見る" : "アーカイブを見る"}
+          </Button>
+          {archived ? null : (
+            <Button size="sm" onClick={() => setEditor({ mode: "create" })}>
+              <PlusIcon className="size-4" />
+              プロジェクトを追加
+            </Button>
+          )}
+        </div>
+      </div>
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Projects</h2>
         {error ? (
           <EmptyState
             icon={TriangleAlertIcon}
@@ -114,9 +163,19 @@ function IndexComponent() {
             }
           />
         ) : (
-          <ProjectList projects={projects} onDelete={handleDelete} />
+          <ProjectList
+            projects={projects}
+            onDelete={handleDelete}
+            onEdit={(project) => setEditor({ mode: "edit", project })}
+            onArchive={handleArchive}
+          />
         )}
       </div>
+      <ProjectFormDialog
+        editor={editor}
+        onOpenChange={(open) => setEditor(open ? editor : null)}
+        onSave={handleSave}
+      />
     </div>
   );
 }

@@ -101,6 +101,9 @@ test.describe("project overview", () => {
     await page.getByLabel("期限日").fill("2020-01-01");
     await page.getByRole("button", { name: "保存" }).click();
     await expect(page.getByRole("dialog", { name: "タスクの詳細" })).toBeHidden();
+    // The overlay outlives the dialog by one closing animation and swallows the
+    // next click, which then fails somewhere unrelated.
+    await expect(page.locator('[data-slot="dialog-overlay"]')).toBeHidden();
 
     await page.getByRole("navigation").first().getByRole("link", { name: "概要" }).click();
 

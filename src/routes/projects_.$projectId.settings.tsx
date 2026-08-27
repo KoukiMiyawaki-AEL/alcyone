@@ -1,5 +1,11 @@
 import { Link, createFileRoute, notFound, redirect, useRouter } from "@tanstack/react-router";
-import { TriangleAlertIcon, UserMinusIcon, UserPlusIcon } from "lucide-react";
+import {
+  ArchiveIcon,
+  PencilIcon,
+  TriangleAlertIcon,
+  UserMinusIcon,
+  UserPlusIcon,
+} from "lucide-react";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/app/empty-state";
@@ -16,7 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { updateProject } from "@/features/projects/api";
+import { ProjectFormDialog } from "@/features/projects/components/ProjectFormDialog";
 import { addMember, addMemberByEmail, removeMember } from "@/features/projects/members-api";
+import type { Project } from "@/features/projects/types";
 import { LabelManager } from "@/features/todos/components/LabelManager";
 // Aliased: `Label` is already the form-label component in this file.
 import type { Label as TaskLabel } from "@/features/todos/types";
@@ -28,7 +37,7 @@ type Member = { id: number; userId: string; name: string; email: string };
 type Account = { id: string; name: string; email: string; role: string };
 
 type LoaderData = {
-  project: { id: number; name: string } | null;
+  project: Project | null;
   labels: TaskLabel[];
   /** Named, not just an id — this is the one person the list cannot remove. */
   owner: { id: string; name: string; email: string } | null;
@@ -141,6 +150,7 @@ function ProjectSettingsComponent() {
   const { projectId } = Route.useParams();
   const { project, labels, owner, members, canManage, directory, error } = Route.useLoaderData();
   const [picked, setPicked] = useState("");
+  const [editing, setEditing] = useState(false);
   const [email, setEmail] = useState("");
 
   // Everyone who is not already on it. The owner is not a member row, so they
@@ -179,6 +189,59 @@ function ProjectSettingsComponent() {
           </Button>
         }
       />
+
+      {canManage ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>基本設定</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[8rem_1fr]">
+              <dt className="text-muted-foreground">プロジェクトキー</dt>
+              <dd className="font-mono">{project?.key}</dd>
+              <dt className="text-muted-foreground">説明</dt>
+              <dd className="whitespace-pre-wrap">
+                {project?.description ?? <span className="text-muted-foreground">未設定</span>}
+              </dd>
+              <dt className="text-muted-foreground">期間</dt>
+              <dd className="tabular-nums">
+                {project?.startAt || project?.dueAt ? (
+                  `${project.startAt ?? "—"} 〜 ${project.dueAt ?? "—"}`
+                ) : (
+                  <span className="text-muted-foreground">未設定</span>
+                )}
+              </dd>
+            </dl>
+
+            <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+              <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+                <PencilIcon className="size-4" />
+                設定を編集
+              </Button>
+              {/*
+                Archiving is here rather than only on the dashboard card: this
+                is the screen somebody is on when a project ends.
+              */}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  if (
+                    await updateProject(Number(projectId), {
+                      archived: project?.archivedAt === null,
+                    })
+                  ) {
+                    await router.invalidate();
+                  }
+                }}
+              >
+                <ArchiveIcon className="size-4" />
+                {project?.archivedAt === null ? "アーカイブする" : "アーカイブから戻す"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <LabelManager
         projectId={projectId}
@@ -327,6 +390,22 @@ function ProjectSettingsComponent() {
           )}
         </CardContent>
       </Card>
+      <ProjectFormDialog
+        editor={editing && project ? { mode: "edit", project } : null}
+        onOpenChange={(open) => setEditing(open)}
+        onSave={async (values) => {
+          if (!project) return false;
+          const saved = await updateProject(project.id, {
+            name: values.name,
+            description: values.description,
+            color: values.color,
+            startAt: values.startAt,
+            dueAt: values.dueAt,
+          });
+          if (saved) await router.invalidate();
+          return saved;
+        }}
+      />
     </div>
   );
 }

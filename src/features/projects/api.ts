@@ -1,10 +1,25 @@
 import { apiClient } from "@/lib/api-client";
 import { mutate } from "@/lib/mutate";
 
-export const addProject = (name: string) =>
+import type { ProjectInput } from "./types";
+
+export const addProject = (values: ProjectInput & { name: string; key: string }) =>
   mutate(
-    () => apiClient.api.projects.$post({ json: { name } }),
-    "プロジェクトの追加に失敗しました。",
+    () => apiClient.api.projects.$post({ json: values }),
+    "プロジェクトを追加できませんでした。プロジェクトキーが既に使われているかもしれません。",
+  );
+
+export const updateProject = (
+  id: number,
+  values: ProjectInput & { name?: string; archived?: boolean },
+) =>
+  mutate(
+    () =>
+      apiClient.api.projects[":projectId"].$patch({
+        param: { projectId: String(id) },
+        json: values,
+      }),
+    "プロジェクトの設定を保存できませんでした。",
   );
 
 export const deleteProject = (id: number) =>

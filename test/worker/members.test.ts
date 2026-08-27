@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "../../src/features/projects/types";
 import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp, uniqueIp } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, uniqueIp, uniqueKey } from "./auth-helper";
 
 async function userId(headers: Headers): Promise<string> {
   // A fresh address each time: `/api/auth/*` is rate limited by IP, and
@@ -31,7 +31,11 @@ async function makeAdmin(headers: Headers) {
 async function createProject(headers: Headers, name = "P"): Promise<number> {
   const res = await app.request(
     "/api/projects",
-    { method: "POST", headers: jsonHeaders(headers), body: JSON.stringify({ name }) },
+    {
+      method: "POST",
+      headers: jsonHeaders(headers),
+      body: JSON.stringify({ name, key: uniqueKey() }),
+    },
     env,
   );
   return ((await res.json()) as Project).id;

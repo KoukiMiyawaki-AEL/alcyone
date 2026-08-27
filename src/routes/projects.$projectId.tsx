@@ -308,7 +308,9 @@ function ProjectTodosComponent() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title={project?.name ?? "Todos"}
-        description="Manage your tasks"
+        // The project's own description if it has one — a project is worth
+        // describing, and this is where somebody looks for what it is about.
+        description={project?.description ?? "Manage your tasks"}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/*
@@ -404,6 +406,7 @@ function ProjectTodosComponent() {
         ) : (
           <TodoList
             todos={todos}
+            projectKey={project?.key ?? ""}
             assignees={assignees}
             today={today}
             onStatusChange={handleStatusChange}

@@ -27,6 +27,7 @@ function renderList(props: Partial<Parameters<typeof TodoList>[0]> = {}) {
   return render(
     <TodoList
       todos={[todo()]}
+      projectKey="ALC"
       assignees={[]}
       today="2026-08-26"
       onStatusChange={vi.fn()}
@@ -227,5 +228,15 @@ describe("labels on a row", () => {
 
     await screen.findByText("裸のタスク");
     expect(container.querySelectorAll("[class*='rounded-full'][class*='border']")).toHaveLength(0);
+  });
+});
+
+describe("the task's identifier", () => {
+  it("shows the project key with the row, not just the title", async () => {
+    // This is the string people paste into chat and read out loud. A row id on
+    // its own is neither.
+    renderList({ todos: [todo({ id: 12, title: "読み上げられるタスク" })] });
+
+    expect(await screen.findByText("ALC-12")).toBeInTheDocument();
   });
 });

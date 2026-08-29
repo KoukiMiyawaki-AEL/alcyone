@@ -78,7 +78,7 @@ describe("which screens are public", () => {
 
 describe("the access scale", () => {
   it("treats an owner as satisfying an administrator's screen", () => {
-    // The roles are already ordered (ADR 0034). Expressing that order a second
+    // The roles are already ordered. Expressing that order a second
     // time as a set is how an owner ends up locked out of an admin screen.
     expect(
       meets("admin", viewerAccess({ user: { role: "owner" } as never, isPending: false })),

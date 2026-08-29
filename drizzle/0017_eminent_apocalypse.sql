@@ -4,15 +4,14 @@
 -- parent and the column is what says so. `todo_links` holds the connections
 -- that are genuinely many-to-many.
 --
--- Both reference `todos` with NO ACTION (ADR 0012), and `parentId` references
+-- Both reference `todos` with NO ACTION, and `parentId` references
 -- it from inside itself. That self-reference has a consequence the purge paths
 -- have to know about: SQLite checks a foreign key row by row, so deleting a
 -- set of todos that point at each other fails unless the pointers are cleared
 -- first. Handled in the same commit that creates the column rather than after
--- the nightly job falls over, which is how attachments were learned (ADR 0019).
+-- the nightly job falls over, which is how attachments were learned.
 --
--- Nullable with no default, which is the form D1 accepts on a populated table:
--- ADR 0011 records that NOT NULL DEFAULT plus REFERENCES fails once rows exist
+-- Nullable with no default, which is the form D1 accepts on a populated table: records that NOT NULL DEFAULT plus REFERENCES fails once rows exist
 -- and succeeds while they do not.
 
 CREATE TABLE `todo_links` (

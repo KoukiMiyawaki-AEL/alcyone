@@ -182,7 +182,7 @@ describe("cross-user isolation", () => {
   });
 
   it("lists only the projects this account is on", async () => {
-    // Bob cannot make one of his own any more (ADR 0039), so his project is
+    // Bob cannot make one of his own any more, so his project is
     // one an administrator made and put him on. The boundary under test is the
     // same: what he is on, and nothing else.
     const bobsProject = await createProject(alice, "Bob's project");
@@ -436,7 +436,7 @@ describe("who may create a project", () => {
   }
 
   it("is an administrator's act, not part of doing the work", async () => {
-    // Which projects exist is an operational decision (ADR 0039). Letting
+    // Which projects exist is an operational decision. Letting
     // anyone create one made the role meaningless: a member could always have
     // a project they administered, without anybody granting them anything.
     const res = await create(member, "Not theirs to make");
@@ -451,7 +451,7 @@ describe("who may create a project", () => {
     expect(res.status).toBe(201);
 
     // Creating still confers management of what was created — that is a fact
-    // about who made it, not a role (ADR 0039).
+    // about who made it, not a role.
     const { id } = (await res.json()) as { id: number };
     const members = await app.request(`/api/projects/${id}/members`, { headers: admin }, env);
     expect(await members.json()).toMatchObject({ canManage: true });
@@ -484,7 +484,7 @@ describe("who may create a project", () => {
 
   it("puts no ceiling on how many", async () => {
     // The control is who, not how many: a cap answers a different fear, and
-    // hitting one would be indistinguishable from being refused (ADR 0039).
+    // hitting one would be indistinguishable from being refused.
     for (let i = 0; i < 5; i += 1) {
       expect((await create(admin, `Project ${i}`)).status).toBe(201);
     }

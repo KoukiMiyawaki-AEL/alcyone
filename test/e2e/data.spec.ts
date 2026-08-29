@@ -17,7 +17,7 @@ test.describe("ownership and deletion", () => {
     await signOut(page);
 
     // An ordinary account, deliberately: an administrator sees every project
-    // (ADR 0036), so signing back in as one would prove the opposite of what
+    //, so signing back in as one would prove the opposite of what
     // this test is named after.
     await signUp(page);
     await expect(page.getByText("No projects yet")).toBeVisible();

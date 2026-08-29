@@ -76,12 +76,12 @@ export function createAuth(env: CloudflareBindings, db: D1Database | D1DatabaseS
       deleteUser: {
         enabled: true,
         // Runs before the user row goes. It has to: `projects.ownerId`
-        // references `user.id` with NO ACTION (ADR 0012), so deleting the user
+        // references `user.id` with NO ACTION, so deleting the user
         // while they still own projects fails the foreign key. Doing it in
         // `afterDelete` would never be reached.
         //
         // Better Auth's own session and account rows cascade from `user`
-        // (ADR 0013), so only the app's tables need handling here.
+        //, so only the app's tables need handling here.
         beforeDelete: async (user) => {
           const repo = createRepo(env.DB, user.id);
 
@@ -114,8 +114,7 @@ export function createAuth(env: CloudflareBindings, db: D1Database | D1DatabaseS
       enabled: true,
       // There is no email infrastructure in this project — Cloudflare Email
       // Sending is beta and Workers Paid only — so verification and password
-      // reset are deliberately off. Recorded as a known limitation in
-      // docs/adr/0013-better-auth.md.
+      // reset are deliberately off.
       requireEmailVerification: false,
       minPasswordLength: 12,
     },

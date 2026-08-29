@@ -9,8 +9,7 @@
 -- cannot add a constraint to an existing table, so a CHECK would mean
 -- rebuilding `user` — and `session.userId` and `account.userId` reference it
 -- ON DELETE CASCADE, so dropping the old table would silently delete every
--- session and every credential (ADR 0011 records this hazard for exactly this
--- table). A trigger gives the same guarantee without touching the rows.
+-- session and every credential. A trigger gives the same guarantee without touching the rows.
 
 CREATE TRIGGER user_role_known_insert
 BEFORE INSERT ON user

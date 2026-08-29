@@ -2,7 +2,7 @@
 --
 -- Contract half of replacing `completed` with `status`: drop the boolean and
 -- add the CHECK constraints. Dropping a column rebuilds `todos`, and `todos` is
--- referenced by `attachments`, so this is ADR 0011's detach/reattach recipe for
+-- referenced by `attachments`, so this is's detach/reattach recipe for
 -- the second time.
 --
 -- The generated PRAGMA foreign_keys lines are omitted: they do nothing on D1.
@@ -14,9 +14,10 @@
 --    foreign key is checked per row, not per table, so local development and
 --    CI — where that table is usually empty at this moment — would have passed
 --    this forever and it would have failed on the first database with a real
---    attachment in it. Same shape as the NOT NULL DEFAULT finding in ADR 0011.
+--    attachment in it. A foreign key is checked row by row, so an empty
+--    child table proves nothing.
 --
--- 2. The rebuild DROPS THE THREE FTS TRIGGERS, exactly as ADR 0018 predicted,
+-- 2. The rebuild DROPS THE THREE FTS TRIGGERS, exactly as predicted,
 --    and `todos_fts` keeps its rows — so search goes on answering, with results
 --    that quietly stop matching the table. Nothing errors. They are recreated
 --    at the end of this file, and test/worker/migrations.test.ts fails if they
@@ -89,9 +90,9 @@ CREATE INDEX `attachments_todo_id_idx` ON `attachments` (`todoId`);
 
 -- 4. Put the FTS triggers back.
 --
---    `DROP TABLE todos` took them with it. Verified by removing this step and
---    watching test/worker/migrations.test.ts go red — the safety net ADR 0018
---    asked for, actually catching the thing it was written for.
+--    `DROP TABLE todos` took them with it, and nothing else would have said
+--    so: `todos_fts` keeps its rows and answers searches with stale results.
+--    test/worker/migrations.test.ts asserts the triggers are here.
 --
 --    Identical to migration 0009. Duplicated rather than factored out because
 --    a migration has to keep saying what it said when it ran; a shared

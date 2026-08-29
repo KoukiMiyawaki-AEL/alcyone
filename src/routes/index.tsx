@@ -79,7 +79,7 @@ function IndexComponent() {
   const router = useRouter();
   const { projects, error } = Route.useLoaderData();
   const { archived } = Route.useSearch();
-  // Creating a project is an operational act (ADR 0039). The server decides;
+  // Creating a project is an operational act. The server decides;
   // this only keeps the screen from offering what it would refuse.
   const canCreate = meets("admin", viewerAccess(useAuth()));
   const [editor, setEditor] = useState<ProjectEditor | null>(null);
@@ -140,8 +140,8 @@ function IndexComponent() {
             Hidden rather than disabled, and hidden rather than shown-and-
             refused. For an ordinary account this is not a thing they cannot do
             *yet* — it is a thing they never do, so a permanently dead control
-            is furniture. And a button the API refuses is the shape ADR 0031
-            set out to avoid.
+            is furniture. And a control the API refuses is one this app does
+            not offer.
           */}
           {archived || !canCreate ? null : (
             <Button size="sm" onClick={() => setEditor({ mode: "create" })}>

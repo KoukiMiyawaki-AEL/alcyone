@@ -86,7 +86,7 @@ test.describe("project members", () => {
   test("an owner invites by address", async ({ browser, page }) => {
     // Adding by address, rather than by picking from the directory. It stopped
     // being the only way an owner *could* invite when creating a project became
-    // an administrator's act (ADR 0039) — every project's creator can read the
+    // an administrator's act — every project's creator can read the
     // directory now — but typing an address you already know is still the
     // shorter path, and it is the one this covers.
     const guestEmail = uniqueEmail("invited");

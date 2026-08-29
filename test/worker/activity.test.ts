@@ -137,7 +137,7 @@ describe("comments", () => {
 
     expect((await activity(alice, todo.id)).comments).toEqual([]);
 
-    // Soft delete, like every other user-facing row (ADR 0015).
+    // Soft delete, like every other user-facing row.
     const row = await env.DB.prepare("SELECT deletedAt FROM todo_comments WHERE id = ?")
       .bind(created.id)
       .first<{ deletedAt: string | null }>();

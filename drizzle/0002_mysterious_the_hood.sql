@@ -1,5 +1,5 @@
 -- HAND-WRITTEN. drizzle-kit's generated version of this migration cannot be
--- applied to D1 — see docs/adr/0011-expand-contract-migrations.md.
+-- applied to D1 —
 --
 -- Two reasons it had to be rewritten:
 --

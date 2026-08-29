@@ -1,7 +1,6 @@
 # 本番デプロイ手順
 
-**現状: 未実施。** [ADR 0003](./adr/0003-d1-local-only.md)のとおり、
-このリポジトリはまだ実際のCloudflareアカウント上で動いたことがない。
+**現状: 未実施。** このリポジトリはまだ実際のCloudflareアカウント上で動いたことがない。
 `wrangler.jsonc` のD1とKVのidはローカル用のプレースホルダで、
 `pnpm run preflight` がそれを検出してデプロイを止める。
 
@@ -50,26 +49,25 @@ Durable ObjectsとWorkflowsとAnalytics Engineは**事前作成が要らない**
 
 ### `BETTER_AUTH_URL` は鶏と卵になる
 
-[ADR 0013](./adr/0013-better-auth.md)でbaseURLを明示すると決めたので、
+Better AuthにはbaseURLを明示しているので、
 **デプロイ先のURLが分からないと設定できない**。一度デプロイしてURLを確認し、
 secretを入れて**もう一度デプロイする**のが素直。
 最初の1回は認証のリダイレクトが正しく動かない。
 
 ### Freeプランではパスワード認証が成立しない
 
-[ADR 0013](./adr/0013-better-auth.md)に記録済み。Better Authは純JSのscryptでハッシュするため
+に記録済み。Better Authは純JSのscryptでハッシュするため
 CPUを食い、**Workers Freeの1呼び出し10ms上限を超える**。Paidが要る。
 
 ### D1のバックアップは破壊的
 
-[Time Travel](./design/service-readiness-map.md)しか無く、**復元はin-placeでフォークできない**。
+D1のバックアップはTime Travelしか無く、**復元はin-placeでフォークできない**。
 中身を確認してから戻すことができない。実データを入れる前に読むこと。
 
 ### アラートが無い
 
-マップ3-6のとおり、Workersのランタイムアラートは存在しない。
-デプロイした瞬間から、**落ちても誰も気づかない**状態になる。
-[ADR 0023](./adr/0023-analytics-engine-events.md)のイベントは記録されるが、
+Workersにランタイムアラートは無い。デプロイした瞬間から、
+**落ちても誰も気づかない**状態になる。Analytics Engineにイベントは記録されるが、
 **誰にも通知されない**。
 
 ### 未検証のまま本番に出るもの
@@ -79,11 +77,11 @@ CPUを食い、**Workers Freeの1呼び出し10ms上限を超える**。Paidが�
 
 | 何が | どこに書いてあるか | 何を確かめるか |
 |---|---|---|
-| D1の読み取りレプリカ整合 | [ADR 0021](./adr/0021-d1-sessions-for-read-replicas.md) | 作成直後の一覧に出るか |
-| KVの結果整合 | [ADR 0022](./adr/0022-share-links-cached-in-kv.md) | 共有解除が何秒で効くか |
-| Analytics Engine | [ADR 0023](./adr/0023-analytics-engine-events.md) | SQL APIで1件でも読めるか |
-| Queuesのdead letter | [ADR 0019](./adr/0019-object-cleanup-queue.md) | 失敗が実際にDLQへ落ちるか（**ローカルでは`send()`が消費側を駆動しないので原理的に不可**） |
-| Workflowsの完了済みステップ | [ADR 0020](./adr/0020-data-export-workflow.md) | 再開時に本当に飛ばしているか（失敗と再開自体はローカルで検証済み） |
+| D1の読み取りレプリカ整合 |  | 作成直後の一覧に出るか |
+| KVの結果整合 |  | 共有解除が何秒で効くか |
+| Analytics Engine |  | SQL APIで1件でも読めるか |
+| Queuesのdead letter |  | 失敗が実際にDLQへ落ちるか（**ローカルでは`send()`が消費側を駆動しないので原理的に不可**） |
+| Workflowsの完了済みステップ |  | 再開時に本当に飛ばしているか（失敗と再開自体はローカルで検証済み） |
 
 ## `pnpm run preflight` が見ているもの
 

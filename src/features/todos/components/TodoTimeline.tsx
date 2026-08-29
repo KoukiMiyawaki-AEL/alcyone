@@ -57,7 +57,7 @@ const BAR_CLASS: Record<Todo["status"], string> = {
  * the data. What it does show is the thing start and due dates were added
  * for — how the work sits against the calendar and against each other.
  *
- * Bars can be dragged to reschedule, which ADR 0026 originally refused on the
+ * Bars can be dragged to reschedule, which originally refused on the
  * grounds that turning pixels into dates risks moving a deadline nobody
  * touched. What answers that objection is the grid: a column is exactly one
  * day, so the conversion is integer division with nothing to round wrong. The

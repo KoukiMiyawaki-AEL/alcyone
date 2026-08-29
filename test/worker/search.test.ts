@@ -120,7 +120,7 @@ describe("search", () => {
     // fails the moment the ownership join is dropped.
     //
     // Both searchers are ordinary accounts. An administrator sees every project
-    // (ADR 0036) and would find both, which would make this pass or fail for
+    // and would find both, which would make this pass or fail for
     // reasons that have nothing to do with the join.
     const carol = await signUp("carol@example.com", "Carol");
     const dave = await signUp("dave@example.com", "Dave");

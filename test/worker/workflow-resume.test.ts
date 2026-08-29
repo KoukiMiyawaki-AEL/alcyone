@@ -6,7 +6,7 @@ import { exportKey, type ExportManifest } from "../../src/worker/data-export";
 import { jsonHeaders, resetAll, signUpAdmin, uniqueKey } from "./auth-helper";
 
 /**
- * The claim ADR 0020 made for choosing Workflows over a queue was that a
+ * The claim made for choosing Workflows over a queue was that a
  * failure resumes rather than restarts — and it was written without a step
  * having ever failed. These make one fail on purpose.
  */

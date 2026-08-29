@@ -5,10 +5,10 @@
 -- One table would cost the second one the only property that makes it worth
 -- having, and the merged feed the UI wants is a cheap merge of two queries.
 --
--- Both reference `todos` and `user` with NO ACTION (ADR 0012), which means both
+-- Both reference `todos` and `user` with NO ACTION, which means both
 -- have to be deleted before the rows they point at. That has now been the cause
--- of one production-shaped bug (attachments, ADR 0019) and one near miss
--- (shares, ADR 0022), so the retention purge, the account purge and the test
+-- of one production-shaped bug (attachments,) and one near miss
+-- (shares,), so the retention purge, the account purge and the test
 -- reset all learn about these two in the same commit that creates them.
 
 CREATE TABLE `todo_comments` (

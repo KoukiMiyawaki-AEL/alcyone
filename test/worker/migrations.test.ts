@@ -15,8 +15,8 @@ import backfillOwner from "../../drizzle/0021_backfill_missing_owner.sql?raw";
  *
  * Known gap: `test/apply-migrations.ts` runs against an empty database, so the
  * backfill and the `INSERT ... SELECT` data conversion never move a row here.
- * Those were rehearsed by hand against the local D1 — see
- * docs/adr/0011-expand-contract-migrations.md.
+ * Those were rehearsed by hand against the local D1.
+ *
  */
 async function tableInfo(table: string) {
   const { results } = await env.DB.prepare(`SELECT * FROM pragma_table_info('${table}')`).all<{
@@ -103,7 +103,7 @@ describe("migrations", () => {
   });
 
   it("enforces the unique constraints Better Auth relies on, as indexes", async () => {
-    // ADR 0011: table-level UNIQUE is silently dropped by drizzle's rebuild
+    //: table-level UNIQUE is silently dropped by drizzle's rebuild
     // path, so these must exist as indexes to survive one.
     for (const name of ["user_email_uidx", "session_token_uidx"]) {
       const row = await env.DB.prepare('SELECT "unique" FROM pragma_index_list(?) WHERE name = ?')
@@ -122,7 +122,7 @@ describe("migrations", () => {
   });
 
   it("keeps the search index's triggers, which nothing else would notice losing", async () => {
-    // The one hazard of hand-writing the FTS objects (ADR 0018): drizzle-kit
+    // The one hazard of hand-writing the FTS objects: drizzle-kit
     // does not know they exist, and SQLite drops a table's triggers with the
     // table. So drizzle's rebuild path for `todos` would remove all three
     // without a word, and the only symptom would be search results going
@@ -192,7 +192,7 @@ describe("migrations", () => {
   });
 
   it("has no `completed` column left", async () => {
-    // The contract half of ADR 0011: once nothing reads it, the duplicate goes.
+    // The contract half of: once nothing reads it, the duplicate goes.
     // Two columns saying the same thing is the drift this replaced.
     const { results } = await env.DB.prepare("SELECT name FROM pragma_table_info('todos')").all<{
       name: string;

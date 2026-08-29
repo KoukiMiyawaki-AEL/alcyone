@@ -4,7 +4,7 @@ import { enqueueObjectCleanup, listKeys } from "./object-cleanup";
 /**
  * How long a soft-deleted row is kept before it is really gone.
  *
- * This is the retention policy in code: ADR 0015 chose soft deletion so a
+ * This is the retention policy in code: chose soft deletion so a
  * misclick is recoverable, which only makes sense if "recoverable" has an end.
  * Without this the rows accumulate until the account is deleted, which
  * eventually meets D1's 10GB ceiling and its rows-scanned billing.

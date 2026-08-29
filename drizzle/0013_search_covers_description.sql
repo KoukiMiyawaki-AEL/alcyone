@@ -1,7 +1,7 @@
 -- HAND-WRITTEN. drizzle-kit cannot express an FTS5 virtual table or a trigger,
--- so this file is outside its model — see migration 0009 and ADR 0018.
+-- so this file is outside its model — see migration 0009 and
 --
--- Widens the search index to cover `description`, which ADR 0024 added. A note
+-- Widens the search index to cover `description`, which added. A note
 -- you cannot find is half a feature: the field exists to hold the detail that
 -- did not fit in the title, which is exactly the text worth searching.
 --
@@ -15,7 +15,7 @@ DROP TRIGGER IF EXISTS todos_fts_update;--> statement-breakpoint
 DROP TABLE IF EXISTS todos_fts;--> statement-breakpoint
 
 -- Same tokenizer and the same reason: `unicode61` has nothing to split
--- Japanese on, so `設計ドキュメント` would be one token. Measured in ADR 0018.
+-- Japanese on, so `設計ドキュメント` would be one token.
 CREATE VIRTUAL TABLE todos_fts USING fts5(
   title,
   description,

@@ -16,7 +16,7 @@ import type { SharedView } from "@/worker/share";
  *
  * Public means "does not need a session", not "must not have one": a signed-in
  * reader opening a shared link sees the same page. It renders outside the app
- * shell either way (ADR 0038).
+ * shell either way.
  */
 export const Route = createFileRoute("/s/$token")({
   // The one screen this app has for people who do not have an account.

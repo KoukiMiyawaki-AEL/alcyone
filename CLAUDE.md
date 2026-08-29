@@ -1,39 +1,33 @@
 # alcyone
 
-React + TanStack Router + shadcn/ui（Tailwind CSS v4）を採用したフロントエンドと、
-Hono + Drizzle ORM + Cloudflare D1 をCloudflare Workers上で動かすバックエンドを、
-単一のVite開発サーバー（`@cloudflare/vite-plugin`）で同時に動かす構成。
+Cloudflare Workers上のスタックで実サービスを運営するのに何が要るかを確かめる検証台。
+題材としてタスク管理ツールを作っている。設計の全体像は
+[`docs/design/overview.md`](./docs/design/overview.md)。
+
+このファイルは**コードをどう書くか**を答える。何をなぜ作っているかは書かない。
 
 ## Tech Stack
 
 | 分類 | 選択 |
 |---|---|
 | パッケージ管理 | pnpm（Node/pnpmのバージョンは`mise.toml`で固定） |
-| フロントエンド | React 19 + TypeScript 7 strict + Vite（[ADR 0008](./docs/adr/0008-typescript-7.md)） |
+| フロントエンド | React 19 + TypeScript 7 strict + Vite |
 | ルーティング | `@tanstack/react-router`（ファイルベース、`src/routes/`。TanStack Startは使わない） |
 | UI | Tailwind CSS v4 + shadcn/ui（base: Base UI, style: nova, baseColor: neutral） |
 | API | Hono（`src/worker/index.ts`）+ `@hono/zod-validator` + zod |
-| クライアント | `hono/client`の`hc<AppType>`で型安全に呼び出す（`src/lib/api-client.ts`） |
-| DB | Drizzle ORM (`drizzle-orm/d1`) + Cloudflare D1（リクエスト毎にD1 Session。[ADR 0021](./docs/adr/0021-d1-sessions-for-read-replicas.md)）。**値域の制約はCHECKでDB側にも置く**（[ADR 0024](./docs/adr/0024-todo-status-instead-of-completed.md)） |
-| テスト | Vitest（`test.projects`で2分割）。`worker`= `@cloudflare/vitest-plugin`（D1込みの統合テスト）、`components`= happy-dom + Testing Library（[ADR 0009](./docs/adr/0009-component-tests-happy-dom.md)） |
-| Lint / Format | `oxlint` + `oxfmt`（[ADR 0006](./docs/adr/0006-oxfmt-formatter.md)） |
-| CI | GitHub Actions（`.github/workflows/ci.yml`で`pnpm run check`。[ADR 0007](./docs/adr/0007-ci-and-codegen.md)） |
-| 認証 | Better Auth（メール+パスワード、D1をdrizzle adapter経由。[ADR 0013](./docs/adr/0013-better-auth.md)） |
-| リアルタイム | Durable Objects + WebSocket hibernation（ユーザー単位。[ADR 0017](./docs/adr/0017-realtime-with-durable-objects.md)） |
-| 検索 | D1のFTS5（`tokenize='trigram'`。[ADR 0018](./docs/adr/0018-fts5-trigram-search.md)） |
-| 非同期処理 | Cloudflare Queues（R2削除。[ADR 0019](./docs/adr/0019-object-cleanup-queue.md)）とWorkflows（データエクスポート。[ADR 0020](./docs/adr/0020-data-export-workflow.md)） |
-| キャッシュ | Workers KV（公開共有ページ。[ADR 0022](./docs/adr/0022-share-links-cached-in-kv.md)） |
-| 計測 | Analytics Engine（イベントの形は`src/worker/analytics.ts`で固定。[ADR 0023](./docs/adr/0023-analytics-engine-events.md)） |
-
-D1は現時点でローカル開発のみ（`wrangler dev` + `wrangler d1 migrations apply --local`）。
-`wrangler.jsonc`の`database_id`はプレースホルダで、実際のCloudflareアカウント上のD1は
-まだ作成していない。本番デプロイ手順は今後追加する。
+| クライアント | `hono/client`の`hc<AppType>`で型安全に呼ぶ（`src/lib/api-client.ts`） |
+| DB | Drizzle ORM (`drizzle-orm/d1`) + Cloudflare D1 |
+| 認証 | Better Auth（メール+パスワード、D1をdrizzle adapter経由） |
+| テスト | Vitest（`test.projects`で2分割）+ Playwright |
+| Lint / Format | `oxlint` + `oxfmt` |
+| CI | GitHub Actions（`.github/workflows/ci.yml`で`pnpm run check`） |
 
 ### よく使うコマンド
 
 ```bash
-pnpm dev                  # Vite dev server（SPA + Hono Workerを同時に起動）
+pnpm dev                  # Vite dev server（SPA + Hono Workerを同時に起動。ポートは5173固定）
 pnpm test                 # Vitest 両プロジェクト（worker / components）
+pnpm run test:e2e         # Playwright（専用DBでdevサーバを起動）
 pnpm run check            # CIと同じ全工程。コミット前にこれを通す
 pnpm run codegen          # worker-configuration.d.ts と src/routeTree.gen.ts を生成
 pnpm run typecheck        # tsc -b のみ
@@ -41,28 +35,172 @@ pnpm run lint             # oxlint（警告0が必須）
 pnpm run format           # oxfmt（書き換え）。検証だけなら format:check
 pnpm run db:generate      # drizzle-kit generate（schema.tsの差分からmigration生成）
 pnpm run db:migrate:local # ローカルD1へmigration適用
-pnpm run seed:accounts    # ローカル開発用のオーナー/管理者/一般アカウント（docs/dev-accounts.md）
+pnpm run seed:accounts    # ローカル開発用のアカウント（docs/dev-accounts.md）
 pnpm run preflight        # wrangler.jsoncが実リソースを指しているか（deployの前段）
-pnpm run deploy           # preflight → check → リモートmigration → deploy（未実施。docs/deploy.md）
+pnpm run deploy           # preflight → check → リモートmigration → deploy（未実施）
 ```
 
-`check`は `codegen → format:check → lint → tsc -b → vite build → vitest → wrangler deploy --dry-run` の順に走る。
+`check`は `codegen → format:check → lint → tsc -b → vite build → vitest → test:e2e → wrangler deploy --dry-run` の順に走る。
 
 `worker-configuration.d.ts`と`src/routeTree.gen.ts`はコミットしない生成物なので、
 fresh cloneの直後や`wrangler.jsonc`のbindingsを変更したあとは`pnpm run codegen`を実行すること
 （`pnpm dev`でも生成される）。
 
-## Documentation
+---
 
-- このファイル（CLAUDE.md）は「今どう書くか」の運用ルール。過去の経緯・代替案の比較は書かない。
-- 「何を作っていて、なぜその形にしたか」は[`docs/design/`](./docs/design/)にdesign doc（機能・サブシステム単位の生きたドキュメント）として書く。
-- 「なぜそうしたか」という個々の設計判断の記録は[`docs/adr/`](./docs/adr/)（Architecture Decision Records）に置く。ライブラリの採用/見送り、アーキテクチャの方針、意図的なスコープ外の判断など、コード規約より大きい決定をしたときは、まずdesign doc/ADRを追加すること（[`docs/adr/README.md`](./docs/adr/README.md)参照）。
-- APIの外部仕様は[`docs/api/`](./docs/api/)に記録する（現状は簡易表。OpenAPI導入を見送った経緯は[ADR 0005](./docs/adr/0005-defer-openapi.md)）。
-- 規約全体の見取り図・使い分けは[`docs/README.md`](./docs/README.md)。
+# 壊してはいけないもの
+
+**ここに挙げたものは、間違えても型エラーにもテスト失敗にもならず、そのまま出荷される。**
+以降の「日々の書き方」より先に読むこと。
+
+## 権限とスコープ
+
+- **DBアクセスは`src/worker/db/repo.ts`の`createRepo(binding, ownerId, role)`を経由する。**
+  ハンドラ内で`drizzle()`を呼ばない。返るメソッドは全てスコープ済みなので、絞り込みを忘れられない。
+  ここに新しいメソッドを足すときは、必ずスコープすること。
+- **アクセス範囲は`accessibleProjectIds()`、管理権限は`ownedProjectIds()`の2つだけ。**
+  **タスクを触るのが前者、プロジェクトを消す・共有する・参加者を変えるのが後者。**
+  混ぜると参加者が鍵を配れるようになる。
+- **権限は文の一部にする。** 所属の検査はinsert-from-selectの`WHERE`に入れる。
+  **外部キーは「行が存在すること」を検査するのであって「呼び出し元のものであること」ではない。**
+  他人のidを渡した書き込みは、外部キーを満たしたまま成立する。
+- **権限や人数の条件はWHEREに入れて1文にする。** 「最後のオーナーは降格できない」を
+  「数える→更新する」の2文にすると、最後の2人が同時に互いを降格できる隙間ができる。
+- **ロールは`owner` / `admin` / `member`の3段階で、`USER_ROLES`の配列順が強さ。**
+  管理者はオーナーに手を出せず、最後のオーナーは降ろせない。
+  **`owner`はインスタンスのオーナーで、プロジェクトの作成者（`projects.ownerId`）とは別物。**
+- **プロジェクトを作れるのは`admin`以上。** 拒むのは`projects.create`（ハンドラではない）。
+  **作成者は降格しても自分が作ったプロジェクトを管理し続ける。**
+- **ロールはBetter Authの`additionalFields`として宣言する（`input: false`付き）。**
+  宣言しないとBetter Authが知らないフィールドを落とすので、`databaseHooks`が返した値も
+  保存されない。`input: false`があるのでサインアップにも`update-user`にも渡せない。
+- **ユーザーのいない処理（cron等）は`createRepo`を使わない。** あれは`ownerId`で必ず絞るためのもの。
+  ユーザーを持たないクエリは`src/worker/db/maintenance.ts`に置く。
+
+## 画面の可視性
+
+- **「誰がどの画面を見られるか」は`src/components/app/access-gate.tsx`の1箇所で、描画時に決まる。**
+  ルートに`beforeLoad`のガードを書かない ——**`beforeLoad`は遷移のときにしか走らず、
+  サインアウトは遷移ではない**ので効かない。
+- 各ルートは`staticData: { access: "public" | "user" | "admin" }`を宣言する。**書き忘れは`user`**。
+  公開は`/login`と`/s/$token`だけで、その一覧は`test/components/access.test.ts`が固定する。
+- **`StaticDataRouteOption`をモジュール拡張しない。** router-coreが宣言してreact-routerが
+  再エクスポートしているので、後者を拡張すると再エクスポートを隠して**ルート全体の型推論が壊れる**
+  （`useLoaderData()`が`any`になる）。`readAccess(unknown)`で読む。
+- **セッションを終える出口は`endSession()`の1つだけ。** `signOut()`のあと
+  **ハードナビゲーション**で`/login`へ。`redirect`パラメータは付けない。退会も同じ。
+- **ローダーの401リダイレクトは残す。** ゲートは「手元にセッションが無い」、401は
+  「手元のセッションがもう無効」——別の信号。
+
+## D1の制約
+
+- **複数文を原子的に実行したいときは`repo.batch([...])`。** 対話的トランザクションは無く、
+  `db.transaction()`は型が通るのに実行時に落ちる。
+- **`repo`のメソッドを`async`にしない。`.all()` / `.get()`も呼ばない。** 未実行のdrizzleビルダーを
+  返すことで、`await`もできるし`batch()`の要素にもできる。`async`にすると後者が黙って壊れる。
+- **`db.run(sql)` / `db.all(sql)`はbatchに入れられない。** 生SQLを混ぜると実行時に
+  「cannot read properties of undefined」で落ちる。insert-from-selectはdrizzleのビルダーで書く。
+- **`meta.changes`を信用しない。** トリガーの書き込みも数えられ、`batch()`の中では文ごとに
+  割り当てられてすらいない。件数が要るときは`.returning()`して行を数える。
+- **読み取りは`deletedAt IS NULL`でも絞る。** Project/Todoは論理削除で、忘れると削除済みの行が
+  見える（型エラーにもテスト失敗にもならない）。物理削除するのは退会時の`purgeOwnedData()`だけ。
+- **論理削除はUndoとセットで出す**（`src/lib/undo-toast.ts`）。復元手段の無い論理削除は、
+  ユーザーから見ればただの削除である。
+- **自己参照する外部キー（`todos.parentId`）を持つ行を物理削除するときは、先に切り離す。**
+  SQLiteは外部キーを行ごとに検査するので、親を子より先に消す削除は失敗する。
+  保持期限のパージ・退会・テストの`resetAll`の3経路すべてが対象。
+- **`user`と`projects`のテーブルは作り直さない。** 前者は`session`と`account`が
+  `ON DELETE CASCADE`で参照しているので全セッションと全資格情報が消え、後者は4つのテーブルから
+  参照されているので最初の子行で失敗する。値域の制約が要るならCHECKではなくトリガー。
+
+## 個人情報
+
+- **リクエストボディとヘッダをログに出さない。** 一度Workers Logsに入ったPIIは保持期間内は
+  消せない（`docs/pii.md`と`test/worker/request-id.test.ts`）。
+- ログは`console.error(JSON.stringify({ ... }))`のように構造化JSONで出し、**必ず`requestId`を含める**。
+- 例外の内容はクライアントに返さない（`onError`が`{ error: "Internal Server Error" }`を返す）。
+
+---
+
+# 日々の書き方
+
+## API Conventions
+
+リクエストの振り分けは`wrangler.jsonc`の`assets.run_worker_first`で決まる。
+**`/api/*`だけがHono Workerに届き**、それ以外はasset workerがSPAとして処理する。
+APIのパスは必ず`/api/`配下に置くこと。
+
+- チェーン形式（`new Hono().get().post()...`）を崩さない。`hc<AppType>`の型推論がこれに依存している。
+- バリデーションは`zValidator`を直接使わず、`src/worker/validator.ts`の`validate()`を使う。
+  失敗時のレスポンスが`{ error: "Bad Request", issues }`に固定される。
+- **エラーレスポンスは`{ error: string }`で揃える。** 権限が無い要求への答えは常に
+  `404 { error: "Not found" }` ——「存在しない」と「あなたのものではない」を書き分けると、
+  書き分けそのものが情報になる。
+- **`/api/*` はすべて認証が必要**（例外は `/api/health` と `/api/auth/*`）。未認証は401。
+  セッション検証とリポジトリ生成は`src/worker/index.ts`の1つのミドルウェアがやる。
+- **レート制限は`src/worker/rate-limit.ts`の`enforce()`を通す。** 認証系はIP単位、認証済みの
+  重い処理はユーザー単位。**location単位かつ結果整合で、正確な計上には使えない。**
+- **変更履歴は「記録してから変更する」を1つのbatchに載せる。** 履歴の挿入が先——UPDATEが走ると
+  古い値が存在しなくなる。比較は`INSERT ... SELECT`の`WHERE`に入れ、**ハンドラで読んでから
+  差分を取らない**。**`<>`ではなく`is not`を使う**——SQLの不等号はNULLを伝播するので、
+  `<>`だと日付を設定/解除した履歴だけが静かに欠落する。
+- **`todo_events`は追記専用。** 更新も削除もするコードを書かない（退会時の物理削除を除く）。
+- **1回の保存で書いた履歴行には同じ`revisionId`を与える。** 詳細フォームは毎回全項目を送るので、
+  これが無いと1つの操作が複数の出来事に見える。idは`crypto.randomUUID()`で作り、
+  **タイムスタンプで代用しない**。
+- **人の名前はSQLで解決する。** コメントや履歴に名前を出すとき、クライアントで
+  「サインイン中の人の名前」を使わない。**偶然一致しているだけの規則は、一致しなくなった日に
+  静かに壊れる。**
+- **Todoの更新は`PATCH /api/todos/:id`の1本だけ。** **省略は「変えない」、`null`は「空にする」**
+  ——同じ扱いにすると「期限を外す」が表現できない。zodの`.transform()`が`undefined`を畳むことに注意。
+- **行の`status`と一覧の絞り込みを同じ型にしない。** `all` / `active` はstatusではなく
+  「statusを名指ししない方法」で、`active`は「`done`以外」。型も`TodoStatus` / `TodoFilter`で分ける。
+- **ラベルはプロジェクトに属し、タスクを触れる人なら誰でも作れる。** 付与は
+  `PUT /api/todos/:id/labels`で**集合の置き換え**（差分ではない）。
+- **暦日（`startAt` / `dueAt`）の計算はUTCで閉じる。** `new Date(y, m, d)`と`toLocaleDateString`を
+  使わない ——ローカル変換はグリニッジより西の利用者にだけ日付を1日ずらし、**作った側には見えない**。
+- **R2のオブジェクトはDBの外。** アップロードは所有権チェックのあとに書き（先に書くと、
+  どの行からも参照されないオブジェクトが残る）、削除は行を先に消す（先にオブジェクトを消して
+  失敗すると、実体の無い行が残る）。
+- Better AuthはOriginヘッダを検証する。**curlでAPIを叩くときは`Origin`ヘッダが必要**（無いと403）。
+- ルートを追加・変更したら[`docs/api/README.md`](./docs/api/)の表も更新する。
+
+## Data Fetching
+
+TanStack Queryは使わない。データ取得はTanStack Routerの`loader`を使い、
+mutation後は`router.invalidate()`で再取得する。
+
+**一覧の状態（絞り込み・並び替え・表示の種類）はURLのsearch paramsに置く。**
+コンポーネントのstateにしない。リンクで共有でき、リロードでも残り、`loaderDeps`経由で
+loaderが再実行されるのでSQL側で絞れる（クライアントが取得済みの行を隠すのではなく）。
+スキーマは`.default()`で「無い場合」を、`.catch()`で「あるが不正な場合」を吸収する。
+
+**プロジェクトは「どの画面か」ではなく「どの文脈か」。** 選択はヘッダーの切り替えに置き、
+サイドバーは開いているプロジェクトで**できること**だけを並べる。プロジェクト間の移動では
+search paramsを引き継がない——絞り込みは離れる側のもので、持ち込むと移った先で黙って行が消える。
+
+mutationは直接`apiClient`を叩かず、feature配下のラッパ（例: `src/features/todos/api.ts`）を
+経由する。**そのラッパは必ず`src/lib/mutate.ts`の`mutate()`を通す。** `res.ok`の検査と失敗時の
+`toast`はそこに1箇所だけあり、成功可否が`boolean`で返るので、呼び出し側は成功したときだけ
+`router.invalidate()`する。エラーを握り潰さないこと。featureの中で`toast`を直接呼ばない。
+作成したものの中身が要るときは`mutateFor<T>()`。
+
+loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catchの外で投げる**。
+どちらもthrowで動くので、catchの中だと握り潰されて汎用エラー表示になる。
+
+**セッションをReactの再レンダリングの条件に使うときは`useAuth()`から読む。**
+`Route.useRouteContext()`はmatchesが再解決されたときにしか更新されないので、
+「セッションが後から届いたら何かを始める」用途では**初回ロードで永久に発火しない**。
+
+画面は `/`（ダッシュボード）、`/my`（担当タスク）、`/projects/$projectId`（概要/一覧/ボード/
+タイムラインを`view`で切り替え）、`/projects/$projectId/settings`、`/admin`、`/search`、
+`/account`、`/s/$token`（公開共有）、`/dev/design-system`。
+動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。
+存在しないリソースはloaderで`notFound()`を投げる。
 
 ## UI / Design System
 
-shadcn/ui + Tailwind CSSを初期UI基盤として使用する。
+shadcn/ui + Tailwind CSSをUI基盤として使用する。
 
 Design principles:
 
@@ -218,180 +356,6 @@ Light / Dark / Systemをサポートする（`ThemeProvider` / `ModeToggle`参�
 - focus state
 - dark mode
 
-## `/dev/design-system`
-
-`src/routes/dev.design-system.tsx` はコンポーネントギャラリーページ。
-shadcn/uiコンポーネントを追加・変更したら、ここに使用例を追加してLight/Dark・
-レスポンシブを確認する運用にする（Storybookはまだ導入しない）。
-
-## Data Fetching
-
-TanStack Queryはまだ導入していない。データ取得はTanStack Routerの`loader`を使い、
-mutation後は`router.invalidate()`で再取得する（`src/routes/index.tsx`参照）。
-
-**プロジェクトは「どの画面か」ではなく「どの文脈か」。** 選択はヘッダーの切り替えに置き、
-サイドバーは開いているプロジェクトで**できること**だけを並べる。プロジェクト間の移動では
-search paramsを引き継がない——絞り込みは離れる側のもので、持ち込むと移った先で黙って行が消える
-（[ADR 0033](./docs/adr/0033-project-as-context-not-a-sidebar-item.md)）。
-
-**一覧の状態（絞り込み・並び替え）はURLのsearch paramsに置く。** コンポーネントのstateにしない。
-リンクで共有でき、リロードでも残り、`loaderDeps`経由でloaderが再実行されるのでSQL側で絞れる
-（クライアントが取得済みの行を隠すのではなく）。スキーマは`.default()`で「無い場合」を、
-`.catch()`で「あるが不正な場合」を吸収する —— 後者は手でURLを書き換えたときに出る。
-
-mutationは直接`apiClient`を叩かず、feature配下のラッパ（例: `src/features/todos/api.ts`）を
-経由する。**そのラッパは必ず`src/lib/mutate.ts`の`mutate()`を通す。** `res.ok`の検査と失敗時の
-`toast`はそこに1箇所だけあり、成功可否が`boolean`で返るので、呼び出し側は成功したときだけ
-`router.invalidate()`する。エラーを握り潰さないこと。featureの中で`toast`を直接呼ばない。
-
-loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catchの外で投げる**。
-どちらもthrowで動くので、catchの中だと握り潰されて汎用エラー表示になる（実際に一度踏んだ）。
-
-**「誰がどの画面を見られるか」は`src/components/app/access-gate.tsx`の1箇所で、描画時に決まる。**
-ルートに`beforeLoad`のガードを書かない ——`beforeLoad`は遷移のときにしか走らず、
-**サインアウトは遷移ではない**ので一度も効かない（7ルートに同じ5行があって、実際に追い出して
-いたのはローダーの401だけだった。[ADR 0038](./docs/adr/0038-one-gate-decides-who-sees-what.md)）。
-
-- 各ルートは`staticData: { access: "public" | "user" | "admin" }`を宣言する。**書き忘れは`user`**。
-  公開は`/login`と`/s/$token`だけで、その一覧は`test/components/access.test.ts`が固定する。
-- `access`は**最低ランク**（オーナーは`admin`を満たす）。**画面のスケールであって、
-  プロジェクト単位のスコープ（ADR 0036）とは別物**。
-- **`StaticDataRouteOption`をモジュール拡張しない。** router-coreが宣言してreact-routerが
-  再エクスポートしているので、後者を拡張すると再エクスポートを隠して**ルート全体の型推論が壊れる**
-  （`useLoaderData()`が`any`になる）。`readAccess(unknown)`で読む。
-- **セッションを終える出口は`endSession()`の1つだけ。** `signOut()`のあと
-  **ハードナビゲーション**で`/login`へ。ルーターのキャッシュもReactのstateもページごと捨てる。
-  `redirect`パラメータは付けない（付けると次にサインインした人が前の人の画面に着地する）。退会も同じ。
-- **ローダーの401リダイレクトは残す。** ゲートは「手元にセッションが無い」、401は
-  「手元のセッションがもう無効」——別の信号。
-
-**セッションをReactの再レンダリングの条件に使うときは`useAuth()`から読む。**
-`Route.useRouteContext()`はmatchesが再解決されたときにしか更新されないので、
-「セッションが後から届いたら何かを始める」用途では**初回ロードで永久に発火しない**。
-ルートガードが平気なのは、ガードがnavigate時にしか走らないから
-（[ADR 0017](./docs/adr/0017-realtime-with-durable-objects.md)で実際に踏んだ）。
-
-## API Conventions
-
-リクエストの振り分けは`wrangler.jsonc`の`assets.run_worker_first`で決まる。
-**`/api/*`だけがHono Workerに届き、それ以外はasset workerがSPAとして処理する**
-（未知のパスは`index.html`にフォールバックし、TanStack Routerがクライアント側で描画する）。
-APIのパスは必ず`/api/`配下に置くこと。
-
-画面は `/`（ダッシュボード。プロジェクトごとの進捗）、`/my`（担当タスク。プロジェクト横断）、
-`/projects/$projectId`（Todo。概要/一覧/ボード/タイムラインを`view`で切り替え）、
-`/projects/$projectId/settings`（参加者）、`/admin`（ユーザー管理。管理者のみ）、
-`/search`、`/account`、`/s/$token`（公開共有）、`/dev/design-system`。
-動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。
-存在しないリソースはloaderで`notFound()`を投げる。**`notFound()`はthrowで動くので、
-fetchのtry/catchの中で投げると握り潰される** —— catchの外で投げること。
-
-`src/worker/index.ts`のルールは以下。
-
-- チェーン形式（`new Hono().get().post()...`）を崩さない。`hc<AppType>`の型推論がこれに依存している。
-- バリデーションは`zValidator`を直接使わず、`src/worker/validator.ts`の`validate()`を使う。
-  失敗時のレスポンスが`{ error: "Bad Request", issues }`に固定される。
-- **DBアクセスは`src/worker/db/repo.ts`の`createRepo()`を経由する。** ハンドラ内で
-  `drizzle()`を呼ばない。将来オーナー列を入れるとき、絞り込みの`where`を足す場所が1箇所で済む
-  （散らばっていると付け忘れが型エラーにもテスト失敗にもならず、そのまま越境漏洩になる）。
-- **repoのメソッドを`async`にしない。`.all()` / `.get()`も呼ばない。** 未実行のdrizzleビルダーを
-  返すことで、`await`もできるし`batch()`の要素にもできる。`async`にすると前者だけになり、
-  後者が黙って壊れる。
-- **複数文を原子的に実行したいときは`repo.batch([...])`。** D1に対話的トランザクションは無く、
-  `db.transaction()`は型が通るのに実行時に落ちる。
-- **変更履歴は「記録してから変更する」を1つのbatchに載せる。** 履歴の挿入が先——UPDATEが走ると
-  古い値が存在しなくなる。比較は`INSERT ... SELECT`の`WHERE`に入れ、**ハンドラで読んでから差分を取らない**
-  （読みと書きの間に別リクエストが入ると、起きていない遷移が残る）。
-  **`<>`ではなく`is not`を使う**——SQLの不等号はNULLを伝播するので、`<>`だと日付を設定/解除した履歴だけが
-  静かに欠落する（[ADR 0027](./docs/adr/0027-comments-and-append-only-history.md)）。
-- **自己参照する外部キー（`todos.parentId`）を持つ行を物理削除するときは、先に切り離す。**
-  SQLiteは外部キーを行ごとに検査するので、親を子より先に消す削除は失敗する。
-  保持期限のパージ・退会・テストの`resetAll`の3経路すべてが対象
-  （[ADR 0029](./docs/adr/0029-task-links-and-an-editable-gantt.md)）。
-- **人の名前はSQLで解決する。** コメントや履歴に名前を出すとき、クライアントで
-  「サインイン中の人の名前」を使わない。今は同じ人だが、**偶然一致しているだけの規則は
-  一致しなくなった日に静かに壊れる**（[ADR 0028](./docs/adr/0028-display-names-and-assignees.md)）。
-- **`todo_events`は追記専用。** 更新も削除もするコードを書かない（退会時の物理削除を除く）。
-- **1回の保存で書いた履歴行には同じ`revisionId`を与える。** 詳細フォームは毎回全項目を送るので、
-  これが無いと1つの操作が複数の出来事に見える。idは`crypto.randomUUID()`で作り、
-  **タイムスタンプで代用しない**（同じミリ秒の2つの保存が融合するし、
-  「時計が一致したから同じ操作」はデータが述べていない推測になる）。
-- **ユーザーのいない処理（cron等）は`createRepo`を使わない。** あれは`ownerId`で必ず絞るためのもの。
-  ユーザーを持たないクエリは`src/worker/db/maintenance.ts`に置く（名前で区別が付くようにしてある）。
-- エラーレスポンスは`{ error: string }`で揃える（404は`{ error: "Not found" }`、
-  未捕捉例外は`onError`が`{ error: "Internal Server Error" }`を返す）。例外の内容はクライアントに返さない。
-- ログは`console.error(JSON.stringify({ ... }))`のように構造化JSONで出し、**必ず`requestId`を含める**
-  （Workersのobservabilityでフィールド検索し、1リクエストのログを束ねるため）。
-- **リクエストボディとヘッダをログに出さない。** 一度Workers Logsに入ったPIIは保持期間内は
-  消せない。`docs/pii.md`と`test/worker/request-id.test.ts`を参照。
-- ルートを追加・変更したら[`docs/api/README.md`](./docs/api/)の表も更新する。
-- **`/api/*` はすべて認証が必要**（例外は `/api/health` と `/api/auth/*`）。未認証は401。
-  セッション検証とリポジトリ生成は`src/worker/index.ts`の1つのミドルウェアがやる。
-- **アクセス範囲は`accessibleProjectIds()`、管理権限は`ownedProjectIds()`の2つだけ。**
-  **タスクを触るのが前者、プロジェクトを消す・共有する・参加者を変えるのが後者**で、
-  混ぜると参加者が鍵を配れるようになる（[ADR 0031](./docs/adr/0031-project-membership-and-roles.md)）。
-- **プロジェクトを作れるのは`admin`以上**（[ADR 0039](./docs/adr/0039-creating-a-project-is-an-operational-act.md)）。
-  拒むのは`projects.create`（ハンドラではない）。**参加条件は付かない** —— 作る時点で参加すべき
-  プロジェクトが無い。**作成者は降格しても自分が作ったプロジェクトを管理し続ける**（`projects.ownerId`）。
-  **テストで分離を確かめるときは観測者を一般ユーザーにすること** —— 管理者は全プロジェクトが
-  見えるので、管理者を観測者にしたテストは何も証明しない。
-- **ロールは強さの段階ではなく役割。見える範囲は広く、変えられる範囲は狭い**
-  （[ADR 0036](./docs/adr/0036-what-each-role-is-for.md)）。
-  `owner`=システム管理（全部見えて全部変えられる）／`admin`=**参加している**プロジェクトの設定管理
-  （全部見えるが、変えられるのは参加しているものだけ）／`member`=参加したプロジェクトで作業。
-  **管理者は「探せる必要がある」から全部見え、「ロールは入口ではない」から参加していないものは
-  変えられない** —— 参加には必ず行が要り、その行が誰がいつを残す。
-- **「変えられるか」はサーバが答える**（`projects.findManageable`）。条件が3つあるので、
-  クライアントが組み直すと**APIが拒むボタンをUIが出す**。
-- **ロールはBetter Authの`additionalFields`として宣言する（`input: false`付き）。** 宣言しないと
-  Better Authが知らないフィールドを落とすので、`databaseHooks`が返した値も保存されない。
-  `input: false`があるのでサインアップにも`update-user`にも渡せない。
-  **最初に作られたアカウントがオーナーになる**（[ADR 0032](./docs/adr/0032-inviting-by-email-and-bootstrapping-the-admin.md) /
-  [ADR 0034](./docs/adr/0034-three-account-roles-and-a-screen-that-creates-them.md)）。
-- **権限は`owner` / `admin` / `member`の3段階で、`USER_ROLES`の配列順が強さ。** 管理者はオーナーに
-  手を出せず、最後のオーナーは降ろせない。**`owner`はインスタンスのオーナーで、プロジェクトの
-  作成者（`projects.ownerId`）とは別物** —— 画面では後者を「プロジェクトの作成者」と呼ぶ。
-- **`user`テーブルは作り直さない。** `session`と`account`が`ON DELETE CASCADE`で参照しているので、
-  古いテーブルを落とした時点で全セッションと全資格情報が消える。値域の制約が要るなら
-  CHECKではなくトリガー（`user_role_known_*`。migration 0019）。
-- **権限や人数の条件はWHEREに入れて1文にする。** 「最後の管理者は降格できない」を
-  「数える→更新する」の2文にすると、最後の2人が同時に互いを降格できる隙間ができる。
-- **DBアクセスは`createRepo(binding, ownerId, role)`経由で、返るメソッドは全てスコープ済み。**
-  ハンドラがスコープされていないクエリを受け取ることがないので、絞り込みを忘れられない。
-  ここに新しいメソッドを足すときは、必ず`ownerId`で絞ること（[ADR 0014](./docs/adr/0014-user-owned-projects.md)）。
-- **プロジェクトは `key` を持ち、タスクは `ALC-12` として表示される。** キーは**作成時のみ**で
-  変更経路が無い（書き留められた参照の中にあるため）。番号はプロジェクト内連番ではなく行のid
-  なので飛ぶ（[ADR 0037](./docs/adr/0037-project-settings.md)）。
-- **`archivedAt` と `deletedAt` は別物。** アーカイブは一覧から消えて永久に読める、削除は30日で
-  完全に消える。読み取りは既定でアーカイブ済みを除く。
-- **`projects`テーブルは作り直さない。** 4つのテーブルから参照されているので、値域の制約が要るなら
-  CHECKではなくトリガー（`projects_valid_*`。migration 0022）。`user`と同じ事情。
-- **暦日（`startAt` / `dueAt`）の計算はUTCで閉じる。** `new Date(y, m, d)`と`toLocaleDateString`を
-  使わない —— ローカル変換はグリニッジより西の利用者にだけ日付を1日ずらし、**作った側には見えない**
-  （[ADR 0026](./docs/adr/0026-timeline-not-a-gantt-chart.md)。`src/features/todos/timeline.ts`が純粋関数）。
-- **Todoの更新は`PATCH /api/todos/:id`の1本だけ。** 完了もタイトルも日付も同じ部分更新を通る。
-  **省略は「変えない」、`null`は「空にする」** —— 同じ扱いにすると「期限を外す」が表現できない
-  （[ADR 0024](./docs/adr/0024-todo-status-instead-of-completed.md)。zodの`.transform()`が
-  `undefined`を畳んで実際に踏んだ）。
-- **ラベルはプロジェクトに属し、タスクを触れる人なら誰でも作れる**（`accessibleProjectIds()`）。
-  付与は`PUT /api/todos/:id/labels`で**集合の置き換え**（差分ではない）。挿入は
-  insert-from-selectで**タスクとラベルが同じプロジェクトかをJOINで検査する** ——
-  外部キーは存在を検査するのであって所属ではない（[ADR 0035](./docs/adr/0035-labels.md)）。
-- **行の`status`と一覧の絞り込みを同じ型にしない。** `all` / `active` はstatusではなく
-  「statusを名指ししない方法」で、`active`は「`done`以外」。型も`TodoStatus` / `TodoFilter`で分けてある。
-- **読み取りは`deletedAt IS NULL`でも絞る。** Project/Todoは論理削除で、忘れると削除済みの行が
-  見える（型エラーにもテスト失敗にもならない）。物理削除するのは退会時の`purgeOwnedData()`だけ
-  （[ADR 0015](./docs/adr/0015-soft-delete-items-hard-delete-accounts.md)）。
-- **論理削除はUndoとセットで出す**（`src/lib/undo-toast.ts`）。復元手段が無い論理削除は、
-  ユーザーから見ればただの削除で、隠し列を増やしただけになる。
-- Better AuthはOriginヘッダを検証する。**curlでAPIを叩くときは`Origin`ヘッダが必要**（無いと403）。
-- **レート制限は`src/worker/rate-limit.ts`の`enforce()`を通す。** 認証系はIP単位、認証済みの
-  重い処理はユーザー単位で絞る。**location単位かつ結果整合で、Cloudflare自身が「正確な計上には
-  使うな」と明記している** —— 濫用コストを上げるものであって割当量ではない。
-- **R2のオブジェクトはDBの外**。行とオブジェクトは別々に消す必要があり、順序も決まっている ——
-  アップロードは所有権チェックのあとに書く（先に書くと、どの行からも参照されないオブジェクトが残る）、
-  削除は行を先に消す（先にオブジェクトを消して失敗すると、実体の無い行が残る）。
-
 ## Testing
 
 `vitest.config.ts`は`test.projects`で2つに分かれている。テストを足す場所を間違えると、
@@ -403,40 +367,49 @@ fetchのtry/catchの中で投げると握り潰される** —— catchの外で
 | `components` | `test/components/*.test.tsx` | happy-dom + Testing Library | Reactコンポーネント |
 | E2E | `test/e2e/*.spec.ts` | Playwright + 実ブラウザ | 上2つの**隙間**（ログイン→セッション→所有スコープ） |
 
-ローカルで画面を触るときのアカウントは[`docs/dev-accounts.md`](./docs/dev-accounts.md)。
-**全部できる人だけで見ていると権限のバグが隠れる**ので、一般ユーザーでも確認すること。
-
-**プロジェクトを作るテストは`signUpAdmin()`を使う。** `signUp()`を既定で管理者にしない ——
-全テストの主役が強くなり、所有スコープのテストが何も証明せずに緑になる。
-
-**E2Eのプロジェクト名はスイート全体で一意にする。** 管理者は全プロジェクトが見え、
-E2EのDBは1回の実行で共有されるので、**同じ名前を2つのテストが使うと一覧に両方出て**、
-その名前を指すロケータが全部strict mode違反になる（実際に「Activity」が4つ出た）。
-
-**最初のアカウントは管理者になるので、テストは必ず管理者を先に用意する。** worker側は
-`resetAll()`が1行シードし（ブートストラップ自体を試すときだけ`resetAll({ seedAdmin: false })`）、
-E2E側は`globalSetup`のwarm-upが`ADMIN_EMAIL`で作る。用意し忘れると、そのファイルが最初に
-サインアップしたユーザーが全権限を持ち、**所有スコープのテストが何も証明せずに緑になる**。
-
-**E2Eの各テストのIPアドレスはテスト名のハッシュから引く**（`test/e2e/fixtures.ts`）。
-モジュールスコープのカウンタだった頃、Playwrightがモジュールを読み直すたびに1へ戻り、
-15個のテストが同じアドレスを共有して**認証のレート制限にまとめて当たっていた**。
-症状は「後続のspecが軒並み落ちる」で、直前に入れた機能のせいにしか見えない。
-
-**同じ画面に同じラベルのコントロールを2つ置かない。** `getByRole`の`name`は部分一致で、
-`form`に`aria-label`を付けるときは**中のフィールドと同じ文字列にしない**（両方が同じ名前で
-引っかかる）。設定画面の2つのフォームは「新しいラベル」「参加者を追加」で区別している。
-
-E2Eは`pnpm run test:e2e`（`check`にも含まれる）。専用DB（`.wrangler/e2e-state`）で毎回空から
-起動するので、**devサーバが5173で動いていると失敗する**（開発用DBを守るための意図的な挙動）。
-
 ```bash
 pnpm test                      # 両方
 pnpm test --project components # コンポーネントのみ
 pnpm test --project worker     # APIのみ
 ```
 
-コンポーネントテストの方針:
+### アカウントとスコープ
+
+**最初のアカウントはオーナーになるので、テストは必ずそれを先に用意する。** worker側は
+`resetAll()`が1行シードし（ブートストラップ自体を試すときだけ`resetAll({ seedAdmin: false })`）、
+E2E側は`globalSetup`のwarm-upが`ADMIN_EMAIL`で作る。用意し忘れると、そのファイルが最初に
+サインアップしたユーザーが全権限を持ち、**所有スコープのテストが何も証明せずに緑になる**。
+
+**プロジェクトを作るテストは`signUpAdmin()`を使う。** `signUp()`を既定で管理者にしない ——
+全テストの主役が強くなり、同じ理由でスコープのテストが証明しなくなる。
+
+**分離を確かめるときは観測者を一般ユーザーにする。** 管理者は全プロジェクトが見えるので、
+管理者を観測者にした「見えないこと」のテストは何も証明しない。
+
+### E2E
+
+`pnpm run test:e2e`（`check`にも含まれる）。専用DB（`.wrangler/e2e-state`）で毎回空から
+起動するので、**devサーバが5173で動いていると失敗する**（開発用DBを守るための意図的な挙動）。
+
+- **各テストのIPアドレスはテスト名のハッシュから引く**（`test/e2e/fixtures.ts`）。
+  `/api/auth/*`はIP単位で1分10回に絞られ、**`get-session`もその1回に数えられる**。
+  同じアドレスを共有すると認証のレート制限にまとめて当たり、症状は
+  「後続のspecが軒並み落ちる」——テストの側ではなくアプリの側が壊れたように見える。
+  **429は未ログインと見分けが付かない。**
+- **プロジェクト名はスイート全体で一意にし、前方一致もさせない。** 管理者は全プロジェクトが
+  見え、DBは1回の実行で共有されるので、同じ名前を2つのテストが使うと一覧に両方出て、
+  その名前を指すロケータが全部strict mode違反になる。`getByRole`の`name`は**部分一致**なので、
+  `Schedule`は`Schedule 2`にも当たる。
+- **同じ画面に同じ名前のコントロールを2つ置かない。** `form`に`aria-label`を付けるときは
+  **中のフィールドと同じ文字列にしない**（両方が同じ名前で引っかかる）。
+- **ダイアログを閉じたら、オーバーレイが消えるまで待つ。** オーバーレイはダイアログより
+  1アニメーション長く残り、その間は次のクリックを飲み込む。
+- **複数一致しうる要素の不在は`toHaveCount(0)`で確かめる。** `toBeHidden()`は複数一致を
+  strict mode違反として**即座に失敗**するので、再描画の途中で落ちる。
+- **他のコマンドを同時に走らせない。** 並行させると実行時間が数十倍になり、
+  アプリのバグに見える失敗が出る。
+
+### コンポーネントテスト
 
 - `globals: false`なので`describe` / `it` / `expect` / `vi`は`vitest`から明示的にimportする。
 - クエリは**ユーザーから見えるもの**で書く（`getByRole` / `getByLabelText` / `getByText`）。
@@ -444,36 +417,32 @@ pnpm test --project worker     # APIのみ
 - レイアウトやCSSカスケードに対するアサーションは書かない（happy-domの再現度に依存するため）。
 - Base UIのfloating系（DropdownMenu等）は開いてから`findByRole("menu")`で待つ。
 - ルートレベルの`test`オプションはプロジェクトに継承されない。設定は必ずプロジェクト側に書く。
+- ルートツリーに触るテストは`import type {} from "@/main"`で**ルーターの`Register`宣言を
+  取り込む**。無いと、そのプロジェクトのルート型が総崩れになり、
+  無関係な十数ファイルが「implicitly any」で落ちる。
 
-**E2Eを計測するときは他のコマンドを同時に走らせない。** 並行させると実行時間が数十倍になり、
-アプリのバグに見える失敗が出る（このセッションで2回、いずれも誤診の原因になった）。
+### 各プリミティブ
 
-キューのテストは`createMessageBatch()`でハンドラを直接呼ぶ。**`queue.send()`は
-vitest環境で消費側を駆動しない**（測って確認済み）ので、送って待つテストは
-何も起きないまま合格するか、時間切れになる。
+- キューのテストは`createMessageBatch()`でハンドラを直接呼ぶ。**`queue.send()`は
+  vitest環境で消費側を駆動しない**ので、送って待つテストは何も起きないまま合格するか、
+  時間切れになる。
+- Workflowのテストは`introspectWorkflowInstance()`。`mockStepError`で狙ったステップだけ
+  失敗させ、`disableRetryDelays`でバックオフを飛ばす。
+- Durable Objectのテストは`cloudflare:test`の`runInDurableObject`で中を覗く。
+  `waitUntil`に載せた処理を検証するときは`createExecutionContext()`を渡し、
+  アサーションの前に`waitOnExecutionContext(ctx)`で待つ。
+- マイグレーションの後埋めをテストするときは、**SQLをファイルから読んで実行する**
+  （`?raw`）。書き写すと、出荷されているSQLが間違っていてもテストは通る。
 
-Workflowのテストは`introspectWorkflowInstance()`。`mockStepError`で狙ったステップだけ
-失敗させ、`disableRetryDelays`でバックオフを飛ばす。
+## `/dev/design-system`
 
-Durable Objectのテストは`cloudflare:test`の`runInDurableObject`で中を覗く。
-`waitUntil`に載せた処理を検証するときは`createExecutionContext()`を渡し、
-アサーションの前に`waitOnExecutionContext(ctx)`で待つ（待たないと当然まだ走っていない）。
+`src/routes/dev.design-system.tsx` はコンポーネントギャラリー。
+shadcn/uiコンポーネントを追加・変更したら、ここに使用例を追加してLight/Dark・
+レスポンシブを確認する運用にする（Storybookは使わない）。
 
-## Not Yet
+## まだやらないこと
 
-以下は初期スコープに含めない。
+TanStack Query / Turborepo / Alchemy / Storybook / カバレッジ計測 / メール送信 /
+組織単位のテナンシー / ゴミ箱UI / 本番デプロイ。
 
-**各項目をなぜ後回しにしているか、いつ着手すべきか（トリガー）は
-[`docs/design/service-readiness-map.md`](./docs/design/service-readiness-map.md)にある。**
-ここは一覧だけを持ち、理由は二重管理しない。alcyoneの位置づけそのものは
-[ADR 0010](./docs/adr/0010-alcyone-as-proving-ground.md)。
-
-- TanStack Query
-- Turborepo
-- Alchemy
-- Storybook
-- テストカバレッジの計測
-- メール送信（そのためメール検証とパスワード再発行は無効）
-- 組織単位のテナンシー（Projectは所有者 + 参加者。組織やチームという単位はまだ無い。[ADR 0031](./docs/adr/0031-project-membership-and-roles.md)）
-- ゴミ箱UI（復元できるのは削除直後のtoastからだけ。30日で自動削除される）
-- 実際のCloudflareアカウントへのD1作成・本番デプロイ（手順は[docs/deploy.md](./docs/deploy.md)。**未実施**）
+理由と設計上の制約は[`docs/design/overview.md`](./docs/design/overview.md)にある。

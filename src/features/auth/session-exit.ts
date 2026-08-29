@@ -23,6 +23,6 @@ export async function endSession(): Promise<void> {
   // No `redirect` parameter. Signing out is a deliberate exit, and carrying the
   // path over means the next person to sign in on this machine lands on the
   // previous person's screen — the thing the hard navigation above exists to
-  // prevent (ADR 0038).
+  // prevent.
   window.location.assign("/login");
 }

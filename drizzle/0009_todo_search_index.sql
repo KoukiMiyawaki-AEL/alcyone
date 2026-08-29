@@ -5,7 +5,7 @@
 -- worth knowing: `drizzle/meta/*_snapshot.json` will never contain these
 -- objects, so `drizzle-kit generate` neither drops nor recreates them. They are
 -- invisible to it, which is safe here and dangerous in one specific case
--- recorded in docs/adr/0018-fts5-trigram-search.md — a rebuild of `todos`
+-- recorded in — a rebuild of `todos`
 -- drops the triggers with it, silently, and the index then rots.
 -- test/worker/migrations.test.ts asserts they exist so that regression is loud.
 

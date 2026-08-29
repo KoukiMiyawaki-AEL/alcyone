@@ -18,7 +18,7 @@ import { useAuth } from "@/features/auth/AuthProvider";
  * bounced anybody on sign-out — the screens that did bounce were the ones whose
  * loader happened to make a request that 401'd, which is why `/search` (which
  * skips the request when the box is empty) and `/account` (which has no loader)
- * simply stayed put. Measured, not guessed (ADR 0038).
+ * simply stayed put. Measured, not guessed.
  *
  * Gating at render is what makes the rule enforceable: a protected route's
  * component and loader do not run at all unless the session is there.
@@ -48,7 +48,7 @@ export function AccessGate() {
       const data = readAccess(state.matches.at(-1)?.staticData);
       if (data.access !== "public" || !data.redirectWhenSignedIn) return null;
       // Set by the loaders' 401 handling — never by signing out, which is a
-      // deliberate exit and carries nothing over (ADR 0038).
+      // deliberate exit and carries nothing over.
       return (state.location.search as { redirect?: string }).redirect ?? "/";
     },
   });

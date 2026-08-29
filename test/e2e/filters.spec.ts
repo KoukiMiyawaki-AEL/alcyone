@@ -4,7 +4,7 @@ import { createProject, createTodo, openProject, signUpAdmin, uniqueKey } from "
 test.describe("list filtering", () => {
   test.beforeEach(async ({ page }) => {
     await signUpAdmin(page);
-    // A fresh name per test: an administrator sees every project (ADR 0036)
+    // A fresh name per test: an administrator sees every project
     // and the E2E database lives for the whole run, so a fixed name here would
     // put four "Filter project"s on the dashboard by the last test.
     const name = `Filter project ${uniqueKey()}`;

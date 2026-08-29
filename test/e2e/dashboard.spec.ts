@@ -24,7 +24,7 @@ test.describe("dashboard", () => {
     await createProject(page, "Untouched");
 
     // Scoped to this project's card. An administrator sees every project
-    // (ADR 0036) and the E2E database lives for a whole run, so other tests'
+    // and the E2E database lives for a whole run, so other tests'
     // empty projects are on this dashboard too.
     const card = page.locator('[data-slot="card"]').filter({ hasText: "Untouched" });
     await expect(card.getByText("まだタスクがありません")).toBeVisible();

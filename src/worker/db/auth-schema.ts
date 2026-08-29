@@ -24,23 +24,22 @@ import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqli
  *
  * Generated from the installed `@better-auth/drizzle-adapter`'s schema
  * generator rather than transcribed from docs, so it matches the version in
- * `package.json` exactly. Regenerate after upgrading `better-auth`; see
- * docs/adr/0013-better-auth.md for the command.
+ * `package.json` exactly. Regenerate after upgrading `better-auth`.
  *
  * Deliberate deviations from the generated output:
  *
- * 1. `.unique()` became `uniqueIndex()`. ADR 0011 requires it — drizzle-kit's
+ * 1. `.unique()` became `uniqueIndex()` — drizzle-kit's
  *    table-rebuild path re-emits indexes but silently drops table-level UNIQUE
  *    constraints, so a future rebuild would quietly lose the guarantee that two
  *    users cannot share an email. Behaviourally identical in SQLite.
  * 2. The generated `authRelations` (drizzle relations v2) block is omitted — the
  *    repository builds its own queries and never uses relational queries.
  *
- * `onDelete: "cascade"` is kept as generated, which is an exception to ADR 0012.
+ * `onDelete: "cascade"` is kept as generated, which is an exception to
  * The reasoning is recorded there; in short, this is library-owned schema whose
  * delete path we do not control, and `deleteUser` is disabled anyway. The
  * consequence to remember: rebuilding `user` would silently delete every
- * session and account, so that migration needs ADR 0011's detach/reattach.
+ * session and account, so that migration needs's detach/reattach.
  *
  * Note these tables use snake_case columns and integer millisecond timestamps,
  * unlike the ISO-8601 text this project uses elsewhere. That is Better Auth's

@@ -103,14 +103,14 @@
     {
       "binding": "ATTACHMENTS",
       // Placeholder like database_id — no bucket has been created on a real
-      // Cloudflare account. See docs/adr/0003-d1-local-only.md.
+      // Cloudflare account.
       "bucket_name": "alcyone-attachments",
     },
   ],
   "d1_databases": [
     {
       "binding": "DB",
-      // Placeholder — see docs/adr/0003-d1-local-only.md. No D1 database has
+      // Placeholder — No D1 database has
       // been created on Cloudflare yet; this is local-dev only.
       "database_id": "00000000-0000-0000-0000-000000000000",
       "database_name": "alcyone-db",

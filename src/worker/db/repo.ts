@@ -51,7 +51,7 @@ const now = () => new Date().toISOString();
  * Today's calendar day, in UTC.
  *
  * `startAt` and `dueAt` are calendar days, not instants, and every comparison
- * on them is closed in UTC (ADR 0026). Reading "today" from the local clock
+ * on them is closed in UTC. Reading "today" from the local clock
  * would move the boundary for users west of Greenwich only — and invisibly to
  * whoever wrote the code.
  */
@@ -266,7 +266,7 @@ export function createRepo(
   // `seesEverything` and `isSystemOwner` are therefore separate: an
   // administrator can open any project, and can change the settings of the ones
   // they participate in. Being handed the role is not the same as being handed
-  // every project (ADR 0036).
+  // every project.
   const isSystemOwner = role === "owner";
   const seesEverything = role === "admin" || role === "owner";
   // Kept under its old name where the question really is "admin or above":
@@ -322,11 +322,11 @@ export function createRepo(
    * and managing is the narrow one — the opposite way round from most systems,
    * and deliberate: an administrator can open any project so they can find the
    * one they were asked about, and can change the settings of the ones they are
-   * actually on (ADR 0036).
+   * actually on.
    *
    * **This is the one place the boundary is drawn**, which is what made adding
    * membership a change to one function rather than to fourteen call sites —
-   * the reason ADR 0014 put the scoping here.
+   * the reason put the scoping here.
    */
   const accessibleProjectIds = (id?: number) =>
     db
@@ -463,7 +463,7 @@ export function createRepo(
      *
      * A plain insert would satisfy the foreign key for *any* existing todo — a
      * foreign key checks existence, not ownership, which is how a public share
-     * link for someone else's project once became possible (ADR 0022). And raw
+     * link for someone else's project once became possible. And raw
      * `db.run()` is not batchable: it type-checks and throws when batched,
      * which is how the first version of the history failed.
      */
@@ -546,7 +546,7 @@ export function createRepo(
    * Who a task on this project may be assigned to.
    *
    * A query rather than "it is you": today it returns exactly one row, because
-   * a project has one owner (ADR 0014). Having the client ask instead of
+   * a project has one owner. Having the client ask instead of
    * assuming means the list grows on its own the day a project has members,
    * and means nothing has to be found and corrected then.
    */
@@ -618,7 +618,7 @@ export function createRepo(
      * doing, displayed as one that somebody is. The history is written first
      * and from the same SELECT, so the entries name the tasks that are actually
      * about to change — reading them in the handler would leave room for a
-     * different request in between (ADR 0027).
+     * different request in between.
      *
      * Every statement carries the same permission check, so a caller who may
      * not do this writes nothing anywhere rather than clearing assignments and
@@ -877,7 +877,7 @@ export function createRepo(
     /**
      * Deleting a label detaches it everywhere first.
      *
-     * Not a cascade: ADR 0012 keeps deletes explicit, and here the order is
+     * Not a cascade: keeps deletes explicit, and here the order is
      * also forced — SQLite checks the foreign key row by row, so a label with
      * any task still on it cannot be removed.
      */
@@ -1159,9 +1159,9 @@ export function createRepo(
      * Creates a project. Administrators and the system owner only.
      *
      * Which projects exist is an operational decision, not part of doing the
-     * work (ADR 0039). Letting anyone create one made the role meaningless:
+     * work. Letting anyone create one made the role meaningless:
      * a member could always have a project they administered, without anybody
-     * granting them anything — while ADR 0036 had just decided that reaching a
+     * granting them anything — while had just decided that reaching a
      * project always leaves a row saying who let you in.
      *
      * Refused here rather than in the handler, like `roles.set` and
@@ -1231,7 +1231,7 @@ export function createRepo(
      *
      * `today` is passed in rather than read from the database, because the
      * calendar day these dates live on is decided in UTC and in one place
-     * (ADR 0026) — `date('now')` would quietly introduce a second opinion.
+     * — `date('now')` would quietly introduce a second opinion.
      */
     summaries: (today: string, archived = false) =>
       db

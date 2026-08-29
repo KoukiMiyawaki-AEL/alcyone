@@ -51,7 +51,7 @@ function toIndex(value: string): string {
  * A read of a public share link.
  *
  * `outcome` distinguishes a KV hit from a miss, which is the only way to tell
- * whether the cache in ADR 0022 is doing anything. Indexed by token so one
+ * whether the cache in is doing anything. Indexed by token so one
  * link's traffic can be isolated; the token is already public to anyone
  * holding the link, so this adds no exposure.
  *

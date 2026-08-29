@@ -5,7 +5,7 @@ export const PASSWORD = "correct horse battery";
 /**
  * The account the warm-up creates, before any test runs.
  *
- * The first account to exist becomes the administrator (ADR 0032), and the E2E
+ * The first account to exist becomes the administrator, and the E2E
  * database starts empty on every run — so without this the first test to sign
  * up would silently hold every permission, and an isolation test would pass
  * while proving nothing. Fixed rather than unique because there is exactly one
@@ -71,13 +71,13 @@ export async function signUp(
 /**
  * Makes an account that may create projects, and signs in as it.
  *
- * Creating a project is an administrator's act (ADR 0039), so a test that needs
+ * Creating a project is an administrator's act, so a test that needs
  * one needs an account that can make it. Deliberately not what `signUp` gives
  * you: with every actor an administrator, the scoping tests would run as
  * somebody who can reach everything and pass without proving anything.
  *
  * The account is made *by the owner*, through the endpoint an administrator
- * uses for exactly this (ADR 0034), rather than signed up and then promoted.
+ * uses for exactly this, rather than signed up and then promoted.
  * That was the first shape, and it cost three requests to `/api/auth/*` on the
  * page's own address — sign-up, then a reload to pick the new role up. The
  * limiter there allows ten a minute per address, and `get-session` is one of
@@ -141,7 +141,7 @@ export async function signIn(page: Page, email: string) {
 export async function signOut(page: Page) {
   await page.getByRole("button", { name: /^アカウント:/ }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
-  // Signing out throws the page away rather than routing (ADR 0038), so this
+  // Signing out throws the page away rather than routing, so this
   // waits for the new document. Without it the next `goto` races a navigation
   // already in flight and aborts — which reads as the test's own navigation
   // failing rather than as the one before it still running.
@@ -167,7 +167,7 @@ export async function createProject(page: Page, name: string) {
 /**
  * Opens a project from the list on the page.
  *
- * Scoped to `main` because the sidebar lists the same projects (ADR 0032), so
+ * Scoped to `main` because the sidebar lists the same projects, so
  * an unscoped locator matches both and Playwright refuses to guess.
  */
 export async function openProject(page: Page, name: string | RegExp) {

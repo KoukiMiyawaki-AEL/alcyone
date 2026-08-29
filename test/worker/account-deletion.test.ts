@@ -91,7 +91,7 @@ describe("account deletion", () => {
 
   it("leaves other users untouched", async () => {
     // Bob's work has to live in somebody else's project: he cannot make one
-    // (ADR 0039), and if it were Alice's it would go with her by design.
+    //, and if it were Alice's it would go with her by design.
     const bob = await signUpAdmin("bob@example.com", "Bob");
     const bobProject = await createProject(bob, "Bob's project");
     await addTodo(bob, bobProject, "bob's todo");
@@ -112,7 +112,7 @@ describe("account deletion", () => {
     // Better Auth's contract is "password OR a fresh session", and freshAge
     // defaults to 24h — so a just-signed-in user can delete without retyping.
     // Asserted rather than assumed, because it is a wider window than the UI's
-    // password prompt implies. See ADR 0015.
+    // password prompt implies.
     const res = await app.request(
       "/api/auth/delete-user",
       { method: "POST", headers: jsonHeaders(alice), body: JSON.stringify({}) },

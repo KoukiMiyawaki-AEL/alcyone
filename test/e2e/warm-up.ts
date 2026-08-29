@@ -18,7 +18,7 @@ import { ADMIN_EMAIL, PASSWORD } from "./helpers";
  * times and nothing else.
  *
  * That account is no longer inert. Being the first to exist makes it the
- * administrator (ADR 0032), which is what keeps every account a test signs up
+ * administrator, which is what keeps every account a test signs up
  * an ordinary member — so creating it is a precondition, not a warm-up, and it
  * happens outside the forgiving block below.
  */

@@ -77,7 +77,7 @@ export function createMaintenance(binding: D1Database) {
 
       const statements = [
         // Attachments first. `attachments.todoId` references `todos.id` with NO
-        // ACTION (ADR 0012), so deleting a todo that still has one fails the
+        // ACTION, so deleting a todo that still has one fails the
         // foreign key — and because this is a single batch, one such row made
         // the entire nightly purge fail for every user. It did exactly that
         // until a test was written for it.

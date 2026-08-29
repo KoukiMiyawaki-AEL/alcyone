@@ -4,11 +4,11 @@ import type { AuthState } from "./types";
  * What a screen requires, weakest first.
  *
  * An ordered scale rather than a set of roles, because the roles are already
- * ordered (ADR 0034) — expressing the same order twice would let a screen be
+ * ordered — expressing the same order twice would let a screen be
  * marked `["admin"]` and become invisible to the owner who outranks them.
  *
  * This is a scale over *screens*. It is not the project-level scope, where
- * seeing is wide and managing is narrow (ADR 0036); the two answer different
+ * seeing is wide and managing is narrow; the two answer different
  * questions and are deliberately not the same mechanism.
  */
 export const ACCESS_LEVELS = ["public", "user", "admin"] as const;

@@ -4,7 +4,7 @@
 -- referenced by `todos`. On D1 foreign keys are always enforced — PRAGMA
 -- foreign_keys is a no-op there and defer_foreign_keys only moves the failure to
 -- COMMIT — so the generated `DROP TABLE projects` fails outright. This is the
--- case ADR 0011 predicted, and this file is the detach/reattach recipe it
+-- case predicted, and this file is the detach/reattach recipe it
 -- prescribes, applied for the first time.
 --
 -- The generated PRAGMA foreign_keys lines are omitted deliberately: they do
@@ -16,7 +16,7 @@
 -- 0. Projects that predate authentication have no owner, and no user exists to
 --    inherit them. Delete them and their todos.
 --
---    ONE-TIME, PRE-PRODUCTION ONLY. This is safe solely because ADR 0003
+--    ONE-TIME, PRE-PRODUCTION ONLY. This is safe solely because
 --    guarantees no D1 database has ever been created on a real Cloudflare
 --    account, so the only rows anywhere are local development junk. DO NOT run
 --    this migration against a database holding data anyone cares about; assign

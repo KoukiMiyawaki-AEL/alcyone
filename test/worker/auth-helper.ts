@@ -92,7 +92,7 @@ export function uniqueKey(): string {
 /**
  * An account that may create projects.
  *
- * Creating one is an administrator's act (ADR 0039), so a test that needs a
+ * Creating one is an administrator's act, so a test that needs a
  * project needs an account that can make it. Deliberately *not* what `signUp`
  * gives you: if every test's actor were an administrator, the scoping tests
  * would run as somebody who can reach everything and pass without proving
@@ -114,7 +114,7 @@ export async function signUpAdmin(email: string, name = "Test admin"): Promise<H
  * Puts an ordinary account on a project somebody else made.
  *
  * The shape most isolation tests need now: an account that cannot create a
- * project of its own (ADR 0039) but has one to work in. Written here because
+ * project of its own but has one to work in. Written here because
  * five test files were about to write it themselves.
  */
 export async function addMemberByEmail(

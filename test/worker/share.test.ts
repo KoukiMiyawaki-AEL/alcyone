@@ -143,7 +143,7 @@ describe("sharing a project", () => {
 
     // The cached snapshot is dropped as part of revoking, so this is immediate
     // here. In production KV is eventually consistent and a replica can answer
-    // with the old value for up to the TTL — see ADR 0022.
+    // with the old value for up to the TTL.
     expect((await publicGet(token)).status).toBe(404);
   });
 

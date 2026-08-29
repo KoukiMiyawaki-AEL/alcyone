@@ -99,14 +99,14 @@ export const projectsTable = sqliteTable(
     /**
      * Finished, but kept. Distinct from `deletedAt`: an archived project drops
      * out of the dashboard and the switcher and stays readable forever, while a
-     * deleted one is restorable for thirty days and then gone (ADR 0015).
+     * deleted one is restorable for thirty days and then gone.
      * Asana and Backlog both draw the line in the same place.
      */
     archivedAt: text(),
     createdAt: text().notNull(),
     // No `onDelete`: `projects` is referenced by `todos`, and D1 cannot disable
     // foreign key enforcement, so a cascade from `user` would silently delete
-    // rows two levels down. See ADR 0012.
+    // rows two levels down.
     ownerId: text()
       .notNull()
       .references(() => user.id),
@@ -127,7 +127,7 @@ export const projectsTable = sqliteTable(
  * A read-only public link to one project.
  *
  * A table rather than a column on `projects` because `projects` is a parent
- * table, and D1 cannot rebuild one (ADR 0011) — a new table costs nothing and
+ * table, and D1 cannot rebuild one — a new table costs nothing and
  * keeps that door shut. It also makes revocation a delete rather than a nulled
  * column, so there is no "was it ever shared" ambiguity.
  *
@@ -161,7 +161,7 @@ export const sharesTable = sqliteTable(
  *
  * `authorId` rather than deriving it from the project's owner: today they are
  * always the same person, because a project has exactly one
- * (ADR 0014). Recording who wrote it anyway is what makes these comments
+ *. Recording who wrote it anyway is what makes these comments
  * survive the day that stops being true — attributing them retroactively would
  * be guessing.
  */
@@ -173,7 +173,7 @@ export const sharesTable = sqliteTable(
  * disagree — an owner whose membership row was deleted, or a member row for a
  * project that changed hands.
  *
- * A pair is unique as an index rather than a table constraint: ADR 0011
+ * A pair is unique as an index rather than a table constraint:
  * records that drizzle's rebuild path re-emits indexes and silently drops
  * table-level UNIQUE.
  */
@@ -221,7 +221,7 @@ export const todoCommentsTable = sqliteTable(
     revisionId: text(),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
-    /** Soft delete, like every other user-facing row (ADR 0015). */
+    /** Soft delete, like every other user-facing row. */
     deletedAt: text(),
   },
   (t) => [index("todo_comments_todo_id_idx").on(t.todoId, t.deletedAt)],
@@ -275,7 +275,7 @@ export const todoEventsTable = sqliteTable(
  * `toTodoId`, which is the shape a schedule actually needs.
  *
  * The pair is unique per kind, as an index rather than a table constraint:
- * ADR 0011 records that drizzle's rebuild path re-emits indexes and silently
+ * records that drizzle's rebuild path re-emits indexes and silently
  * drops table-level UNIQUE.
  */
 export const todoLinksTable = sqliteTable(
@@ -404,7 +404,7 @@ export const todosTable = sqliteTable(
      * links would make "two parents" representable and then require a rule
      * nobody can see in the schema.
      *
-     * Self-referencing with NO ACTION (ADR 0012), which has a consequence: a
+     * Self-referencing with NO ACTION, which has a consequence: a
      * hard delete has to detach children first, because SQLite checks the
      * foreign key row by row as it goes and would hit a child still pointing
      * at a parent it already removed.
@@ -419,10 +419,10 @@ export const todosTable = sqliteTable(
      * References `user` rather than being derived from the project's owner,
      * because "who owns the list" and "who is doing this task" are different
      * questions that happen to have the same answer while a project has one
-     * person on it (ADR 0014).
+     * person on it.
      *
      * The candidate set is therefore exactly one person today, which makes the
-     * field close to useless on its own — and it is still the field ADR 0026
+     * field close to useless on its own — and it is still the field
      * named as a precondition for a real Gantt chart, and the one collaboration
      * needs to exist before anyone can be invited to anything.
      */

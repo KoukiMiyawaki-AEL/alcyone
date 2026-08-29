@@ -402,7 +402,7 @@ const app = new Hono<{
 
     // Awaited, not deferred: revocation is the one operation here where being
     // late actually matters. KV is still eventually consistent, so this bites
-    // within the TTL rather than at once — recorded in ADR 0022.
+    // within the TTL rather than at once.
     await purgeSharedView(c.env.SHARE_CACHE, removed.token);
 
     return c.body(null, 204);
@@ -619,7 +619,7 @@ const app = new Hono<{
     // collection is odd on its face — nothing is being hidden here, since the
     // thing does not exist yet — but "refused" answers with one shape
     // everywhere in this API, and a second shape would put a branch in every
-    // client for no gain (ADR 0039).
+    // client for no gain.
     if (!project) return c.json({ error: "Not found" }, 404);
 
     return c.json(project, 201);
@@ -789,7 +789,7 @@ const app = new Hono<{
       if (values.parentId != null) {
         // The foreign key only requires the parent to exist, not to be yours —
         // the same gap that once let anyone mint a share link for someone
-        // else's project (ADR 0022). A test caught this one too. `find` is
+        // else's project. A test caught this one too. `find` is
         // already scoped, so an id you cannot see answers as one that is not
         // there.
         const [parent] = await repo.todos.find(values.parentId);
@@ -927,7 +927,7 @@ const app = new Hono<{
   /**
    * Creates an account with a role already on it.
    *
-   * There is no email to invite through (ADR 0013), so an administrator types
+   * There is no email to invite through, so an administrator types
    * the initial password and hands it over — the alternative is an account
    * nobody can sign in to. Recorded rather than dressed up: an initial password
    * chosen by someone else is a real weakness, and the fix is email delivery,

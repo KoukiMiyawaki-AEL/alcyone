@@ -113,7 +113,7 @@ describe("parent and child", () => {
 
   it("cannot point at a task in someone else's account", async () => {
     // The actor is an ordinary account on this project. It has to be: an
-    // administrator can reach every project (ADR 0036), so with one as the
+    // administrator can reach every project, so with one as the
     // actor this would answer 200 and prove nothing about the check.
     const worker = await signUp("worker@example.com", "Worker");
     await addMemberByEmail(alice, projectId, "worker@example.com");

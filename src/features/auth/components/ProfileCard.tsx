@@ -16,7 +16,7 @@ import { authClient } from "@/lib/auth-client";
  * matters more than it did.
  *
  * The email stays read-only: changing it is an identity change, needs the
- * address proved, and there is no mail infrastructure (ADR 0013).
+ * address proved, and there is no mail infrastructure.
  */
 export function ProfileCard({ name, email }: { name: string; email: string }) {
   const fieldId = useId();

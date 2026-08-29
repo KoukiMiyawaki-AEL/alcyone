@@ -5,9 +5,9 @@
 -- "changed the status, the due date and the priority" one thing on screen.
 --
 -- Written as expand-and-contract inside one file rather than across two
--- deploys, which is a departure from ADR 0011 and needs its reason stated: the
+-- deploys, which is a departure from and needs its reason stated: the
 -- concept and its column are being introduced in the same change, no code
--- outside this commit writes to `todo_events`, and ADR 0003 still holds — no
+-- outside this commit writes to `todo_events`, and still holds — no
 -- D1 database has ever existed on a real Cloudflare account. On a deployed
 -- system these would be two migrations with a deploy between them.
 ALTER TABLE `todo_events` ADD `revisionId` text;--> statement-breakpoint

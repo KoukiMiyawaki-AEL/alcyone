@@ -1,8 +1,7 @@
 # 個人情報の棚卸し
 
-このアプリが保持する個人情報と、その消し方の一覧。[service-readiness-map](./design/service-readiness-map.md)の3-7が
-「どのテーブルの何が個人情報かを把握していないと、削除請求にも漏洩時対応にも答えられない」として
-挙げていた項目。
+このアプリが保持する個人情報と、その消し方の一覧。
+**どのテーブルの何が個人情報かを把握していないと、削除請求にも漏洩時対応にも答えられない。**
 
 **この表は`src/worker/db/schema.ts`と`src/worker/db/auth-schema.ts`が変わったら更新すること。**
 **データベース以外の置き場所（R2 / KV / Cookie / Analytics Engine）も同じ表に入れる。**
@@ -34,11 +33,11 @@
 
 | 置き場所 | 何が | 消え方 |
 |---|---|---|
-| R2 `attachments/*` | 添付ファイルの中身 | 退会時に即時削除。個別削除は保持期間経過後にキュー経由（[ADR 0019](./adr/0019-object-cleanup-queue.md)） |
-| R2 `exports/{userId}/*` | **その時点の全データの複製**（論理削除済みの行を含む） | 30日で自動削除。退会時はprefixごと即時削除（[ADR 0020](./adr/0020-data-export-workflow.md)） |
-| KV `share:{token}` | 公開共有ビュー（project名とtodoのtitle） | 60秒のTTL。共有解除時にも削除するが、**KVは結果整合なので最大1分残りうる**（[ADR 0022](./adr/0022-share-links-cached-in-kv.md)） |
-| Analytics Engine | 共有リンクの閲覧イベントとエラーイベント | **閲覧者を識別する情報を書いていない**（IP・UA・user idを含めない）。ただし**個別に消す手段が無い**（[ADR 0023](./adr/0023-analytics-engine-events.md)） |
-| Cookie `d1-bookmark` | D1のbookmark。個人データではない | 1日で失効（[ADR 0021](./adr/0021-d1-sessions-for-read-replicas.md)） |
+| R2 `attachments/*` | 添付ファイルの中身 | 退会時に即時削除。個別削除は保持期間経過後にキュー経由 |
+| R2 `exports/{userId}/*` | **その時点の全データの複製**（論理削除済みの行を含む） | 30日で自動削除。退会時はprefixごと即時削除 |
+| KV `share:{token}` | 公開共有ビュー（project名とtodoのtitle） | 60秒のTTL。共有解除時にも削除するが、**KVは結果整合なので最大1分残りうる** |
+| Analytics Engine | 共有リンクの閲覧イベントとエラーイベント | **閲覧者を識別する情報を書いていない**（IP・UA・user idを含めない）。ただし**個別に消す手段が無い** |
+| Cookie `d1-bookmark` | D1のbookmark。個人データではない | 1日で失効 |
 
 `session.ipAddress` と `session.userAgent` は Better Auth が既定で記録する。**本人が入力したもの
 ではないのに個人データである**点に注意。
@@ -56,7 +55,7 @@
 
 ## 削除
 
-`/account` からの退会で、上記すべてが物理削除される（[ADR 0015](./adr/0015-soft-delete-items-hard-delete-accounts.md)）。
+`/account` からの退会で、上記すべてが物理削除される。
 
 - `user` / `session` / `account`: Better Auth が削除。session と account は `user` からcascade
 - `projects` / `todos` / `attachments` / `shares` / `todo_comments` / `todo_events`: `beforeDelete` フックが**論理削除済みの行も含めて**物理削除
@@ -69,10 +68,10 @@
 - 論理削除された `projects` / `todos` は**30日で自動削除**される（`src/worker/scheduled.ts`）。それ以外の保持期間は未定義
 - **`todo_events` に保持期限が無い。** タスクが物理削除されるときに一緒に消えるだけで、
   生きているタスクの履歴は増え続ける。**追記専用なので、間引く手段を作ると追記専用でなくなる**
-  という緊張がある（[ADR 0027](./adr/0027-comments-and-append-only-history.md)）
+  という緊張がある
 - **Analytics Engineのイベントを個別に消せない。** データセットは追記専用で、
   「このユーザーの分だけ削除」ができない。だから**識別情報を最初から書いていない**という
-  設計で対応しており、これは事後の削除では取り返せない性質の判断である（[ADR 0023](./adr/0023-analytics-engine-events.md)）
-- **共有リンクの解除は即座ではない**（最大1分。[ADR 0022](./adr/0022-share-links-cached-in-kv.md)）
+  設計で対応しており、これは事後の削除では取り返せない性質の判断である
+- **共有リンクの解除は即座ではない**（最大1分。）
 - Workers Logs の保持は Paid 7日 / Free 3日
 - 削除請求・開示請求を受け付ける窓口が無い（利用規約もプライバシーポリシーも未作成）

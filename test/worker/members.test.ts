@@ -526,7 +526,7 @@ describe("administrators", () => {
 
   it("is the only role that can see the directory of accounts", async () => {
     // Not `owner`: that account makes projects, so it is an administrator too
-    // (ADR 0039). The account that must see nothing has to be an ordinary one.
+    //. The account that must see nothing has to be an ordinary one.
     const plain = await signUp("plain@example.com", "Plain");
     const asAdmin = await app.request("/api/users", { headers: admin }, env);
     const asOwner = await app.request("/api/users", { headers: plain }, env);

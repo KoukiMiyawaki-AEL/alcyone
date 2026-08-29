@@ -1,13 +1,24 @@
 # alcyone
 
-React + TanStack Router + shadcn/ui（Tailwind CSS v4）+ Hono + Drizzle ORM + Cloudflare D1
-を、単一のVite開発サーバー（`@cloudflare/vite-plugin`）で動かすフルスタック構成。
+**Cloudflare Workers上のスタックで実際にサービスを運営するなら何が要るのかを、
+動くもので確かめるための検証台。** 題材としてタスク管理ツールを作っているが、
+タスク管理ツールが目的ではない。
 
-技術スタックの詳細・デザイン規約は [CLAUDE.md](./CLAUDE.md) を参照。
+React + TanStack Router + shadcn/ui（Tailwind CSS v4）+ Hono + Drizzle ORM + Cloudflare D1 を、
+単一のVite開発サーバー（`@cloudflare/vite-plugin`）で動かす。
+
+## どこを読むか
+
+| 知りたいこと | 読む場所 |
+|---|---|
+| 何を作っていて、どういう原則で動くか | [`docs/design/overview.md`](./docs/design/overview.md) |
+| コードをどう書くか、何を壊してはいけないか | [`CLAUDE.md`](./CLAUDE.md) |
+| APIの外部仕様 | [`docs/api/README.md`](./docs/api/README.md) |
+| 文書の種類と更新の規則 | [`docs/README.md`](./docs/README.md) |
 
 ## セットアップ
 
-Node / pnpmのバージョンは`mise.toml`で固定している（[mise](https://mise.jdx.dev/)推奨）。
+Node / pnpmのバージョンは `mise.toml` で固定している（[mise](https://mise.jdx.dev/) 推奨）。
 
 ```bash
 pnpm install
@@ -18,41 +29,32 @@ pnpm install
 pnpm run codegen
 
 # ローカルD1にmigrationを適用（初回のみ / schema.tsを変更したら再実行）
-pnpm run db:generate
 pnpm run db:migrate:local
 
 # E2E用のブラウザ（初回のみ）
 pnpm exec playwright install chromium
+
+pnpm dev
 ```
 
-## よく使うコマンド
+画面を触るためのアカウントは [`docs/dev-accounts.md`](./docs/dev-accounts.md) を参照
+（`pnpm run seed:accounts` でオーナー・管理者・一般ユーザーが用意される）。
 
-```bash
-pnpm dev                  # Vite dev server（SPA + Hono Workerを同時に起動。ポートは5173固定）
-pnpm test                 # Vitest 両プロジェクト（worker: D1込みの統合 / components: happy-dom）
-pnpm run test:e2e         # Playwright（専用DBでdevサーバを起動して実行）
-pnpm run check            # CIと同じ全工程（codegen→format→lint→typecheck→build→test→dry-run）
-pnpm run codegen          # worker-configuration.d.ts と src/routeTree.gen.ts を生成
-pnpm run typecheck        # tsc -b のみ
-pnpm run lint             # oxlint
-pnpm run format           # oxfmt（書き換え）
-pnpm run db:generate      # drizzle-kit generate（schema.tsの差分からmigration生成）
-pnpm run db:migrate:local # ローカルD1へmigration適用
+コマンドの一覧は [`CLAUDE.md`](./CLAUDE.md) にある。
+CI（`.github/workflows/ci.yml`）はpull requestごとに `pnpm run check` を実行する。
+
+## ディレクトリ
+
 ```
-
-CI（`.github/workflows/ci.yml`）はpull requestごとに`pnpm run check`を実行する。
-
-## 構成
-
-- `src/routes/` — TanStack Routerのファイルベースルート（`/`がProject一覧、`/projects/$projectId`がそのProjectのTodo一覧、`/login`、`/dev/design-system`がコンポーネントギャラリー）
-- `src/components/ui/` — shadcn/ui primitives
-- `src/components/app/` — アプリ共通のcomposed components（AppHeader, ThemeProviderなど）
-- `src/features/` — ドメインごとのコンポーネント・型・APIラッパ（`todos/` `projects/` `auth/`）
-- `src/lib/` — `api-client.ts`（Hono RPC）、`auth-client.ts`、`mutate.ts`（全mutationが通るラッパ）、`utils.ts`
-- `src/worker/` — Hono API（Cloudflare Worker）。`/api/*`のみがWorkerに届く。DBアクセスは`db/repo.ts`の1箇所を通る
-- `test/worker/` — Vitest（`@cloudflare/vitest-plugin`）によるAPI統合テスト
-- `test/components/` — Vitest（happy-dom + Testing Library）によるコンポーネントテスト
-- `test/e2e/` — Playwright。workerテストとcomponentテストの隙間（ログイン→セッション→所有スコープ）を通しで検証
-- `docs/` — ドキュメント規約・design doc（[`docs/design/`](./docs/design/)）・設計判断の記録（ADR）・API仕様（[`docs/README.md`](./docs/README.md)参照）
-
-D1は現時点でローカル開発のみ。本番デプロイ（実際のCloudflareアカウント上のD1作成含む）は未対応。
+src/routes/         TanStack Routerのファイルベースルート
+src/components/ui/  shadcn/ui primitives（生成物）
+src/components/app/ アプリ共通のcomposed components
+src/features/       ドメインごとのコンポーネント・型・APIラッパ
+src/lib/            api-client / auth-client / mutate / utils
+src/worker/         Hono API（Cloudflare Worker）。DBアクセスは db/repo.ts の1箇所を通る
+drizzle/            マイグレーション
+test/worker/        API統合テスト（workerd + ローカルD1）
+test/components/    コンポーネントテスト（happy-dom + Testing Library）
+test/e2e/           Playwright。上2つの隙間を通しで検証
+docs/               設計文書と規約
+```

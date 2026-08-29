@@ -10,7 +10,7 @@
 -- table rebuild. That matters here: `projects` is referenced by `todos`,
 -- `shares`, `project_members` and `labels`, and SQLite checks foreign keys row
 -- by row, so dropping and recreating it would fail on the first child row
--- (ADR 0011).
+--.
 --
 -- The `key` default of '' is the same story: SQLite cannot add a NOT NULL
 -- column to a table with rows unless it has one. Nothing writes it — the

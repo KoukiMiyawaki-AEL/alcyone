@@ -1,4 +1,4 @@
--- Expand half of replacing `completed` with `status` (ADR 0011).
+-- Expand half of replacing `completed` with `status`.
 --
 -- The boolean stays for now and both are written; the contract migration drops
 -- it once no code reads it. Doing it in one step would mean a deploy where the
@@ -6,7 +6,7 @@
 --
 -- All three are ADD COLUMN with a constant default, which D1 accepts. (The
 -- form it rejects on a non-empty table is NOT NULL DEFAULT combined with
--- REFERENCES — recorded in ADR 0011.)
+-- REFERENCES — recorded in)
 ALTER TABLE `todos` ADD `status` text DEFAULT 'todo' NOT NULL;--> statement-breakpoint
 ALTER TABLE `todos` ADD `startAt` text;--> statement-breakpoint
 ALTER TABLE `todos` ADD `description` text;--> statement-breakpoint

@@ -138,7 +138,7 @@ export type DragResult = { startAt: string | null; dueAt: string | null };
 /**
  * Turns a drag of `deltaDays` columns into the dates it produces.
  *
- * The objection ADR 0026 raised against editing here was that turning pixels
+ * The objection raised against editing here was that turning pixels
  * back into dates puts a deadline the user never touched at risk. The answer is
  * that the axis is a fixed grid: a column is exactly one day, so the conversion
  * is integer division with no rounding to be wrong about. What remains is

@@ -26,7 +26,7 @@ export const todosFts = sqliteTable("todos_fts", {
  */
 export const ftsRank = sql<number>`bm25(todos_fts)`;
 
-/** Below this, a query cannot match a trigram at all. See ADR 0018. */
+/** Below this, a query cannot match a trigram at all. See */
 export const MIN_FTS_TERM_LENGTH = 3;
 
 /**

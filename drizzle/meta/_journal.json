@@ -162,6 +162,13 @@
       "when": 1787854542529,
       "tag": "0022_simple_crusher_hogan",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1788026804082,
+      "tag": "0023_remarkable_bedlam",
+      "breakpoints": true
     }
   ]
 }

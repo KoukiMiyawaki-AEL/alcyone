@@ -188,9 +188,14 @@ export const projectMembersTable = sqliteTable(
       .notNull()
       .references(() => user.id),
     /** Who let them in, kept because "how did they get access" is asked later. */
-    addedBy: text()
-      .notNull()
-      .references(() => user.id),
+    /**
+     * Who granted this access. Null once that account is gone.
+     *
+     * Not deleting the row along with them: the row is somebody else's access,
+     * and it does not stop being valid because the person who granted it left.
+     * What is lost is only the answer to "who let them in".
+     */
+    addedBy: text().references(() => user.id),
     createdAt: text().notNull(),
   },
   (t) => [

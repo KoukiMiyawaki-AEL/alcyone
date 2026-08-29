@@ -55,10 +55,23 @@
 
 ## 削除
 
-`/account` からの退会で、上記すべてが物理削除される。
+`/account` からの退会で、上記すべてが物理削除される。`user` 行を指す列が1つでも残っていると
+外部キーが削除を拒み、**Better Auth の delete-user が500で返る**（利用者からは「退会できない」
+としか見えない）ので、参照する側を先に片付ける。
 
 - `user` / `session` / `account`: Better Auth が削除。session と account は `user` からcascade
-- `projects` / `todos` / `attachments` / `shares` / `todo_comments` / `todo_events`: `beforeDelete` フックが**論理削除済みの行も含めて**物理削除
+- **自分が作ったプロジェクト**の `projects` / `todos` / `attachments` / `shares` /
+  `todo_comments` / `todo_events` / `labels`: `beforeDelete` フックが**論理削除済みの行も含めて**物理削除
+- **他人のプロジェクトに残した分**も同じフックが片付ける。ここは行ごとに答えが違う。
+
+  | 残るもの | 退会時の扱い | 理由 |
+  |---|---|---|
+  | 書いたコメント（`todo_comments`） | 削除 | 本人の発言 |
+  | 変更履歴（`todo_events`） | 削除 | 本人の行動 |
+  | 自分への担当（`todos.assigneeId`） | `null` にする | タスクはプロジェクトのもので、本人のものではない |
+  | 自分の参加（`project_members.userId`） | 削除 | 本人が居ないので、アクセスも無い |
+  | 自分が招いた人（`project_members.addedBy`） | `null` にする | **他人のアクセス**であって、招いた人が去っても有効性は変わらない。失われるのは「誰が入れたか」だけ |
+
 - R2の添付とエクスポート: 同フックが**行より先に**同期で削除する。行を先に消すと、
   オブジェクトを指すものが無くなって永久に残る（**添付を1つずつ消すときは逆に行が先**で、
   鍵をキューに送る。残った行は直せるが、残ったオブジェクトは見えない）

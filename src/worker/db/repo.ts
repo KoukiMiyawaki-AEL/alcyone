@@ -1613,6 +1613,31 @@ export function createRepo(
 
   const purgeOwnedData = () =>
     [
+      // Everything this account left in *other people's* projects comes first.
+      // Those rows are not reachable through `allOwnedTodoIds()` — that only
+      // covers projects this account created — and every one of them names
+      // `user.id`, so leaving any behind makes the account undeletable: the
+      // foreign key refuses, and the whole delete comes back as a 500.
+      //
+      // What happens to each is a different answer, because they are different
+      // things:
+      //
+      //   comments and history  their words and their actions. Deleted.
+      //   assignments           the task belongs to the project, not to them.
+      //                         Unassigned, exactly as removing a member does.
+      //   their membership      they are gone; so is their access.
+      //   memberships they made somebody else's access, which does not stop
+      //                         being valid because the person who granted it
+      //                         left. Only "who let them in" is lost.
+      db.delete(todoCommentsTable).where(eq(todoCommentsTable.authorId, ownerId)),
+      db.delete(todoEventsTable).where(eq(todoEventsTable.actorId, ownerId)),
+      db.update(todosTable).set({ assigneeId: null }).where(eq(todosTable.assigneeId, ownerId)),
+      db.delete(projectMembersTable).where(eq(projectMembersTable.userId, ownerId)),
+      db
+        .update(projectMembersTable)
+        .set({ addedBy: null })
+        .where(eq(projectMembersTable.addedBy, ownerId)),
+
       // Three levels now — attachments reference todos, todos reference
       // projects — so three statements in dependency order. The R2 objects are
       // not rows and survive this; see ownedAttachmentKeys.

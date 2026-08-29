@@ -89,6 +89,48 @@ export function uniqueKey(): string {
   return `K${keyCounter}`;
 }
 
+/**
+ * An account that may create projects.
+ *
+ * Creating one is an administrator's act (ADR 0039), so a test that needs a
+ * project needs an account that can make it. Deliberately *not* what `signUp`
+ * gives you: if every test's actor were an administrator, the scoping tests
+ * would run as somebody who can reach everything and pass without proving
+ * anything — the same trap the seeded owner in `resetAll` exists to avoid.
+ *
+ * The role is written directly because no endpoint grants it without an
+ * existing owner's session, and the seeded owner is a bare row with no
+ * password.
+ */
+export async function signUpAdmin(email: string, name = "Test admin"): Promise<Headers> {
+  const headers = await signUp(email, name);
+
+  await env.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?").bind(email).run();
+
+  return headers;
+}
+
+/**
+ * Puts an ordinary account on a project somebody else made.
+ *
+ * The shape most isolation tests need now: an account that cannot create a
+ * project of its own (ADR 0039) but has one to work in. Written here because
+ * five test files were about to write it themselves.
+ */
+export async function addMemberByEmail(
+  manager: Headers,
+  projectId: number,
+  email: string,
+): Promise<void> {
+  const res = await app.request(
+    `/api/projects/${projectId}/members`,
+    { method: "POST", headers: jsonHeaders(manager), body: JSON.stringify({ email }) },
+    env,
+  );
+
+  if (!res.ok) throw new Error(`could not add ${email} (${res.status}): ${await res.text()}`);
+}
+
 export const PASSWORD = "correct horse battery";
 
 /**

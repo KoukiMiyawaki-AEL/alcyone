@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { createProject, signUp } from "./helpers";
+import { createProject, signUpAdmin } from "./helpers";
 
 /**
  * The claim realtime actually makes is "a change in one tab shows up in the
@@ -11,7 +11,7 @@ import { createProject, signUp } from "./helpers";
 test.describe("realtime", () => {
   test("a change in one tab appears in the other", async ({ context }) => {
     const first = await context.newPage();
-    await signUp(first);
+    await signUpAdmin(first);
 
     const second = await context.newPage();
     await second.goto("/");
@@ -26,8 +26,8 @@ test.describe("realtime", () => {
 
   test("a second user's change does not reach the first", async ({ browser, context }) => {
     const mine = await context.newPage();
-    await signUp(mine);
-    await createProject(mine, "Mine");
+    await signUpAdmin(mine);
+    await createProject(mine, "Mine 2");
 
     // A separate context, so a separate session — this is the isolation that
     // matters, and it is worth proving through the browser and not only
@@ -36,12 +36,12 @@ test.describe("realtime", () => {
       extraHTTPHeaders: { "CF-Connecting-IP": "203.0.113.240" },
     });
     const theirs = await otherContext.newPage();
-    await signUp(theirs);
+    await signUpAdmin(theirs);
     await createProject(theirs, "Theirs");
 
     await expect(theirs.getByRole("main").getByText("Theirs")).toBeVisible();
     await expect(mine.getByRole("main").getByText("Theirs")).toBeHidden();
-    await expect(mine.getByRole("main").getByText("Mine")).toBeVisible();
+    await expect(mine.getByRole("main").getByText("Mine 2")).toBeVisible();
 
     await otherContext.close();
   });

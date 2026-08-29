@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, openProject, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUpAdmin } from "./helpers";
 
 /**
  * The point of this change is that the fields are *settable*. Until now the
@@ -9,9 +9,9 @@ import { createProject, createTodo, openProject, signUp } from "./helpers";
  */
 test.describe("task details", () => {
   test("sets status, dates, priority and a note, and they survive a reload", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Planning");
-    await openProject(page, "Planning");
+    await signUpAdmin(page);
+    await createProject(page, "Planning 2");
+    await openProject(page, "Planning 2");
     await createTodo(page, "設計を書く");
 
     await page.getByRole("button", { name: "「設計を書く」の操作" }).click();
@@ -31,9 +31,9 @@ test.describe("task details", () => {
   });
 
   test("refuses a start date after the due date without saving anything", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Planning");
-    await openProject(page, "Planning");
+    await signUpAdmin(page);
+    await createProject(page, "Planning 3");
+    await openProject(page, "Planning 3");
     await createTodo(page, "逆順");
 
     await page.getByRole("button", { name: "「逆順」の操作" }).click();
@@ -50,9 +50,9 @@ test.describe("task details", () => {
   });
 
   test("filters the list by a status the checkbox cannot express", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Planning");
-    await openProject(page, "Planning");
+    await signUpAdmin(page);
+    await createProject(page, "Planning 4");
+    await openProject(page, "Planning 4");
     await createTodo(page, "進行中のもの");
     await createTodo(page, "手つかずのもの");
 

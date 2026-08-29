@@ -615,6 +615,13 @@ const app = new Hono<{
       return c.json({ error: "Bad Request" }, 400);
     }
 
+    // No row means this account may not create projects. A 404 for a POST to a
+    // collection is odd on its face — nothing is being hidden here, since the
+    // thing does not exist yet — but "refused" answers with one shape
+    // everywhere in this API, and a second shape would put a branch in every
+    // client for no gain (ADR 0039).
+    if (!project) return c.json({ error: "Not found" }, 404);
+
     return c.json(project, 201);
   })
   .patch(

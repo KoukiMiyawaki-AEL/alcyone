@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, openProject, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUpAdmin } from "./helpers";
 
 async function openDetails(page: import("@playwright/test").Page, title: string) {
   await page.getByRole("button", { name: `「${title}」の操作` }).click();
@@ -9,9 +9,9 @@ async function openDetails(page: import("@playwright/test").Page, title: string)
 
 test.describe("comments and history", () => {
   test("a comment is written, edited and removed", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Activity");
-    await openProject(page, "Activity");
+    await signUpAdmin(page);
+    await createProject(page, "Activity 1");
+    await openProject(page, "Activity 1");
     await createTodo(page, "議論するタスク");
 
     await openDetails(page, "議論するタスク");
@@ -31,9 +31,9 @@ test.describe("comments and history", () => {
   });
 
   test("a status change is recorded with both values and survives a reload", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Activity");
-    await openProject(page, "Activity");
+    await signUpAdmin(page);
+    await createProject(page, "Activity 2");
+    await openProject(page, "Activity 2");
     await createTodo(page, "動かすタスク");
 
     await openDetails(page, "動かすタスク");
@@ -54,9 +54,9 @@ test.describe("comments and history", () => {
   });
 
   test("one save is one entry, and the note explaining it sits inside", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Activity");
-    await openProject(page, "Activity");
+    await signUpAdmin(page);
+    await createProject(page, "Activity 3");
+    await openProject(page, "Activity 3");
     await createTodo(page, "まとめて更新するタスク");
 
     await openDetails(page, "まとめて更新するタスク");
@@ -82,9 +82,9 @@ test.describe("comments and history", () => {
   test("saving without changing anything records nothing", async ({ page }) => {
     // The form submits every field on every save, so a history that recorded
     // what was asked for would bury real changes under non-changes.
-    await signUp(page);
-    await createProject(page, "Activity");
-    await openProject(page, "Activity");
+    await signUpAdmin(page);
+    await createProject(page, "Activity 4");
+    await openProject(page, "Activity 4");
     await createTodo(page, "触らないタスク");
 
     await openDetails(page, "触らないタスク");

@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { openProject, signUp, uniqueKey } from "./helpers";
+import { openProject, signUpAdmin, uniqueKey } from "./helpers";
 
 /** Creates a project through the dialog, filling in more than a name. */
 async function createDetailed(
@@ -17,7 +17,7 @@ async function createDetailed(
 
 test.describe("project settings", () => {
   test("a project is created with more than a name", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
 
     await createDetailed(page, {
       name: "Alcyone",
@@ -36,7 +36,7 @@ test.describe("project settings", () => {
   });
 
   test("the key follows the name until it is typed over", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
 
     await page.getByRole("button", { name: "プロジェクトを追加" }).click();
     await page.getByLabel("プロジェクト名").fill("Design System");
@@ -50,7 +50,7 @@ test.describe("project settings", () => {
   });
 
   test("names tasks by the key, which is what people quote", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     const key = uniqueKey();
     await createDetailed(page, { name: "Quoted", key });
     await openProject(page, "Quoted");
@@ -67,7 +67,7 @@ test.describe("project settings", () => {
   });
 
   test("refuses a key that is already taken, and says so", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     const key = uniqueKey();
 
     await createDetailed(page, { name: "First", key });
@@ -85,7 +85,7 @@ test.describe("project settings", () => {
   test("the key cannot be changed once the project exists", async ({ page }) => {
     // Jira refuses once a project has issues and Backlog advises against it,
     // both because the key is in every reference anyone has written down.
-    await signUp(page);
+    await signUpAdmin(page);
     await createDetailed(page, { name: "Fixed", key: uniqueKey() });
     await openProject(page, "Fixed");
     await page.getByRole("navigation").first().getByRole("link", { name: "設定" }).click();
@@ -95,7 +95,7 @@ test.describe("project settings", () => {
   });
 
   test("archiving takes a project off the dashboard without deleting it", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createDetailed(page, { name: "Finished", key: uniqueKey() });
     await createDetailed(page, { name: "Ongoing", key: uniqueKey() });
 
@@ -116,7 +116,7 @@ test.describe("project settings", () => {
   });
 
   test("editing the settings keeps them", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createDetailed(page, { name: "Editable", key: uniqueKey() });
     await openProject(page, "Editable");
     await page.getByRole("navigation").first().getByRole("link", { name: "設定" }).click();

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueKey } from "./auth-helper";
 
 async function createProject(headers: Headers): Promise<number> {
   const res = await app.request(
@@ -55,7 +55,7 @@ describe("todo filtering and sorting", () => {
 
   beforeEach(async () => {
     await resetAll();
-    headers = await signUp("owner@example.com");
+    headers = await signUpAdmin("owner@example.com");
     projectId = await createProject(headers);
   });
 

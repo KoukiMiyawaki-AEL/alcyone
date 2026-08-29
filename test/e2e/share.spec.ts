@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, openProject, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUpAdmin } from "./helpers";
 
 test.describe("share links", () => {
   test("a signed-out visitor can read a shared project but not edit it", async ({
@@ -7,7 +7,7 @@ test.describe("share links", () => {
     browser,
   }) => {
     const owner = await context.newPage();
-    await signUp(owner);
+    await signUpAdmin(owner);
     await createProject(owner, "Shared board");
     await openProject(owner, "Shared board");
     await createTodo(owner, "publicly visible");
@@ -33,7 +33,7 @@ test.describe("share links", () => {
 
   test("revoking the link closes the door", async ({ context, browser }) => {
     const owner = await context.newPage();
-    await signUp(owner);
+    await signUpAdmin(owner);
     await createProject(owner, "Temporarily shared");
     await openProject(owner, "Temporarily shared");
 

@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, openProject, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUpAdmin } from "./helpers";
 
 /** The views live in the sidebar now, one addressable link each. */
 const viewSwitch = (page: import("@playwright/test").Page) => page.getByRole("navigation").first();
@@ -20,9 +20,9 @@ function daysFromToday(offset: number): string {
 
 test.describe("timeline view", () => {
   test("shows dated tasks on the axis and lists the undated ones", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Schedule");
-    await openProject(page, "Schedule");
+    await signUpAdmin(page);
+    await createProject(page, "Schedule 1");
+    await openProject(page, "Schedule 1");
 
     await scheduleTask(page, "日程のあるタスク", "2026-11-02", "2026-11-06");
     await expect(page.getByText("日程のあるタスク")).toBeVisible();
@@ -45,7 +45,7 @@ test.describe("timeline view", () => {
   test("draws a calendar even before anything is scheduled", async ({ page }) => {
     // The axis is a calendar, not a bounding box around the work: you cannot
     // see that a month is free if the month is not drawn.
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Empty");
     await openProject(page, "Empty");
     await createTodo(page, "日付なし");
@@ -59,7 +59,7 @@ test.describe("timeline view", () => {
   });
 
   test("marks today and labels the days, not just the months", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Days");
     await openProject(page, "Days");
     await createTodo(page, "なにか");
@@ -75,7 +75,7 @@ test.describe("timeline view", () => {
   test("switches between day and week granularity", async ({ page }) => {
     // A quarter at one column per day is over two thousand pixels — legible,
     // but only through a letterbox.
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Zoom");
     await openProject(page, "Zoom");
     await createTodo(page, "なにか");
@@ -101,9 +101,9 @@ test.describe("timeline view", () => {
   });
 
   test("says so when no task has a date yet", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Schedule");
-    await openProject(page, "Schedule");
+    await signUpAdmin(page);
+    await createProject(page, "Schedule 2");
+    await openProject(page, "Schedule 2");
     await createTodo(page, "日付なし");
 
     await viewSwitch(page).getByRole("link", { name: "タイムライン" }).click();
@@ -112,9 +112,9 @@ test.describe("timeline view", () => {
   });
 
   test("opens the detail form from a bar", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Schedule");
-    await openProject(page, "Schedule");
+    await signUpAdmin(page);
+    await createProject(page, "Schedule 3");
+    await openProject(page, "Schedule 3");
 
     await scheduleTask(page, "編集する", "2026-11-18", "2026-11-20");
 
@@ -169,9 +169,9 @@ async function dragBar(
 
 test.describe("rescheduling on the chart", () => {
   test("dragging a bar moves both dates and keeps the duration", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Schedule");
-    await openProject(page, "Schedule");
+    await signUpAdmin(page);
+    await createProject(page, "Schedule 4");
+    await openProject(page, "Schedule 4");
 
     const from = daysFromToday(2);
     const to = daysFromToday(4);
@@ -196,9 +196,9 @@ test.describe("rescheduling on the chart", () => {
   test("a click that does not move changes nothing", async ({ page }) => {
     // It would churn `updatedAt` and tell every other tab to refetch for a
     // change that did not happen.
-    await signUp(page);
-    await createProject(page, "Schedule");
-    await openProject(page, "Schedule");
+    await signUpAdmin(page);
+    await createProject(page, "Schedule 5");
+    await openProject(page, "Schedule 5");
 
     const from = daysFromToday(2);
     await scheduleTask(page, "触るだけ", from, daysFromToday(4));
@@ -214,9 +214,9 @@ test.describe("rescheduling on the chart", () => {
   test("shows where the bar would land while it is being dragged", async ({ page }) => {
     // A bar that simply moved would answer "where to" and lose "from where".
     // The ghost is what makes the change legible before it is committed.
-    await signUp(page);
-    await createProject(page, "Schedule");
-    await openProject(page, "Schedule");
+    await signUpAdmin(page);
+    await createProject(page, "Schedule 6");
+    await openProject(page, "Schedule 6");
 
     const from = daysFromToday(2);
     const to = daysFromToday(4);
@@ -243,9 +243,9 @@ test.describe("rescheduling on the chart", () => {
   });
 
   test("dragging an edge moves only that end", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Schedule");
-    await openProject(page, "Schedule");
+    await signUpAdmin(page);
+    await createProject(page, "Schedule 7");
+    await openProject(page, "Schedule 7");
 
     const from = daysFromToday(2);
     await scheduleTask(page, "伸ばす予定", from, daysFromToday(4));

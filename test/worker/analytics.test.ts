@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
 import { recordServerError, recordShareView } from "../../src/worker/analytics";
-import { jsonHeaders, resetAll, signUp, uniqueIp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUpAdmin, uniqueIp, uniqueKey } from "./auth-helper";
 
 /**
  * Records what would have been written.
@@ -105,7 +105,7 @@ describe("events the running Worker emits", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
   });
 
   async function shareAProject(): Promise<string> {

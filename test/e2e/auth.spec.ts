@@ -1,5 +1,13 @@
 import { expect, test } from "./fixtures";
-import { createProject, openProject, PASSWORD, signIn, signOut, signUp } from "./helpers";
+import {
+  createProject,
+  openProject,
+  PASSWORD,
+  signIn,
+  signOut,
+  signUp,
+  signUpAdmin,
+} from "./helpers";
 
 /**
  * These cover the seams that neither vitest project can see. The worker tests
@@ -33,7 +41,7 @@ test.describe("authentication", () => {
   });
 
   test("an unauthenticated deep link returns you to it after signing in", async ({ page }) => {
-    const email = await signUp(page);
+    const email = await signUpAdmin(page);
     await createProjectAndOpen(page);
     const projectUrl = page.url();
     await signOut(page);
@@ -57,7 +65,7 @@ test.describe("authentication", () => {
   });
 
   test("rejects a wrong password without leaving the form", async ({ page }) => {
-    const email = await signUp(page);
+    const email = await signUpAdmin(page);
     await signOut(page);
 
     await page.goto("/login");

@@ -2,7 +2,14 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
-import { jsonHeaders, PASSWORD, resetAll, SEED_ADMIN_ID, signUp, uniqueKey } from "./auth-helper";
+import {
+  jsonHeaders,
+  PASSWORD,
+  resetAll,
+  SEED_ADMIN_ID,
+  signUpAdmin,
+  uniqueKey,
+} from "./auth-helper";
 
 async function createProject(headers: Headers, name: string): Promise<number> {
   const res = await app.request(
@@ -50,7 +57,7 @@ describe("account deletion", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
   });
 
   it("removes the user's projects and todos, including soft-deleted ones", async () => {
@@ -83,7 +90,9 @@ describe("account deletion", () => {
   });
 
   it("leaves other users untouched", async () => {
-    const bob = await signUp("bob@example.com", "Bob");
+    // Bob's work has to live in somebody else's project: he cannot make one
+    // (ADR 0039), and if it were Alice's it would go with her by design.
+    const bob = await signUpAdmin("bob@example.com", "Bob");
     const bobProject = await createProject(bob, "Bob's project");
     await addTodo(bob, bobProject, "bob's todo");
     await createProject(alice, "Alice's project");

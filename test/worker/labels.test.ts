@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueKey } from "./auth-helper";
 
 type Label = { id: number; name: string; color: string; projectId: number };
 
@@ -69,7 +69,7 @@ describe("labels", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     project = await createProject(alice, "Labelled");
   });
 
@@ -215,7 +215,7 @@ describe("labels across accounts", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     bob = await signUp("bob@example.com", "Bob");
     aliceProject = await createProject(alice, "Alice's");
     aliceLabel = await labelId(alice, aliceProject, "private");

@@ -1,9 +1,9 @@
 import { expect, test } from "./fixtures";
-import { createProject, signUp } from "./helpers";
+import { createProject, signUpAdmin } from "./helpers";
 
 test.describe("data export", () => {
   test("exports the account's data and offers each part for download", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Exported");
 
     await page.getByRole("button", { name: /アカウント:/ }).click();

@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
-import { PASSWORD, jsonHeaders, resetAll, signUp, uniqueIp } from "./auth-helper";
+import { jsonHeaders, PASSWORD, resetAll, signUpAdmin, uniqueIp } from "./auth-helper";
 
 /**
  * The limiter is per-Cloudflare-location and eventually consistent — Cloudflare
@@ -52,7 +52,7 @@ describe("rate limiting", () => {
   });
 
   it("does not rate limit ordinary reads", async () => {
-    const headers = await signUp("owner@example.com");
+    const headers = await signUpAdmin("owner@example.com");
 
     const statuses: number[] = [];
     for (let i = 0; i < 30; i += 1) {

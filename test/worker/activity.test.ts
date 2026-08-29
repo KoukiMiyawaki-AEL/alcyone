@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueKey } from "./auth-helper";
 
 type Comment = {
   id: number;
@@ -69,7 +69,7 @@ describe("comments", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     todo = await addTodo(alice, await createProject(alice));
   });
 
@@ -196,7 +196,7 @@ describe("change history", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     todo = await addTodo(alice, await createProject(alice), "履歴のあるタスク");
   });
 

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
 import { BOOKMARK_COOKIE, bookmarkCookie, readBookmark } from "../../src/worker/db/session";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUpAdmin, uniqueKey } from "./auth-helper";
 
 /**
  * Adds the bookmark to the existing Cookie header rather than appending a
@@ -73,7 +73,7 @@ describe("D1 sessions across requests", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
   });
 
   it("hands a bookmark forward after a query", async () => {

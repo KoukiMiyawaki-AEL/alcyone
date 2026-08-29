@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "../../src/features/projects/types";
 import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp, uniqueIp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueIp, uniqueKey } from "./auth-helper";
 
 async function userId(headers: Headers): Promise<string> {
   // A fresh address each time: `/api/auth/*` is rate limited by IP, and
@@ -93,7 +93,7 @@ describe("membership", () => {
 
   beforeEach(async () => {
     await resetAll();
-    owner = await signUp("owner@example.com", "Owner");
+    owner = await signUpAdmin("owner@example.com", "Owner");
     guest = await signUp("guest@example.com", "Guest");
     projectId = await createProject(owner, "Shared work");
   });
@@ -407,7 +407,7 @@ describe("inviting by address", () => {
 
   beforeEach(async () => {
     await resetAll();
-    owner = await signUp("owner@example.com", "Owner");
+    owner = await signUpAdmin("owner@example.com", "Owner");
     guest = await signUp("guest@example.com", "Guest");
     projectId = await createProject(owner, "Shared work");
   });
@@ -470,7 +470,7 @@ describe("administrators", () => {
 
   beforeEach(async () => {
     await resetAll();
-    owner = await signUp("owner@example.com", "Owner");
+    owner = await signUpAdmin("owner@example.com", "Owner");
     admin = await signUp("admin@example.com", "Admin");
     await makeAdmin(admin);
     projectId = await createProject(owner, "Someone else's");
@@ -525,8 +525,11 @@ describe("administrators", () => {
   });
 
   it("is the only role that can see the directory of accounts", async () => {
+    // Not `owner`: that account makes projects, so it is an administrator too
+    // (ADR 0039). The account that must see nothing has to be an ordinary one.
+    const plain = await signUp("plain@example.com", "Plain");
     const asAdmin = await app.request("/api/users", { headers: admin }, env);
-    const asOwner = await app.request("/api/users", { headers: owner }, env);
+    const asOwner = await app.request("/api/users", { headers: plain }, env);
 
     expect(((await asAdmin.json()) as unknown[]).length).toBeGreaterThan(1);
     // Handing every user a list of every other user is a directory, and nobody
@@ -536,14 +539,15 @@ describe("administrators", () => {
 
   it("cannot be granted through the API", async () => {
     // Better Auth's update endpoint must never be a way to set this column.
+    const plain = await signUp("plain@example.com", "Plain");
     await app.request(
       "/api/auth/update-user",
-      { method: "POST", headers: jsonHeaders(owner), body: JSON.stringify({ role: "admin" }) },
+      { method: "POST", headers: jsonHeaders(plain), body: JSON.stringify({ role: "admin" }) },
       env,
     );
 
     const row = await env.DB.prepare("SELECT role FROM user WHERE id = ?")
-      .bind(await userId(owner))
+      .bind(await userId(plain))
       .first<{ role: string }>();
     expect(row?.role).toBe("member");
   });
@@ -613,10 +617,12 @@ describe("administrators", () => {
   });
 
   it("is not a role a member can hand themselves", async () => {
-    const res = await setRole(owner, await userId(owner), "admin");
+    const plain = await signUp("plain@example.com", "Plain");
+
+    const res = await setRole(plain, await userId(plain), "admin");
 
     expect(res.status).toBe(404);
-    expect(await roleOf(await userId(owner))).toBe("member");
+    expect(await roleOf(await userId(plain))).toBe("member");
   });
 });
 

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
 import { exportKey, type ExportManifest } from "../../src/worker/data-export";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUpAdmin, uniqueKey } from "./auth-helper";
 
 /**
  * The claim ADR 0020 made for choosing Workflows over a queue was that a
@@ -16,7 +16,7 @@ describe("a data export whose step fails", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     const session = await app.request("/api/auth/get-session", { headers: alice }, env);
     userId = ((await session.json()) as { user: { id: string } }).user.id;
 

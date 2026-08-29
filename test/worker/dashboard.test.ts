@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { ProjectSummary } from "../../src/features/projects/types";
 import type { AssignedTodo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueKey } from "./auth-helper";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -56,7 +56,7 @@ describe("dashboard summaries", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
   });
 
   it("counts a project's tasks alongside its name", async () => {
@@ -120,7 +120,7 @@ describe("assigned tasks", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     bob = await signUp("bob@example.com", "Bob");
     aliceId = await userId(alice);
   });

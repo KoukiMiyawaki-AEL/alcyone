@@ -1,11 +1,11 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, openProject, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUpAdmin } from "./helpers";
 
 test.describe("search", () => {
   test("finds a todo from another project and links to it", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Work");
-    await openProject(page, "Work");
+    await signUpAdmin(page);
+    await createProject(page, "Work 1");
+    await openProject(page, "Work 1");
     await createTodo(page, "設計ドキュメントを書く");
 
     await page.getByRole("link", { name: "検索" }).click();
@@ -16,13 +16,13 @@ test.describe("search", () => {
     // reload — the same rule the filtered lists follow.
     await expect(page).toHaveURL(/\/search\?q=/);
     await page.getByRole("link", { name: "設計ドキュメントを書く" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Work" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Work 1" })).toBeVisible();
   });
 
   test("a search survives a reload and reports no matches plainly", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Work");
-    await openProject(page, "Work");
+    await signUpAdmin(page);
+    await createProject(page, "Work 2");
+    await openProject(page, "Work 2");
     await createTodo(page, "write the plan");
 
     await page.goto("/search?q=nothingmatchesthis");

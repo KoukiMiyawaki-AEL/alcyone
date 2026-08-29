@@ -1,9 +1,9 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, openProject, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUp, signUpAdmin } from "./helpers";
 
 test.describe("display name", () => {
   test("is editable, and appears where the account acts", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
 
     await page.getByRole("button", { name: /^アカウント:/ }).click();
     await page.getByRole("menuitem", { name: "Account" }).click();
@@ -56,7 +56,7 @@ test.describe("display name", () => {
 
 test.describe("assignment", () => {
   test("a task shows who it is assigned to, by their current name", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
 
     await page.getByRole("button", { name: /^アカウント:/ }).click();
     await page.getByRole("menuitem", { name: "Account" }).click();
@@ -64,8 +64,8 @@ test.describe("assignment", () => {
     await page.getByRole("button", { name: "保存" }).click();
 
     await page.getByRole("link", { name: "ダッシュボード" }).click();
-    await createProject(page, "Assigning");
-    await openProject(page, "Assigning");
+    await createProject(page, "Assigning 1");
+    await openProject(page, "Assigning 1");
     await createTodo(page, "割り当てるタスク");
 
     await page.getByRole("button", { name: "「割り当てるタスク」の操作" }).click();
@@ -85,14 +85,14 @@ test.describe("assignment", () => {
     await page.getByRole("button", { name: "保存" }).click();
 
     await page.getByRole("link", { name: "ダッシュボード" }).click();
-    await openProject(page, "Assigning");
+    await openProject(page, "Assigning 1");
     await expect(page.getByLabel("担当: 改名後")).toBeVisible();
   });
 
   test("a task can be handed back to nobody", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Assigning");
-    await openProject(page, "Assigning");
+    await signUpAdmin(page);
+    await createProject(page, "Assigning 2");
+    await openProject(page, "Assigning 2");
     await createTodo(page, "戻すタスク");
 
     await page.getByRole("button", { name: "「戻すタスク」の操作" }).click();

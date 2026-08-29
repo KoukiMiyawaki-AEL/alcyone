@@ -1,11 +1,11 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, openProject, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUpAdmin } from "./helpers";
 
 test.describe("board view", () => {
   test("moves a task between columns and the move survives a reload", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Board");
-    await openProject(page, "Board");
+    await signUpAdmin(page);
+    await createProject(page, "Board 1");
+    await openProject(page, "Board 1");
     await createTodo(page, "動かすタスク");
 
     await page
@@ -32,9 +32,9 @@ test.describe("board view", () => {
   });
 
   test("the view is part of the link, and the list still filters", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Board");
-    await openProject(page, "Board");
+    await signUpAdmin(page);
+    await createProject(page, "Board 2");
+    await openProject(page, "Board 2");
     await createTodo(page, "一覧のタスク");
 
     await page
@@ -56,9 +56,9 @@ test.describe("adding a task", () => {
     // A task that has a deadline usually has it at the moment it is written
     // down. The shortcut that used to sit here mostly produced tasks that had
     // to be opened and filled in anyway.
-    await signUp(page);
-    await createProject(page, "Planning");
-    await openProject(page, "Planning");
+    await signUpAdmin(page);
+    await createProject(page, "Planning 1");
+    await openProject(page, "Planning 1");
 
     await expect(page.getByLabel("新しいタスクのタイトル")).toBeHidden();
 

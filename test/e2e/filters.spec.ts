@@ -1,11 +1,15 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, openProject, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUpAdmin, uniqueKey } from "./helpers";
 
 test.describe("list filtering", () => {
   test.beforeEach(async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Filter project");
-    await openProject(page, /Filter project/);
+    await signUpAdmin(page);
+    // A fresh name per test: an administrator sees every project (ADR 0036)
+    // and the E2E database lives for the whole run, so a fixed name here would
+    // put four "Filter project"s on the dashboard by the last test.
+    const name = `Filter project ${uniqueKey()}`;
+    await createProject(page, name);
+    await openProject(page, name);
     await createTodo(page, "still open");
     await createTodo(page, "finished");
     await page.getByRole("checkbox", { name: "「finished」を完了にする" }).click();

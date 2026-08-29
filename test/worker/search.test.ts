@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import {
+  addMemberByEmail,
+  jsonHeaders,
+  resetAll,
+  signUp,
+  signUpAdmin,
+  uniqueKey,
+} from "./auth-helper";
 
 async function createProject(headers: Headers, name = "Project"): Promise<number> {
   const res = await app.request(
@@ -39,7 +46,7 @@ describe("search", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     projectId = await createProject(alice);
   });
 
@@ -108,16 +115,25 @@ describe("search", () => {
     expect(res.status).toBe(400);
   });
 
-  it("does not find another user's todos", async () => {
+  it("does not find todos from a project this account is not on", async () => {
     // The index holds every user's titles — it has no owner column — so this
     // fails the moment the ownership join is dropped.
-    const bob = await signUp("bob@example.com", "Bob");
-    const bobProject = await createProject(bob, "Bob's");
-    await addTodo(bob, bobProject, "bob's secret plan");
-    await addTodo(alice, projectId, "alice's own plan");
+    //
+    // Both searchers are ordinary accounts. An administrator sees every project
+    // (ADR 0036) and would find both, which would make this pass or fail for
+    // reasons that have nothing to do with the join.
+    const carol = await signUp("carol@example.com", "Carol");
+    const dave = await signUp("dave@example.com", "Dave");
+    const hers = await createProject(alice, "Hers");
+    const his = await createProject(alice, "His");
+    await addMemberByEmail(alice, hers, "carol@example.com");
+    await addMemberByEmail(alice, his, "dave@example.com");
 
-    expect(await search(alice, "plan")).toEqual(["alice's own plan"]);
-    expect(await search(bob, "plan")).toEqual(["bob's secret plan"]);
+    await addTodo(alice, hers, "carol's own plan");
+    await addTodo(alice, his, "dave's secret plan");
+
+    expect(await search(carol, "plan")).toEqual(["carol's own plan"]);
+    expect(await search(dave, "plan")).toEqual(["dave's secret plan"]);
   });
 
   it("does not find soft-deleted todos, and finds them again after a restore", async () => {
@@ -229,7 +245,7 @@ describe("the search index tracks its table", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     projectId = await createProject(alice);
   });
 

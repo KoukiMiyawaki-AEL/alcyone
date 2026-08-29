@@ -8,6 +8,7 @@ import {
   signIn,
   signOut,
   signUp,
+  signUpAdmin,
   uniqueEmail,
 } from "./helpers";
 
@@ -59,7 +60,7 @@ test.describe("what a signed-out visitor can reach", () => {
 test.describe("signing out", () => {
   for (const screen of SCREENS) {
     test(`from ${screen} lands on the login form`, async ({ page }) => {
-      await signUp(page);
+      await signUpAdmin(page);
       await page.goto(screen);
       // `/admin` refuses an ordinary account, but the account menu is in the
       // header either way, which is what this is signing out from.
@@ -71,7 +72,7 @@ test.describe("signing out", () => {
   }
 
   test("from inside a project, taking the tasks with it", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Private work");
     await openProject(page, "Private work");
     await createTodo(page, "見えてはいけないタスク");
@@ -83,7 +84,7 @@ test.describe("signing out", () => {
   });
 
   test("leaves nothing for the back button to find", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Back button");
     await openProject(page, "Back button");
     await createTodo(page, "戻っても見えないタスク");

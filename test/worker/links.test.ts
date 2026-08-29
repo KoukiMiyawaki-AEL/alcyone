@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import {
+  addMemberByEmail,
+  jsonHeaders,
+  resetAll,
+  signUp,
+  signUpAdmin,
+  uniqueKey,
+} from "./auth-helper";
 
 type Link = { id: number; kind: string; fromTodoId: number; toTodoId: number };
 
@@ -58,7 +65,7 @@ describe("parent and child", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     projectId = await createProject(alice);
     parent = await addTodo(alice, projectId, "親");
     child = await addTodo(alice, projectId, "子");
@@ -105,13 +112,19 @@ describe("parent and child", () => {
   });
 
   it("cannot point at a task in someone else's account", async () => {
-    const bob = await signUp("bob@example.com", "Bob");
-    const theirs = await addTodo(bob, await createProject(bob, "Bob's"), "他人のタスク");
+    // The actor is an ordinary account on this project. It has to be: an
+    // administrator can reach every project (ADR 0036), so with one as the
+    // actor this would answer 200 and prove nothing about the check.
+    const worker = await signUp("worker@example.com", "Worker");
+    await addMemberByEmail(alice, projectId, "worker@example.com");
+
+    const stranger = await signUpAdmin("stranger@example.com", "Stranger");
+    const theirs = await addTodo(stranger, await createProject(stranger, "Theirs"), "他人のタスク");
 
     // The foreign key would happily accept it: it checks existence, not
     // ownership. Answering 404 also keeps the endpoint from reporting whether
     // an id in another account exists.
-    const res = await setParent(alice, child.id, theirs.id);
+    const res = await setParent(worker, child.id, theirs.id);
     expect(res.status).toBe(404);
 
     const row = await env.DB.prepare("SELECT parentId FROM todos WHERE id = ?")
@@ -142,7 +155,7 @@ describe("links between tasks", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     projectId = await createProject(alice);
     a = await addTodo(alice, projectId, "A");
     b = await addTodo(alice, projectId, "B");
@@ -190,10 +203,13 @@ describe("links between tasks", () => {
   it("cannot reach a task in another account", async () => {
     // Both endpoints are checked, so a link cannot be used to learn whether
     // someone else's id exists.
-    const bob = await signUp("bob@example.com", "Bob");
-    const theirs = await addTodo(bob, await createProject(bob, "Bob's"), "他人の");
+    const worker = await signUp("worker@example.com", "Worker");
+    await addMemberByEmail(alice, projectId, "worker@example.com");
 
-    const res = await link(alice, a.id, theirs.id);
+    const stranger = await signUpAdmin("stranger@example.com", "Stranger");
+    const theirs = await addTodo(stranger, await createProject(stranger, "Theirs"), "他人の");
+
+    const res = await link(worker, a.id, theirs.id);
     expect(res.status).toBe(404);
   });
 

@@ -18,6 +18,12 @@ export default defineConfig({
   // application. A genuine failure now takes longer to report, which is the
   // price of not reporting failures that are not there.
   expect: { timeout: 15_000 },
+  // Longer than the 30s default. Creating a project needs an administrator now
+  // (ADR 0039), and `signUpAdmin` signs up, signs the owner in over its own
+  // request context, grants the role and reloads — so the tests that were
+  // already the longest started running out of budget in the middle of a
+  // helper, which reads as the app hanging rather than as the test doing more.
+  timeout: 60_000,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",

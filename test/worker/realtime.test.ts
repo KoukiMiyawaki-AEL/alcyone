@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { app } from "../../src/worker";
 import type { UserChannel } from "../../src/worker/realtime";
 import { notifyUser } from "../../src/worker/realtime";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueKey } from "./auth-helper";
 
 /** Reaches into a user's channel the way the Worker addresses it. */
 function channelOf(userId: string) {
@@ -42,7 +42,7 @@ describe("realtime channel", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
   });
 
   it("refuses a plain GET that is not an upgrade", async () => {

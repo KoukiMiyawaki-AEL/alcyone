@@ -8,6 +8,7 @@ import {
   PASSWORD,
   signIn,
   signUp,
+  signUpAdmin,
   switchProject,
   uniqueEmail,
 } from "./helpers";
@@ -18,13 +19,13 @@ const memberForm = (page: import("@playwright/test").Page) =>
 
 test.describe("sidebar", () => {
   test("offers the views only while a project is open", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
 
     // Nothing to switch the view of yet.
     await expect(sidebar(page).getByRole("link", { name: "ボード", exact: true })).toBeHidden();
 
-    await createProject(page, "Sidebar");
-    await openProject(page, "Sidebar");
+    await createProject(page, "Sidebar 1");
+    await openProject(page, "Sidebar 1");
 
     await expect(sidebar(page).getByRole("link", { name: "一覧" })).toBeVisible();
     await sidebar(page).getByRole("link", { name: "ボード", exact: true }).click();
@@ -38,38 +39,38 @@ test.describe("sidebar", () => {
     // The sidebar answers "what can I do here". Which project "here" is comes
     // from the switcher above it — a project is the context, not one of the
     // things inside it.
-    await signUp(page);
-    await createProject(page, "Ichi");
-    await createProject(page, "Ni");
+    await signUpAdmin(page);
+    await createProject(page, "Ichi 1");
+    await createProject(page, "Ni 1");
 
-    await openProject(page, "Ichi");
-    await expect(page.getByRole("heading", { level: 1, name: "Ichi" })).toBeVisible();
-    await expect(sidebar(page).getByRole("link", { name: "Ni" })).toBeHidden();
+    await openProject(page, "Ichi 1");
+    await expect(page.getByRole("heading", { level: 1, name: "Ichi 1" })).toBeVisible();
+    await expect(sidebar(page).getByRole("link", { name: "Ni 1" })).toBeHidden();
 
-    await switchProject(page, "Ni");
-    await expect(page.getByRole("heading", { level: 1, name: "Ni" })).toBeVisible();
+    await switchProject(page, "Ni 1");
+    await expect(page.getByRole("heading", { level: 1, name: "Ni 1" })).toBeVisible();
   });
 
   test("does not carry one project's filter into another", async ({ page }) => {
     // The filter belongs to the project being left. Carried across, it hides
     // rows in the one being entered, silently.
-    await signUp(page);
-    await createProject(page, "Ichi");
-    await createProject(page, "Ni");
+    await signUpAdmin(page);
+    await createProject(page, "Ichi 2");
+    await createProject(page, "Ni 2");
 
-    await openProject(page, "Ichi");
+    await openProject(page, "Ichi 2");
     await page.getByRole("button", { name: "未完了" }).click();
     await expect(page).toHaveURL(/status=active/);
 
-    await switchProject(page, "Ni");
+    await switchProject(page, "Ni 2");
     await expect(page).not.toHaveURL(/status=active/);
   });
 
   test("keeps the filter when the view changes", async ({ page }) => {
     // Switching where you are must not throw away how you narrowed it.
-    await signUp(page);
-    await createProject(page, "Sidebar");
-    await openProject(page, "Sidebar");
+    await signUpAdmin(page);
+    await createProject(page, "Sidebar 2");
+    await openProject(page, "Sidebar 2");
     await createTodo(page, "なにか");
 
     await page.getByRole("button", { name: "未完了" }).click();
@@ -82,10 +83,12 @@ test.describe("sidebar", () => {
 });
 
 test.describe("project members", () => {
-  test("an owner invites by address, without any directory", async ({ browser, page }) => {
-    // The list of accounts is an administrator's to see, so an owner has no
-    // list to pick from. They do know the address, which is the whole point of
-    // this route existing.
+  test("an owner invites by address", async ({ browser, page }) => {
+    // Adding by address, rather than by picking from the directory. It stopped
+    // being the only way an owner *could* invite when creating a project became
+    // an administrator's act (ADR 0039) — every project's creator can read the
+    // directory now — but typing an address you already know is still the
+    // shorter path, and it is the one this covers.
     const guestEmail = uniqueEmail("invited");
     const guestContext = await browser.newContext({
       extraHTTPHeaders: { "CF-Connecting-IP": "198.51.100.31" },
@@ -93,14 +96,12 @@ test.describe("project members", () => {
     const guest = await guestContext.newPage();
     await signUp(guest, guestEmail);
 
-    await signUp(page);
-    await createProject(page, "Alone");
-    await openProject(page, "Alone");
+    await signUpAdmin(page);
+    await createProject(page, "Alone 1");
+    await openProject(page, "Alone 1");
     await sidebar(page).getByRole("link", { name: "設定" }).click();
 
     await expect(page.getByText("まだ誰も参加していません", { exact: false })).toBeVisible();
-    // No picker for an owner: there is nothing they are allowed to list.
-    await expect(page.getByLabel("一覧から追加")).toBeHidden();
 
     await page.getByLabel("メールアドレスで追加").fill(guestEmail);
     await memberForm(page).getByRole("button", { name: "追加", exact: true }).click();
@@ -108,15 +109,15 @@ test.describe("project members", () => {
     await expect(page.getByText(guestEmail)).toBeVisible();
 
     await guest.goto("/");
-    await expect(guest.getByRole("main").getByRole("link", { name: "Alone" })).toBeVisible();
+    await expect(guest.getByRole("main").getByRole("link", { name: "Alone 1" })).toBeVisible();
 
     await guestContext.close();
   });
 
   test("an address with no account is refused, and says so", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Alone");
-    await openProject(page, "Alone");
+    await signUpAdmin(page);
+    await createProject(page, "Alone 2");
+    await openProject(page, "Alone 2");
     await sidebar(page).getByRole("link", { name: "設定" }).click();
 
     await page.getByLabel("メールアドレスで追加").fill("nobody@example.com");
@@ -135,7 +136,7 @@ test.describe("project members", () => {
     const guest = await guestContext.newPage();
     await signUp(guest, guestEmail);
 
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Together");
     await openProject(page, "Together");
     const projectId = page.url().match(/projects\/(\d+)/)![1];
@@ -172,7 +173,7 @@ test.describe("project members", () => {
     const guest = await guestContext.newPage();
     await signUp(guest, guestEmail, "外れる人");
 
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Handover");
     await openProject(page, "Handover");
     await createTodo(page, "誰かの仕事");
@@ -203,7 +204,7 @@ test.describe("project members", () => {
   });
 
   test("names the creator rather than calling them a role with no name", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Named");
     await openProject(page, "Named");
     await sidebar(page).getByRole("link", { name: "設定" }).click();
@@ -228,7 +229,7 @@ test.describe("administrators", () => {
       extraHTTPHeaders: { "CF-Connecting-IP": "198.51.100.71" },
     });
     const them = await theirContext.newPage();
-    await signUp(them, uniqueEmail("stranger"));
+    await signUpAdmin(them, uniqueEmail("stranger"));
     await createProject(them, "Not the admin's");
     await openProject(them, "Not the admin's");
     const projectId = them.url().match(/projects\/(\d+)/)![1];

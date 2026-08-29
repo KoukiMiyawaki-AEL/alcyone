@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
-import { jsonHeaders, PASSWORD, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, PASSWORD, resetAll, signUp, signUpAdmin, uniqueKey } from "./auth-helper";
 
 type Attachment = { id: number; filename: string; contentType: string; size: number; key: string };
 
@@ -62,7 +62,7 @@ describe("attachments", () => {
     for (const object of (await env.ATTACHMENTS.list()).objects) {
       await env.ATTACHMENTS.delete(object.key);
     }
-    headers = await signUp("owner@example.com");
+    headers = await signUpAdmin("owner@example.com");
     todoId = await createTodo(headers);
   });
 

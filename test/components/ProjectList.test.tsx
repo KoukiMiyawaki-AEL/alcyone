@@ -39,7 +39,13 @@ function renderInRouter(ui: React.ReactNode) {
 describe("ProjectList", () => {
   it("renders an empty state instead of an empty box", async () => {
     renderInRouter(
-      <ProjectList projects={[]} onDelete={vi.fn()} onEdit={vi.fn()} onArchive={vi.fn()} />,
+      <ProjectList
+        projects={[]}
+        canCreate
+        onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
+      />,
     );
 
     expect(await screen.findByText("No projects yet")).toBeInTheDocument();
@@ -50,6 +56,7 @@ describe("ProjectList", () => {
     renderInRouter(
       <ProjectList
         projects={[project(), project({ id: 2, name: "Second" })]}
+        canCreate
         onDelete={vi.fn()}
         onEdit={vi.fn()}
         onArchive={vi.fn()}
@@ -69,6 +76,7 @@ describe("ProjectList", () => {
     renderInRouter(
       <ProjectList
         projects={[project(), project({ id: 2, name: "Second" })]}
+        canCreate
         onDelete={onDelete}
         onEdit={vi.fn()}
         onArchive={vi.fn()}
@@ -88,6 +96,7 @@ describe("ProjectCard progress", () => {
     renderInRouter(
       <ProjectList
         projects={[project({ total: 4, done: 3 })]}
+        canCreate
         onDelete={vi.fn()}
         onEdit={vi.fn()}
         onArchive={vi.fn()}
@@ -103,6 +112,7 @@ describe("ProjectCard progress", () => {
     renderInRouter(
       <ProjectList
         projects={[project()]}
+        canCreate
         onDelete={vi.fn()}
         onEdit={vi.fn()}
         onArchive={vi.fn()}
@@ -117,6 +127,7 @@ describe("ProjectCard progress", () => {
     renderInRouter(
       <ProjectList
         projects={[project({ total: 5, done: 1, overdue: 2, dueToday: 0 })]}
+        canCreate
         onDelete={vi.fn()}
         onEdit={vi.fn()}
         onArchive={vi.fn()}
@@ -126,5 +137,38 @@ describe("ProjectCard progress", () => {
     expect(await screen.findByText("期限切れ 2")).toBeInTheDocument();
     // A row of zeroes is noise that has to be read before it can be dismissed.
     expect(screen.queryByText(/本日期限/)).not.toBeInTheDocument();
+  });
+});
+
+describe("what an empty list says", () => {
+  it("points somebody who can create at the way to create", async () => {
+    renderInRouter(
+      <ProjectList
+        projects={[]}
+        canCreate
+        onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText(/「プロジェクトを追加」から/)).toBeInTheDocument();
+  });
+
+  it("tells somebody who cannot what to do instead", async () => {
+    // An empty screen should say what to do next. Pointing an ordinary account
+    // at a button it does not have says what to do next for somebody else.
+    renderInRouter(
+      <ProjectList
+        projects={[]}
+        canCreate={false}
+        onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onArchive={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText(/管理者に追加してもらって/)).toBeInTheDocument();
+    expect(screen.queryByText(/「プロジェクトを追加」から/)).not.toBeInTheDocument();
   });
 });

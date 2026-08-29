@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "../../src/worker";
 import { newShareToken, SHARE_TTL_SECONDS, type SharedView } from "../../src/worker/share";
-import { jsonHeaders, resetAll, signUp, uniqueIp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueIp, uniqueKey } from "./auth-helper";
 
 async function createProject(headers: Headers, name = "Shared"): Promise<number> {
   const res = await app.request(
@@ -62,7 +62,7 @@ describe("sharing a project", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     projectId = await createProject(alice);
   });
 
@@ -186,7 +186,7 @@ describe("the KV cache in front of the shared view", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     projectId = await createProject(alice);
     await addTodo(alice, projectId, "first");
     token = await share(alice, projectId);

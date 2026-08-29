@@ -33,7 +33,7 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 | GET | `/api/todos/assigned` | 自分の担当（未完了・全プロジェクト） | 本人 | `{ items }` | — |
 | GET | `/api/projects` | Project一覧（id昇順） | クエリ: `cursor`、`limit`（1〜100、既定50） | `{ items: Project[], nextCursor }` | `400` |
 | PATCH | `/api/projects/:projectId` | 設定を変更（`key`は不可） | 管理できる人 | `200` | `400` `404` |
-| POST | `/api/projects` | Project作成 | `{ name: string }`（1〜100文字） | `201` `Project` | `400` |
+| POST | `/api/projects` | プロジェクトを作成 | **管理者 / オーナー** | `201` | `400` `404` |
 | DELETE | `/api/projects/:projectId` | Project削除（**論理削除**。配下のTodoも同時に） | — | `204` (body無し) | `400`, `404` |
 | POST | `/api/projects/:projectId/restore` | Projectの復元（配下のTodoも同時に） | — | `200` `Project` | `400`, `404` |
 | GET | `/api/projects/:projectId/todos` | そのProjectのTodo一覧 | クエリ: `status`（下記）、`sort`=`created`\|`start`\|`due`\|`priority`、`cursor`、`limit` | `{ project, todos, nextCursor }` | `400`, `404` |
@@ -153,6 +153,12 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 所有者には選ぶ一覧が無く、宛先を知っている本人が打つしかない。`{ email }` は**アカウントの
 有無を1件ずつ問い合わせられる**ので、IP単位のレート制限を通す。存在しないアドレスの答えは、
 管理できないプロジェクトの答えと同じ `404` にしてある。
+
+**プロジェクトを作れるのは `admin` 以上**（[ADR 0039](../adr/0039-creating-a-project-is-an-operational-act.md)）。
+どのプロジェクトが存在するかは運用の決めごとで、作業の一部ではない。参加条件は付かない
+——作る時点で参加すべきプロジェクトが無いため。拒否は他と同じ `404` だが、**ここでの理由は
+隠蔽ではなく一貫性**（作ろうとしているものはまだ存在しない）。件数の上限は無い。
+**作成者は降格しても、自分が作ったプロジェクトを管理し続ける。**
 
 プロジェクトは `name` / `key` / `description` / `color` / `startAt` / `dueAt` / `archivedAt` を持つ
 （[ADR 0037](../adr/0037-project-settings.md)）。**`key` は作成時のみ**——書き留められた参照の中に

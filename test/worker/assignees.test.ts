@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueKey } from "./auth-helper";
 
 async function createProject(headers: Headers, name = "P"): Promise<number> {
   const res = await app.request(
@@ -30,7 +30,7 @@ describe("assignees", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     projectId = await createProject(alice);
     const res = await app.request(
       `/api/projects/${projectId}/todos`,

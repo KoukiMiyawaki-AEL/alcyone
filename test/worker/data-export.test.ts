@@ -5,7 +5,7 @@ import { app } from "../../src/worker";
 import { exportKey, exportPrefix, type ExportManifest } from "../../src/worker/data-export";
 import { handleObjectCleanup } from "../../src/worker/object-cleanup";
 import { RETENTION_DAYS, purgeExpiredDeletions } from "../../src/worker/scheduled";
-import { jsonHeaders, resetAll, signUp, uniqueKey } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueKey } from "./auth-helper";
 
 async function createProject(headers: Headers, name = "Work"): Promise<number> {
   const res = await app.request(
@@ -45,7 +45,7 @@ describe("data export", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
   });
 
   it("writes every part and a manifest naming them", async () => {

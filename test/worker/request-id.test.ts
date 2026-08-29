@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { app } from "../../src/worker";
-import { resetAll, signUp, uniqueKey } from "./auth-helper";
+import { resetAll, signUpAdmin, uniqueKey } from "./auth-helper";
 
 describe("request id", () => {
   beforeEach(resetAll);
@@ -36,7 +36,7 @@ describe("request id", () => {
 
     // A session cookie is required to get past the auth middleware, which
     // would otherwise answer 401 before anything touches the database.
-    const headers = await signUp("logs@example.com");
+    const headers = await signUpAdmin("logs@example.com");
     // No DB binding, so looking that session up throws into onError.
     const res = await app.request("/api/projects", { headers }, {} as typeof env);
     spy.mockRestore();
@@ -50,7 +50,7 @@ describe("request id", () => {
 
   it("keeps request bodies out of the logs", async () => {
     const logged: string[] = [];
-    const headers = await signUp("bodies@example.com");
+    const headers = await signUpAdmin("bodies@example.com");
     headers.set("Content-Type", "application/json");
     const spy = vi.spyOn(console, "error").mockImplementation((line) => {
       logged.push(String(line));

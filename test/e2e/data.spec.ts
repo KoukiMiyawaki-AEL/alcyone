@@ -7,14 +7,18 @@ import {
   rowAction,
   signOut,
   signUp,
+  signUpAdmin,
 } from "./helpers";
 
 test.describe("ownership and deletion", () => {
   test("one user's projects are invisible to another", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Alice's private project");
     await signOut(page);
 
+    // An ordinary account, deliberately: an administrator sees every project
+    // (ADR 0036), so signing back in as one would prove the opposite of what
+    // this test is named after.
     await signUp(page);
     await expect(page.getByText("No projects yet")).toBeVisible();
     await expect(
@@ -23,9 +27,9 @@ test.describe("ownership and deletion", () => {
   });
 
   test("another user's project id is not reachable by URL", async ({ page }) => {
-    await signUp(page);
-    await createProject(page, "Private");
-    await openProject(page, /Private/);
+    await signUpAdmin(page);
+    await createProject(page, "Private one");
+    await openProject(page, /Private one/);
     const victimUrl = page.url();
     await signOut(page);
 
@@ -33,11 +37,11 @@ test.describe("ownership and deletion", () => {
     await page.goto(victimUrl);
 
     await expect(page.getByText("Project not found")).toBeVisible();
-    await expect(page.getByRole("heading", { level: 1, name: "Private" })).toBeHidden();
+    await expect(page.getByRole("heading", { level: 1, name: "Private one" })).toBeHidden();
   });
 
   test("deleting a todo offers Undo, and Undo restores it", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Undo project");
     await openProject(page, /Undo project/);
     await createTodo(page, "bring me back");
@@ -51,7 +55,7 @@ test.describe("ownership and deletion", () => {
   });
 
   test("deleting an account removes its data and signs you out", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Doomed project");
 
     await page.getByRole("button", { name: /^アカウント:/ }).click();

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "../../src/features/projects/types";
 import type { Todo } from "../../src/features/todos/types";
 import { app } from "../../src/worker";
-import { jsonHeaders, resetAll, signUp } from "./auth-helper";
+import { jsonHeaders, resetAll, signUp, signUpAdmin, uniqueKey } from "./auth-helper";
 
 let keyCounter = 0;
 
@@ -53,12 +53,17 @@ async function countRows(projectId: number): Promise<number> {
   return row?.n ?? 0;
 }
 
+async function userId(headers: Headers): Promise<string> {
+  const res = await app.request("/api/auth/get-session", { headers }, env);
+  return ((await res.json()) as { user: { id: string } }).user.id;
+}
+
 describe("Projects API", () => {
   let alice: Headers;
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
   });
 
   it("creates and lists projects in id order", async () => {
@@ -170,14 +175,26 @@ describe("cross-user isolation", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
     bob = await signUp("bob@example.com", "Bob");
     aliceProject = await createProject(alice, "Alice's project");
     aliceTodo = await addTodo(alice, aliceProject, "Alice's todo");
   });
 
-  it("does not list another user's projects", async () => {
-    await createProject(bob, "Bob's project");
+  it("lists only the projects this account is on", async () => {
+    // Bob cannot make one of his own any more (ADR 0039), so his project is
+    // one an administrator made and put him on. The boundary under test is the
+    // same: what he is on, and nothing else.
+    const bobsProject = await createProject(alice, "Bob's project");
+    await app.request(
+      `/api/projects/${bobsProject}/members`,
+      {
+        method: "POST",
+        headers: jsonHeaders(alice),
+        body: JSON.stringify({ email: "bob@example.com" }),
+      },
+      env,
+    );
 
     const res = await app.request("/api/projects", { headers: bob }, env);
     const names = ((await res.json()) as { items: Project[] }).items.map((p) => p.name);
@@ -240,7 +257,7 @@ describe("project settings", () => {
 
   beforeEach(async () => {
     await resetAll();
-    alice = await signUp("alice@example.com", "Alice");
+    alice = await signUpAdmin("alice@example.com", "Alice");
   });
 
   async function create(body: Record<string, unknown>) {
@@ -393,5 +410,83 @@ describe("project settings", () => {
 
     expect(res.status).toBe(404);
     expect((await read(id)).name).toBe("Hers");
+  });
+});
+
+describe("who may create a project", () => {
+  let admin: Headers;
+  let member: Headers;
+
+  beforeEach(async () => {
+    await resetAll();
+    admin = await signUpAdmin("admin@example.com", "Admin");
+    member = await signUp("member@example.com", "Member");
+  });
+
+  async function create(headers: Headers, name: string) {
+    return app.request(
+      "/api/projects",
+      {
+        method: "POST",
+        headers: jsonHeaders(headers),
+        body: JSON.stringify({ name, key: uniqueKey() }),
+      },
+      env,
+    );
+  }
+
+  it("is an administrator's act, not part of doing the work", async () => {
+    // Which projects exist is an operational decision (ADR 0039). Letting
+    // anyone create one made the role meaningless: a member could always have
+    // a project they administered, without anybody granting them anything.
+    const res = await create(member, "Not theirs to make");
+
+    expect(res.status).toBe(404);
+    const row = await env.DB.prepare("SELECT count(*) AS n FROM projects").first<{ n: number }>();
+    expect(row?.n).toBe(0);
+  });
+
+  it("an administrator makes one, and administers it", async () => {
+    const res = await create(admin, "Theirs to make");
+    expect(res.status).toBe(201);
+
+    // Creating still confers management of what was created — that is a fact
+    // about who made it, not a role (ADR 0039).
+    const { id } = (await res.json()) as { id: number };
+    const members = await app.request(`/api/projects/${id}/members`, { headers: admin }, env);
+    expect(await members.json()).toMatchObject({ canManage: true });
+  });
+
+  it("the system owner may too", async () => {
+    // `resetAll` seeds the owner as a bare row, so this one signs up first on
+    // an empty table and becomes the owner the way a real instance does.
+    await resetAll({ seedAdmin: false });
+    const owner = await signUp("first@example.com", "First");
+
+    expect((await create(owner, "The owner's")).status).toBe(201);
+  });
+
+  it("keeps administering a project after losing the role", async () => {
+    // "May create" and "responsible for what was created" are facts about
+    // different moments. Demotion cannot reach back and undo the second.
+    const created = await create(admin, "Made while an administrator");
+    const { id } = (await created.json()) as { id: number };
+
+    const adminId = await userId(admin);
+    await env.DB.prepare("UPDATE user SET role = 'member' WHERE id = ?").bind(adminId).run();
+
+    const members = await app.request(`/api/projects/${id}/members`, { headers: admin }, env);
+    expect(await members.json()).toMatchObject({ canManage: true });
+
+    // But they cannot make another one.
+    expect((await create(admin, "Made after")).status).toBe(404);
+  });
+
+  it("puts no ceiling on how many", async () => {
+    // The control is who, not how many: a cap answers a different fear, and
+    // hitting one would be indistinguishable from being refused (ADR 0039).
+    for (let i = 0; i < 5; i += 1) {
+      expect((await create(admin, `Project ${i}`)).status).toBe(201);
+    }
   });
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { createProject, createTodo, openProject, signUp } from "./helpers";
+import { createProject, createTodo, openProject, signUpAdmin } from "./helpers";
 
 /** Adds a label from the project's settings screen. */
 async function addLabel(page: import("@playwright/test").Page, name: string) {
@@ -15,7 +15,7 @@ async function addLabel(page: import("@playwright/test").Page, name: string) {
 
 test.describe("labels", () => {
   test("is made on the project, then put on a task, and shows on the row", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Labelled");
     await openProject(page, "Labelled");
     await createTodo(page, "調べもの");
@@ -44,7 +44,7 @@ test.describe("labels", () => {
   });
 
   test("narrows the list, and the filter lives in the URL", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Filtered");
     await openProject(page, "Filtered");
     await createTodo(page, "ラベル付き");
@@ -75,7 +75,7 @@ test.describe("labels", () => {
   });
 
   test("deleting a label takes it off the tasks that carried it", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Pruned");
     await openProject(page, "Pruned");
     await createTodo(page, "残るタスク");
@@ -106,7 +106,7 @@ test.describe("labels", () => {
   });
 
   test("refuses a second label with the same name, and says so", async ({ page }) => {
-    await signUp(page);
+    await signUpAdmin(page);
     await createProject(page, "Duplicated");
     await openProject(page, "Duplicated");
 

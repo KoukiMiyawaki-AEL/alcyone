@@ -1155,11 +1155,33 @@ export function createRepo(
         .from(projectsTable)
         .where(and(eq(projectsTable.id, id), inArray(projectsTable.id, ownedProjectIds(id)))),
 
+    /**
+     * Creates a project. Administrators and the system owner only.
+     *
+     * Which projects exist is an operational decision, not part of doing the
+     * work (ADR 0039). Letting anyone create one made the role meaningless:
+     * a member could always have a project they administered, without anybody
+     * granting them anything — while ADR 0036 had just decided that reaching a
+     * project always leaves a row saying who let you in.
+     *
+     * Refused here rather than in the handler, like `roles.set` and
+     * `directory.list`, so it cannot be forgotten. There is no row to scope
+     * this to — the project does not exist yet — so the refusal is a statement
+     * that selects nothing rather than a `where` on the insert.
+     *
+     * Unlike `ownedProjectIds`, no participation is required: there is nothing
+     * to participate in until the project exists.
+     */
     create: (values: ProjectFields & { name: string; key: string }) =>
-      db
-        .insert(projectsTable)
-        .values({ ...values, ownerId, createdAt: now() })
-        .returning(),
+      isAdmin
+        ? db
+            .insert(projectsTable)
+            .values({ ...values, ownerId, createdAt: now() })
+            .returning()
+        : db
+            .select()
+            .from(projectsTable)
+            .where(sql`0 = 1`),
 
     /**
      * Partial update, scoped to projects this account may administer.

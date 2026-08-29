@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, request, type Page } from "@playwright/test";
 
 export const PASSWORD = "correct horse battery";
 
@@ -12,6 +12,9 @@ export const PASSWORD = "correct horse battery";
  * of it per run.
  */
 export const ADMIN_EMAIL = "warm-up-admin@example.com";
+
+/** Where the dev server is. Mirrors playwright.config.ts. */
+const BASE_URL = `http://localhost:${process.env.PORT ?? 5173}`;
 
 let counter = 0;
 
@@ -63,6 +66,69 @@ export async function signUp(
   // The assertion is the point: signing up has to actually land somewhere.
   await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
   return email;
+}
+
+/**
+ * Makes an account that may create projects, and signs in as it.
+ *
+ * Creating a project is an administrator's act (ADR 0039), so a test that needs
+ * one needs an account that can make it. Deliberately not what `signUp` gives
+ * you: with every actor an administrator, the scoping tests would run as
+ * somebody who can reach everything and pass without proving anything.
+ *
+ * The account is made *by the owner*, through the endpoint an administrator
+ * uses for exactly this (ADR 0034), rather than signed up and then promoted.
+ * That was the first shape, and it cost three requests to `/api/auth/*` on the
+ * page's own address — sign-up, then a reload to pick the new role up. The
+ * limiter there allows ten a minute per address, and `get-session` is one of
+ * them, so the longer tests started reading as signed-out halfway through. One
+ * sign-in is all this needs.
+ */
+export async function signUpAdmin(
+  page: Page,
+  email = uniqueEmail("admin"),
+  // The same display name `signUp` uses: the role is what differs, and a
+  // different name would quietly change what every assignee picker and comment
+  // byline in the suite says.
+  name = "E2E user",
+): Promise<string> {
+  // `page.url()` is "about:blank" until the first navigation, so the base URL
+  // comes from the config rather than from the page.
+  const origin = BASE_URL;
+  const owner = await request.newContext({
+    baseURL: origin,
+    extraHTTPHeaders: {
+      // Better Auth validates this; without it every sign-in here is a 403.
+      Origin: origin,
+      // Its own address, so these never eat into the page's rate-limit budget.
+      "CF-Connecting-IP": addressFor(email),
+    },
+  });
+  try {
+    const signedIn = await owner.post("/api/auth/sign-in/email", {
+      data: { email: ADMIN_EMAIL, password: PASSWORD },
+    });
+    if (!signedIn.ok()) throw new Error(`owner sign-in failed (${signedIn.status()})`);
+
+    const created = await owner.post("/api/users", {
+      data: { name, email, password: PASSWORD, role: "admin" },
+    });
+    if (!created.ok()) throw new Error(`could not create ${email} (${created.status()})`);
+  } finally {
+    await owner.dispose();
+  }
+
+  await signIn(page, email);
+  await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
+
+  return email;
+}
+
+/** A per-account address, so the promotions above do not share a rate limit. */
+function addressFor(seed: string): string {
+  let hash = 0;
+  for (const character of seed) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return `10.${(hash >>> 16) & 0xff}.${(hash >>> 8) & 0xff}.${hash & 0xff}`;
 }
 
 export async function signIn(page: Page, email: string) {

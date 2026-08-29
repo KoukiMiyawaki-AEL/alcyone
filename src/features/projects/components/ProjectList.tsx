@@ -7,18 +7,33 @@ import { ProjectCard } from "./ProjectCard";
 
 type ProjectListProps = {
   projects: ProjectSummary[];
+  /** Whether this account may create one — which decides what "none" means. */
+  canCreate: boolean;
   onDelete: (id: number) => Promise<void>;
   onEdit: (project: ProjectSummary) => void;
   onArchive: (id: number, archived: boolean) => Promise<void>;
 };
 
-export function ProjectList({ projects, onDelete, onEdit, onArchive }: ProjectListProps) {
+export function ProjectList({
+  projects,
+  canCreate,
+  onDelete,
+  onEdit,
+  onArchive,
+}: ProjectListProps) {
   if (projects.length === 0) {
     return (
       <EmptyState
         icon={FolderIcon}
         title="No projects yet"
-        description="「プロジェクトを追加」から最初のプロジェクトを作ってください。"
+        // An empty screen should say what to do next. Pointing an ordinary
+        // account at a button it does not have says what to do next for
+        // somebody else.
+        description={
+          canCreate
+            ? "「プロジェクトを追加」から最初のプロジェクトを作ってください。"
+            : "参加しているプロジェクトはありません。管理者に追加してもらってください。"
+        }
       />
     );
   }

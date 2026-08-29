@@ -4,7 +4,12 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test-dom.tsbuildinfo",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-    "types": []
+    // The app's own type environment. A component test that reaches the route
+    // tree type-checks app code, and app code expects these — without the
+    // Worker's generated types, `AppType` collapses and every API call becomes
+    // `any`.
+    "types": ["vite/client", "./worker-configuration.d.ts"],
+    "allowArbitraryExtensions": true
   },
   // setup-dom.ts must stay in scope: its `@testing-library/jest-dom/vitest`
   // import is what augments vitest's Assertion type with the DOM matchers.

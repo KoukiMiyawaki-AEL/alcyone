@@ -25,12 +25,6 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/search")({
   validateSearch: searchSchema,
   loaderDeps: ({ search }) => search,
-  beforeLoad: ({ context, location }) => {
-    if (context.auth.isPending) return;
-    if (!context.auth.user) {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-  },
   loader: async ({ deps }): Promise<{ todos: Todo[]; error: string | null }> => {
     // An empty box is not a search. The API rejects it, and asking would just
     // be a round trip to be told so.

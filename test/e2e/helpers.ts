@@ -75,6 +75,11 @@ export async function signIn(page: Page, email: string) {
 export async function signOut(page: Page) {
   await page.getByRole("button", { name: /^アカウント:/ }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
+  // Signing out throws the page away rather than routing (ADR 0038), so this
+  // waits for the new document. Without it the next `goto` races a navigation
+  // already in flight and aborts — which reads as the test's own navigation
+  // failing rather than as the one before it still running.
+  await page.waitForURL(/\/login/);
 }
 
 export async function createProject(page: Page, name: string) {

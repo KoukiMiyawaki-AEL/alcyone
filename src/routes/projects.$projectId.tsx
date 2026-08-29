@@ -74,16 +74,6 @@ export const Route = createFileRoute("/projects/$projectId")({
   // Without this the loader would not re-run when only the search params
   // change, and the filter would appear to do nothing.
   loaderDeps: ({ search }) => search,
-  // The guard lives here rather than on the root route so that /login itself
-  // stays reachable. `isPending` must not count as signed-out, or a hard reload
-  // would bounce a signed-in user to the login screen before the session
-  // request has even come back.
-  beforeLoad: ({ context, location }) => {
-    if (context.auth.isPending) return;
-    if (!context.auth.user) {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-  },
   loader: async ({ params, deps }): Promise<LoaderData> => {
     let res;
     try {

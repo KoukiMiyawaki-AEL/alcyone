@@ -1,11 +1,10 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { z } from "zod";
 
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/features/auth/AuthProvider";
 import { SignInForm, type SignInMode } from "@/features/auth/components/SignInForm";
 import { authClient } from "@/lib/auth-client";
 
@@ -21,27 +20,15 @@ const searchSchema = z.object({
 });
 
 export const Route = createFileRoute("/login")({
+  // Public, and pointless once you are in — the gate sends a signed-in
+  // visitor to the app.
+  staticData: { access: "public", redirectWhenSignedIn: true },
   validateSearch: searchSchema,
   component: LoginComponent,
 });
 
 function LoginComponent() {
-  const router = useRouter();
-  const { user } = useAuth();
-  const { redirect: redirectTo } = Route.useSearch();
   const [mode, setMode] = useState<SignInMode>("sign-in");
-
-  // The only thing that navigates *away* from /login, deliberately.
-  //
-  // Navigating from the submit handler races the session hook: sign-in resolves
-  // before the hook has refetched, so the destination's guard still sees no user
-  // and bounces straight back here. And a `beforeLoad` redirect here would fight
-  // the protected routes' guards over a context that lags by a render, which
-  // produces a redirect loop rather than a race. Reacting to the user appearing
-  // is the one ordering that holds.
-  useEffect(() => {
-    if (user) void router.navigate({ to: redirectTo ?? "/" });
-  }, [user, router, redirectTo]);
 
   async function handleSubmit(values: { email: string; password: string; name: string }) {
     const { error } =

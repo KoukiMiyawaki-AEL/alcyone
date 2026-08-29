@@ -43,6 +43,7 @@
 | [0035](./0035-labels.md) | ラベルを入れる（ステータスでも担当者でも表せない軸） | Accepted |
 | [0036](./0036-what-each-role-is-for.md) | 3つのロールが「何のためのもの」かを決める（見える範囲と、変えられる範囲を分ける） | Accepted |
 | [0037](./0037-project-settings.md) | プロジェクトに設定を持たせる（3つのツールの共通項を採る） | Accepted |
+| [0038](./0038-one-gate-decides-who-sees-what.md) | 「誰がどの画面を見られるか」を1箇所で、描画時に決める | Accepted |
 
 ## ルール
 

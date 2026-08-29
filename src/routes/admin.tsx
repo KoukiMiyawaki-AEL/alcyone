@@ -1,5 +1,5 @@
-import { Link, createFileRoute, redirect, useRouter } from "@tanstack/react-router";
-import { ShieldIcon, TriangleAlertIcon, UserPlusIcon } from "lucide-react";
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { TriangleAlertIcon, UserPlusIcon } from "lucide-react";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/app/empty-state";
@@ -32,12 +32,7 @@ const PASSWORD_FLOOR = 12;
 type LoaderData = { accounts: Account[]; error: string | null };
 
 export const Route = createFileRoute("/admin")({
-  beforeLoad: ({ context, location }) => {
-    if (context.auth.isPending) return;
-    if (!context.auth.user) {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-  },
+  staticData: { access: "admin" },
   loader: async (): Promise<LoaderData> => {
     let res;
     try {
@@ -59,27 +54,6 @@ function AdminComponent() {
   const { user } = useAuth();
   const { accounts, error } = Route.useLoaderData();
 
-  // Read from `useAuth`, not from the route context, and rendered rather than
-  // redirected. The context only updates when matches re-resolve, so a member
-  // who typed this URL kept the page a `beforeLoad` check would have bounced —
-  // the session had not arrived yet the one time that check ran. This is not
-  // the permission either way; the server answers a member with an empty list.
-  const role = (user?.role ?? "member") as UserRole;
-  if (user && role === "member") {
-    return (
-      <EmptyState
-        icon={ShieldIcon}
-        title="権限がありません"
-        description="ユーザー管理を開けるのは管理者とオーナーだけです。"
-        action={
-          <Button size="sm" variant="outline" render={<Link to="/" />}>
-            プロジェクトへ戻る
-          </Button>
-        }
-      />
-    );
-  }
-
   if (error) {
     return (
       <EmptyState
@@ -94,6 +68,10 @@ function AdminComponent() {
       />
     );
   }
+
+  // The gate has already refused anyone below `admin`, so the only question
+  // left here is whether this administrator is also the system owner.
+  const role = (user?.role ?? "member") as UserRole;
 
   // An owner may hand out any role. An administrator may not create anyone at
   // or above their own rank — the server refuses either way, and this keeps the

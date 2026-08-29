@@ -10,11 +10,17 @@ import type { SharedView } from "@/worker/share";
 /**
  * The one page anyone can open without an account.
  *
- * No `beforeLoad` guard, deliberately — that is the feature. Everything shown
- * comes from the API's own chosen payload, so there is nothing here that could
- * leak more than intended by rendering a field someone forgot about.
+ * Declared public, deliberately — that is the feature. Everything shown comes
+ * from the API's own chosen payload, so there is nothing here that could leak
+ * more than intended by rendering a field someone forgot about.
+ *
+ * Public means "does not need a session", not "must not have one": a signed-in
+ * reader opening a shared link sees the same page. It renders outside the app
+ * shell either way (ADR 0038).
  */
 export const Route = createFileRoute("/s/$token")({
+  // The one screen this app has for people who do not have an account.
+  staticData: { access: "public" },
   loader: async ({ params }): Promise<SharedView> => {
     let res;
     try {

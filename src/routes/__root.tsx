@@ -1,8 +1,7 @@
-import { Link, Outlet, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
+import { Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
 import { FileQuestionIcon, TriangleAlertIcon } from "lucide-react";
 
-import { AppHeader } from "@/components/app/app-header";
-import { AppSidebar } from "@/components/app/app-sidebar";
+import { AccessGate } from "@/components/app/access-gate";
 import { EmptyState } from "@/components/app/empty-state";
 import { ThemeProvider } from "@/components/app/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -30,15 +29,11 @@ function RootComponent() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="alcyone-ui-theme">
       <TooltipProvider>
-        <div className="flex h-svh flex-col bg-background text-foreground">
-          <AppHeader />
-          <div className="flex flex-1 overflow-hidden">
-            <AppSidebar />
-            <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-              <Outlet />
-            </main>
-          </div>
-        </div>
+        {/*
+          Everything below the gate. Which screens exist for whom is decided in
+          exactly one place — see AccessGate for why it cannot be a guard.
+        */}
+        <AccessGate />
         <Toaster />
       </TooltipProvider>
     </ThemeProvider>

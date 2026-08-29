@@ -31,16 +31,6 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/")({
   validateSearch: searchSchema,
   loaderDeps: ({ search }) => search,
-  // The guard lives here rather than on the root route so that /login itself
-  // stays reachable. `isPending` must not count as signed-out, or a hard reload
-  // would bounce a signed-in user to the login screen before the session
-  // request has even come back.
-  beforeLoad: ({ context, location }) => {
-    if (context.auth.isPending) return;
-    if (!context.auth.user) {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-  },
   loader: async ({ deps }): Promise<{ projects: ProjectSummary[]; error: string | null }> => {
     let res;
     try {

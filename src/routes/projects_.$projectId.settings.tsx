@@ -50,12 +50,6 @@ type LoaderData = {
 };
 
 export const Route = createFileRoute("/projects_/$projectId/settings")({
-  beforeLoad: ({ context, location }) => {
-    if (context.auth.isPending) return;
-    if (!context.auth.user) {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-  },
   loader: async ({ params }): Promise<LoaderData> => {
     let res;
     try {

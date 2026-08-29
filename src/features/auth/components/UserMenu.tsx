@@ -1,4 +1,4 @@
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -9,20 +9,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/features/auth/AuthProvider";
-import { authClient } from "@/lib/auth-client";
+import { endSession } from "@/features/auth/session-exit";
 
 export function UserMenu() {
-  const router = useRouter();
   const { user } = useAuth();
 
   if (!user) return null;
 
   async function handleSignOut() {
-    await authClient.signOut();
-    // No navigate here on purpose. Clearing the session updates the router
-    // context, and the current route's own guard is what sends us to /login —
-    // one owner per direction, or the two redirect each other in a loop.
-    await router.invalidate();
+    // One exit, and it throws the page away — see endSession for why clearing
+    // caches by hand is a weaker guarantee than not having a page any more.
+    await endSession();
   }
 
   return (

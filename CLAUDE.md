@@ -247,10 +247,23 @@ mutationは直接`apiClient`を叩かず、feature配下のラッパ（例: `src
 loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catchの外で投げる**。
 どちらもthrowで動くので、catchの中だと握り潰されて汎用エラー表示になる（実際に一度踏んだ）。
 
-**画面に出す権限の判定もコンポーネント側で`useAuth()`から読む。** `beforeLoad`の
-`redirect()`は「セッションがまだ`isPending`だった1回」で終わり、届いたあとに再実行されない
-——ハードリロードで直接URLを開いた人は弾かれずにそのまま画面に残る（`/admin`で実際に踏んだ）。
-サーバは同じ要求をどのみち拒むので、`beforeLoad`は白い画面を避けるための飾りでしかない。
+**「誰がどの画面を見られるか」は`src/components/app/access-gate.tsx`の1箇所で、描画時に決まる。**
+ルートに`beforeLoad`のガードを書かない ——`beforeLoad`は遷移のときにしか走らず、
+**サインアウトは遷移ではない**ので一度も効かない（7ルートに同じ5行があって、実際に追い出して
+いたのはローダーの401だけだった。[ADR 0038](./docs/adr/0038-one-gate-decides-who-sees-what.md)）。
+
+- 各ルートは`staticData: { access: "public" | "user" | "admin" }`を宣言する。**書き忘れは`user`**。
+  公開は`/login`と`/s/$token`だけで、その一覧は`test/components/access.test.ts`が固定する。
+- `access`は**最低ランク**（オーナーは`admin`を満たす）。**画面のスケールであって、
+  プロジェクト単位のスコープ（ADR 0036）とは別物**。
+- **`StaticDataRouteOption`をモジュール拡張しない。** router-coreが宣言してreact-routerが
+  再エクスポートしているので、後者を拡張すると再エクスポートを隠して**ルート全体の型推論が壊れる**
+  （`useLoaderData()`が`any`になる）。`readAccess(unknown)`で読む。
+- **セッションを終える出口は`endSession()`の1つだけ。** `signOut()`のあと
+  **ハードナビゲーション**で`/login`へ。ルーターのキャッシュもReactのstateもページごと捨てる。
+  `redirect`パラメータは付けない（付けると次にサインインした人が前の人の画面に着地する）。退会も同じ。
+- **ローダーの401リダイレクトは残す。** ゲートは「手元にセッションが無い」、401は
+  「手元のセッションがもう無効」——別の信号。
 
 **セッションをReactの再レンダリングの条件に使うときは`useAuth()`から読む。**
 `Route.useRouteContext()`はmatchesが再解決されたときにしか更新されないので、

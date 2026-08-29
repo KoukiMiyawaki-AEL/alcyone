@@ -31,12 +31,6 @@ const GROUPS: { state: DueState; title: string }[] = [
 ];
 
 export const Route = createFileRoute("/my")({
-  beforeLoad: ({ context, location }) => {
-    if (context.auth.isPending) return;
-    if (!context.auth.user) {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-  },
   loader: async (): Promise<LoaderData> => {
     // Read once, here, so every row on this page is bucketed against the same
     // day. Computing it per row lets a page rendered across midnight put two

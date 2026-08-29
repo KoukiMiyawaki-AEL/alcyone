@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { PageHeader } from "@/components/app/page-header";
@@ -8,21 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { ProfileCard } from "@/features/auth/components/ProfileCard";
+import { endSession } from "@/features/auth/session-exit";
 import { DataExportCard } from "@/features/exports/DataExportCard";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/account")({
-  beforeLoad: ({ context, location }) => {
-    if (context.auth.isPending) return;
-    if (!context.auth.user) {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-  },
   component: AccountComponent,
 });
 
 function AccountComponent() {
-  const router = useRouter();
   const { user } = useAuth();
   const [confirming, setConfirming] = useState(false);
   const [password, setPassword] = useState("");
@@ -47,10 +41,10 @@ function AccountComponent() {
       // This cannot loop the way the login screen once did: /login has no
       // guard of its own to push back.
       //
-      // signOut() first because deleteUser ends the session server-side but
-      // leaves the client's store holding the now-deleted user.
-      await authClient.signOut();
-      await router.navigate({ to: "/login" });
+      // The same exit as signing out. The rows are gone, but nothing on screen
+      // knows that yet — a row disappearing does not erase the copy of it this
+      // page is holding, which is the whole reason the exit is a hard one.
+      await endSession();
     } finally {
       setSubmitting(false);
     }

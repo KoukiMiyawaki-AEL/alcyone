@@ -98,8 +98,11 @@ test.describe("labels", () => {
 
     await page.getByRole("link", { name: "一覧" }).click();
     await expect(page.getByText("残るタスク")).toBeVisible();
-    // The filter chip goes with the label, so nothing on the page names it.
-    await expect(page.getByRole("main").getByText("消える")).toBeHidden();
+    // `toHaveCount(0)` rather than `toBeHidden()`: two chips carry the name
+    // while the list is still showing the page it had before the refetch — the
+    // row's and the filter's — and `toBeHidden` treats two matches as a strict
+    // mode violation and fails at once instead of retrying.
+    await expect(page.getByRole("main").getByText("消える")).toHaveCount(0);
   });
 
   test("refuses a second label with the same name, and says so", async ({ page }) => {

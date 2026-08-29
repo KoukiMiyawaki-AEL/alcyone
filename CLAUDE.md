@@ -159,9 +159,10 @@ APIのパスは必ず`/api/`配下に置くこと。
   `PUT /api/todos/:id/labels`で**集合の置き換え**（差分ではない）。
 - **暦日（`startAt` / `dueAt`）の計算はUTCで閉じる。** `new Date(y, m, d)`と`toLocaleDateString`を
   使わない ——ローカル変換はグリニッジより西の利用者にだけ日付を1日ずらし、**作った側には見えない**。
-- **R2のオブジェクトはDBの外。** アップロードは所有権チェックのあとに書き（先に書くと、
-  どの行からも参照されないオブジェクトが残る）、削除は行を先に消す（先にオブジェクトを消して
-  失敗すると、実体の無い行が残る）。
+- **R2のオブジェクトはDBの外で、順序は経路によって逆になる。** アップロードは所有権チェックの
+  あとに書く。**添付を1つ消すときは行が先**（先にオブジェクトを消して失敗すると、実体の無い行が
+  残る）。**退会のときはオブジェクトが先**で同期で消す——「消えました」は応答時点で真である
+  必要があり、残った行は直せるが残ったオブジェクトは見えない。
 - Better AuthはOriginヘッダを検証する。**curlでAPIを叩くときは`Origin`ヘッダが必要**（無いと403）。
 - ルートを追加・変更したら[`docs/api/README.md`](./docs/api/)の表も更新する。
 
@@ -192,11 +193,9 @@ loaderで`redirect()`や`notFound()`を投げるときは、**fetchのtry/catch�
 `Route.useRouteContext()`はmatchesが再解決されたときにしか更新されないので、
 「セッションが後から届いたら何かを始める」用途では**初回ロードで永久に発火しない**。
 
-画面は `/`（ダッシュボード）、`/my`（担当タスク）、`/projects/$projectId`（概要/一覧/ボード/
-タイムラインを`view`で切り替え）、`/projects/$projectId/settings`、`/admin`、`/search`、
-`/account`、`/s/$token`（公開共有）、`/dev/design-system`。
 動的ルートはフラットなファイル名で置く（`src/routes/projects.$projectId.tsx`）。
-存在しないリソースはloaderで`notFound()`を投げる。
+存在しないリソースはloaderで`notFound()`を投げる。画面の一覧と役割は
+[`docs/design/overview.md`](./docs/design/overview.md)。
 
 ## UI / Design System
 
@@ -375,8 +374,9 @@ pnpm test --project worker     # APIのみ
 
 ### アカウントとスコープ
 
-**最初のアカウントはオーナーになるので、テストは必ずそれを先に用意する。** worker側は
-`resetAll()`が1行シードし（ブートストラップ自体を試すときだけ`resetAll({ seedAdmin: false })`）、
+**最初のアカウントはオーナーになるので、テストは必ずそれを先に用意する。**
+（ヘルパの名前は`seedAdmin` / `ADMIN_EMAIL`だが、作られるのは`owner`である。
+`signUpAdmin()`だけが`admin`を作る。）worker側は`resetAll()`が1行シードし（ブートストラップ自体を試すときだけ`resetAll({ seedAdmin: false })`）、
 E2E側は`globalSetup`のwarm-upが`ADMIN_EMAIL`で作る。用意し忘れると、そのファイルが最初に
 サインアップしたユーザーが全権限を持ち、**所有スコープのテストが何も証明せずに緑になる**。
 
@@ -396,6 +396,8 @@ E2E側は`globalSetup`のwarm-upが`ADMIN_EMAIL`で作る。用意し忘れる�
   同じアドレスを共有すると認証のレート制限にまとめて当たり、症状は
   「後続のspecが軒並み落ちる」——テストの側ではなくアプリの側が壊れたように見える。
   **429は未ログインと見分けが付かない。**
+- **Playwrightは、ロケータが2つ以上の要素に一致すると即座に失敗する**（strict mode）。
+  待ち直さないので、「一致が2つある」状態は再試行では解決しない。以下はすべてその回避。
 - **プロジェクト名はスイート全体で一意にし、前方一致もさせない。** 管理者は全プロジェクトが
   見え、DBは1回の実行で共有されるので、同じ名前を2つのテストが使うと一覧に両方出て、
   その名前を指すロケータが全部strict mode違反になる。`getByRole`の`name`は**部分一致**なので、
@@ -442,7 +444,5 @@ shadcn/uiコンポーネントを追加・変更したら、ここに使用例�
 
 ## まだやらないこと
 
-TanStack Query / Turborepo / Alchemy / Storybook / カバレッジ計測 / メール送信 /
-組織単位のテナンシー / ゴミ箱UI / 本番デプロイ。
-
-理由と設計上の制約は[`docs/design/overview.md`](./docs/design/overview.md)にある。
+一覧と、それぞれの理由・設計上の制約は
+[`docs/design/overview.md`](./docs/design/overview.md)にある。

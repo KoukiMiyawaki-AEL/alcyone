@@ -21,11 +21,13 @@ React + TanStack Router + shadcn/ui（Tailwind CSS v4）+ Hono + Drizzle ORM + C
 Node / pnpmのバージョンは `mise.toml` で固定している（[mise](https://mise.jdx.dev/) 推奨）。
 
 ```bash
+mise install      # miseを使う場合。使わないなら mise.toml のバージョンに手で合わせる
 pnpm install
 
 # 生成物（worker-configuration.d.ts / src/routeTree.gen.ts）はコミットしていないので、
 # clone直後は必ず実行する。これが無いと型チェックが通らない。
-# .dev.vars が無ければ .dev.vars.example から作られるので、BETTER_AUTH_SECRET を設定する
+# .dev.vars が無ければ .dev.vars.example から作られる。BETTER_AUTH_SECRET に任意の長い文字列を
+# 入れる（`openssl rand -base64 32` でよい）。Cloudflareへのログインは要らない。
 pnpm run codegen
 
 # ローカルD1にmigrationを適用（初回のみ / schema.tsを変更したら再実行）
@@ -34,14 +36,19 @@ pnpm run db:migrate:local
 # E2E用のブラウザ（初回のみ）
 pnpm exec playwright install chromium
 
-pnpm dev
+pnpm dev          # http://localhost:5173 （ポートは固定）
 ```
 
+**アカウントは `pnpm dev` を起動したまま、別のターミナルで作る。**
 画面を触るためのアカウントは [`docs/dev-accounts.md`](./docs/dev-accounts.md) を参照
 （`pnpm run seed:accounts` でオーナー・管理者・一般ユーザーが用意される）。
 
 コマンドの一覧は [`CLAUDE.md`](./CLAUDE.md) にある。
 CI（`.github/workflows/ci.yml`）はpull requestごとに `pnpm run check` を実行する。
+
+**`pnpm run check` を手元で通すときは、先に `pnpm dev` を止めること。** `check` にはE2Eが
+含まれ、E2Eは専用のデータベースで自分でdevサーバを起動するので、5173が塞がっていると失敗する
+（開発用のデータベースを守るための意図的な挙動）。
 
 ## ディレクトリ
 

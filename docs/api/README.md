@@ -1,6 +1,21 @@
 # API
 
-OpenAPI仕様書は現時点では生成していない（経緯は）。ここにあるのは人が読むための簡易な参照であり、**型としての一次情報は[`src/lib/api-client.ts`](../../src/lib/api-client.ts)（`hc<AppType>`）と[`src/worker/index.ts`](../../src/worker/index.ts)そのもの**。この表と実装がずれていないか、実装を変更したPRの中でセルフチェックすること。
+OpenAPI仕様書は生成していない。ここにあるのは人が読むための簡易な参照であり、**型としての一次情報は[`src/lib/api-client.ts`](../../src/lib/api-client.ts)（`hc<AppType>`）と[`src/worker/index.ts`](../../src/worker/index.ts)そのもの**。この表と実装がずれていないか、実装を変更したPRの中でセルフチェックすること。
+
+## 誰が呼べるか
+
+表には権限の列を置いていない。**規則で決まるからで、エンドポイントごとの事情ではない。**
+
+- `/api/*` は**すべて認証が必要**（例外は `/api/health` と `/api/auth/*`）。未認証は `401`。
+- **タスクを読み書きするもの**（`/api/todos/*`、`/api/projects/:id/todos`、ラベルの付与、
+  コメント、添付）は、そのプロジェクトに**到達できる人**——作成者・参加者・管理者・オーナー。
+- **プロジェクトの設定を変えるもの**（削除・復元・共有・参加者の増減・`PATCH /api/projects/:id`）は
+  **管理できる人**——作成者、システムのオーナー、そのプロジェクトに参加している管理者。
+- **プロジェクトの作成**（`POST /api/projects`）は `admin` 以上。
+- **アカウントの一覧・作成・権限変更**（`/api/users*`）は `admin` 以上。
+- **`/api/shared/:token`** だけが認証不要。
+
+境界の定義は[`../design/access-control.md`](../design/access-control.md)。
 
 ## リクエストの振り分け
 
@@ -25,15 +40,15 @@ TanStack Routerがクライアント側で描画する（存在しない画面�
 |---|---|---|---|---|---|
 | GET | `/api/health` | ヘルスチェック（**認証不要**） | — | `{ ok: true }` | — |
 | * | `/api/auth/*` | Better Auth（サインアップ/イン/アウト等） | — | — | `403` Origin不正 |
-| POST | `/api/projects/:projectId/labels` | ラベルを作成 | 到達できる人 | `201 { id }` | `400` `404` |
-| PATCH | `/api/labels/:labelId` | 名前・色を変更 | 到達できる人 | `204` | `400` `404` |
-| DELETE | `/api/labels/:labelId` | ラベルを削除（全タスクから外す） | 到達できる人 | `204` | `400` `404` |
-| PUT | `/api/todos/:id/labels` | タスクのラベルを**置き換え** | 到達できる人 | `{ labels }` | `400` `404` |
-| GET | `/api/dashboard` | 到達できる全プロジェクト + タスク件数（`?archived=1`でアーカイブ済み） | 到達できる人 | `{ projects }` | — |
-| GET | `/api/todos/assigned` | 自分の担当（未完了・全プロジェクト） | 本人 | `{ items }` | — |
+| POST | `/api/projects/:projectId/labels` | ラベルを作成 | `{ name, color }` | `201 { id }` | `400` `404` |
+| PATCH | `/api/labels/:labelId` | 名前・色を変更 | `{ name?, color? }` | `204` | `400` `404` |
+| DELETE | `/api/labels/:labelId` | ラベルを削除（全タスクから外す） | — | `204` | `400` `404` |
+| PUT | `/api/todos/:id/labels` | タスクのラベルを**置き換え** | `{ labelIds }` | `{ labels }` | `400` `404` |
+| GET | `/api/dashboard` | 到達できる全プロジェクト + タスク件数（`?archived=1`でアーカイブ済み） | — | `{ projects }` | — |
+| GET | `/api/todos/assigned` | 自分の担当（未完了・全プロジェクト） | — | `{ items }` | — |
 | GET | `/api/projects` | Project一覧（id昇順） | クエリ: `cursor`、`limit`（1〜100、既定50） | `{ items: Project[], nextCursor }` | `400` |
-| PATCH | `/api/projects/:projectId` | 設定を変更（`key`は不可） | 管理できる人 | `200` | `400` `404` |
-| POST | `/api/projects` | プロジェクトを作成 | **管理者 / オーナー** | `201` | `400` `404` |
+| PATCH | `/api/projects/:projectId` | 設定を変更（`key`は不可） | 下記の任意フィールド | `200` | `400` `404` |
+| POST | `/api/projects` | プロジェクトを作成 | `{ name, key }` + 任意 | `201` | `400` `404` |
 | DELETE | `/api/projects/:projectId` | Project削除（**論理削除**。配下のTodoも同時に） | — | `204` (body無し) | `400`, `404` |
 | POST | `/api/projects/:projectId/restore` | Projectの復元（配下のTodoも同時に） | — | `200` `Project` | `400`, `404` |
 | GET | `/api/projects/:projectId/todos` | そのProjectのTodo一覧 | クエリ: `status`（下記）、`sort`=`created`\|`start`\|`due`\|`priority`、`cursor`、`limit` | `{ project, todos, nextCursor }` | `400`, `404` |
@@ -74,15 +89,16 @@ Todo一覧が裸の配列ではなく`{ project, todos }`を返すのは、画�
 「そのTodoが本当にそのProjectのものか」を追加クエリで検証するか、黙って無視するかの二択になるため。
 無視されるパスセグメントは、無いより悪い。
 
-Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batch()`で実行している
-。
+Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batch()`で実行している。
 
 `Todo` / `Project` の型は`src/worker/db/schema.ts`から`drizzle-orm`が推論する。
 
 - `Todo`: `{ id, title, status, createdAt, updatedAt, projectId, startAt: string|null, dueAt: string|null, description: string|null, priority: 0-3, deletedAt: string|null }`
   - `status` は `todo` / `in_progress` / `blocked` / `done` のいずれか。
     **DBのCHECK制約でも縛られている**ので、この4つ以外は保存されない
-- `Project`: `{ id: number, name: string, createdAt: string, ownerId: string, deletedAt: string | null }`
+- `Project`: `{ id, name, key, description, color, startAt, dueAt, archivedAt, ownerId, createdAt, deletedAt }`
+  - `key` は `ALC` のような短い識別子で、タスクは画面上 `ALC-12` と表示される（`12` は `todos.id`）
+  - `color` はラベルと同じパレットの6色（`slate` / `red` / `amber` / `green` / `blue` / `violet`）
 
 一覧は**キーセットページネーション**。`nextCursor`が非nullなら次のページがあり、そのまま
 `cursor`に渡す。カーソルは不透明な文字列で、中身に依存しないこと。壊れた・古いカーソルは
@@ -104,13 +120,11 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 必ず両方を扱う（退会時も同様）。逆に、オブジェクトが無いのに行がある状態も起こりうるので、
 ダウンロードは404を返す。
 
-`deletedAt` が非nullの行は論理削除済みで、一覧にも取得にも現れない
-。アカウント削除
+`deletedAt` が非nullの行は論理削除済みで、一覧にも取得にも現れない。アカウント削除
 （`POST /api/auth/delete-user`）だけは論理削除済みの行も含めて物理的に消す。
 
 **時刻はISO-8601（`2026-08-23T12:44:13.000Z`）でアプリ側が生成する。** DBのデフォルトは使わない
 （SQLiteの`current_timestamp`はISO-8601ではなく、`new Date()`がローカル時刻として誤読する）。
-経緯は。
 
 ## タスク間の関係
 
@@ -130,15 +144,16 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 
 | Method | Path | 用途 | 誰が | 成功 | 失敗 |
 |---|---|---|---|---|---|
-| GET | `/api/projects/:projectId/members` | 参加者一覧 + `canManage` | 到達できる人 | `{ project, owner, members, canManage }` | `400` `404` |
-| POST | `/api/projects/:projectId/members` | 参加者を追加（`{ userId }` または `{ email }`） | 管理できる人 | `201 { id }` | `400` `404` `429` |
-| DELETE | `/api/projects/:projectId/members/:userId` | 参加者を解除（担当も外れる） | 管理できる人 | `204` | `400` `404` |
+| GET | `/api/projects/:projectId/members` | 参加者一覧 + `canManage` | — | `{ project, owner, members, canManage }` | `400` `404` |
+| POST | `/api/projects/:projectId/members` | 参加者を追加 | `{ userId }` または `{ email }` | `201 { id }` | `400` `404` `429` |
+| DELETE | `/api/projects/:projectId/members/:userId` | 参加者を解除（担当も外れる） | — | `204` | `400` `404` |
 | GET | `/api/users` | アカウント一覧 | 管理者 / オーナー | `{ id, name, email, role }[]` | — |
 | POST | `/api/users` | アカウントを作成 | 管理者 / オーナー | `201 { id }` | `400` `404` |
 | PATCH | `/api/users/:userId/role` | 権限を変更 | 管理者 / オーナー | `204` | `400` `404` |
 
 権限が無い場合は**すべて`404`**。「権限が無い」と「存在しない」を区別すると、
-存在の有無が漏れる。
+存在の有無が漏れる。一覧を返すエンドポイントだけは例外で、**空の一覧**を返す
+（`GET /api/users` を管理者以外が叩くと `[]`）——そこには隠すべき「その1件」が無い。
 
 `canManage` は**サーバが答える**。クライアントが規則を再実装すると、APIが拒むボタンをUIが出す。
 
@@ -149,9 +164,9 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 `?label=` はSQLのWHEREで絞る。**数字だが存在しないidは空の結果**、
 **数字ですらない値は無視**（前者は本当に指定された絞り込み、後者は手書きURLの事故）。
 
-参加者の追加は `{ userId }` と `{ email }` のどちらかを取る。名簿を読めるのは管理者だけなので、
-所有者には選ぶ一覧が無く、宛先を知っている本人が打つしかない。`{ email }` は**アカウントの
-有無を1件ずつ問い合わせられる**ので、IP単位のレート制限を通す。存在しないアドレスの答えは、
+参加者の追加は `{ userId }` と `{ email }` のどちらかを取る。前者は名簿から選ぶとき、
+後者は宛先を知っているときの短い経路。`{ email }` は**アカウントの有無を1件ずつ
+問い合わせられる**ので、IP単位のレート制限を通す。存在しないアドレスの答えは、
 管理できないプロジェクトの答えと同じ `404` にしてある。
 
 **プロジェクトを作れるのは `admin` 以上**。
@@ -161,9 +176,8 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 **作成者は降格しても、自分が作ったプロジェクトを管理し続ける。**
 
 プロジェクトは `name` / `key` / `description` / `color` / `startAt` / `dueAt` / `archivedAt` を持つ
-。**`key` は作成時のみ**——書き留められた参照の中に
-あるので、変更経路を用意していない。**アーカイブは削除ではない**: 一覧から消えて永久に読める。
-`PATCH` は `archived: boolean` を取り、行には instant を書く。
+**`key` は作成時のみ**——書き留められた参照の中にあるので、変更経路を用意していない。**アーカイブは削除ではない**: 一覧から消えて永久に読める。
+`PATCH` は `archived: boolean` を取り、行にはアーカイブした時刻を書く。
 
 ロールは**強さの段階ではなく役割**。
 **見える範囲は広く、変えられる範囲は狭い。**
@@ -189,7 +203,9 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 `/api/users` は管理者以外には**空配列**を返す。全員に全員の名前と住所を配るのは名簿であり、
 誰も頼んでいない。
 
-**ロールを設定するAPIは存在しない。** 全アカウントは `member` で始まる。
+ロールは `PATCH /api/users/:userId/role` で変える。**Better Authの`update-user`には渡せない**
+（`input: false`で宣言してある）ので、**自分で自分の権限を上げる経路は無い**。
+最初に作られたアカウントだけが、誰の許可も無く `owner` になる。
 
 ## 担当者
 
@@ -197,11 +213,12 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 |---|---|---|---|---|
 | GET | `/api/projects/:projectId/assignees` | そのProjectのタスクを割り当てられる相手 | `{ id, name }[]` | `400` |
 
-**今日はちょうど1人（Projectの所有者）を返す。** クライアントが「自分自身」と決め打ちしないのは、
-複数人が届くようになったときに探して直す場所を作らないため。
+**そのプロジェクトの作成者と参加者を返す。** クライアントが「自分自身」と決め打ちしない
+——担当者はプロジェクトに属する事実で、サインイン中の人とは別物である。
 
 割り当ては `PATCH /api/todos/:id` の `assigneeId`。`null` で解除する。
-存在しないユーザーidは外部キーが拒む（`500`）。
+**存在しないユーザーidは外部キーが拒み、`500`になる。** 他のエラーと形が揃っていない
+既知の粗さで、担当者はUIの選択肢から選ばれる前提に寄りかかっている。
 
 ## コメントと履歴
 
@@ -225,7 +242,7 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 **変わっていないフィールドは記録されない。** 詳細フォームは毎回全項目を送るので、
 「送られたもの」を記録すると本当の変更が埋もれる。
 
-`description` の編集は記録しない。理由は。
+`description` の編集は記録しない。プロズの変更履歴は、見るべき変更を埋める。
 
 ## 共有リンク
 
@@ -236,12 +253,12 @@ Project削除は`ON DELETE CASCADE`ではなく、子を先に消す2文を`batc
 | DELETE | `/api/projects/:projectId/share` | リンクを解除 | 要 | `204` | `404` |
 | GET | `/api/shared/:token` | 共有ビューを読む | **不要** | `{ project, todos }` | `400` `404` `429` |
 
-`/api/shared/:token`は**このAPIで唯一、認証が要らない**。IPでレート制限している。
+`/api/shared/:token`は**アカウントを持たない人が開ける唯一のエンドポイント**。IPでレート制限している。
 
 返すのは行そのものではなく、公開用に選んだ形（id・ownerId・createdAtを含まない）。
 
 **KVが前段にあるので、内容は最大60秒古い。解除も「1分以内に効く」であって即座ではない。**
-理由と、その取引を受け入れた条件は。
+認証を持たない人が開くページなので、D1に触らせないことを優先している。
 
 取り消し済みトークンと存在しないトークンは**同じ応答**を返す。
 
@@ -260,13 +277,13 @@ R2の鍵は**セッションのuser idから組み立てる**ので、`instanceI
 他人のデータは出てこない（`manifest: null` か `404`）。
 
 エクスポートは**論理削除済みの行も含む**（各行の`deletedAt`で判別できる）。
-保持期限は他と同じ30日で、退会時にも消える。理由は。
+保持期限は他と同じ30日で、退会時にも消える。
 
 ## 検索
 
 | Method | Path | 用途 | パラメータ | 成功 | 失敗 |
 |---|---|---|---|---|---|
-| GET | `/api/search` | 所有する全Projectを横断してTodoを検索 | `q`（必須、1〜200字）、`cursor`、`limit` | `{ items, nextCursor }` | `400` |
+| GET | `/api/search` | 到達できる全Projectを横断してTodoを検索 | `q`（必須、1〜200字）、`cursor`、`limit` | `{ items, nextCursor }` | `400` |
 
 **タイトルとメモ（`description`）の両方**を検索する。
 
@@ -277,7 +294,7 @@ R2の鍵は**セッションのuser idから組み立てる**ので、`instanceI
 全件返すと検索窓がアプリで最も高いクエリになる。
 
 **3文字未満の語はFTSでは引けない**（trigramの制約）。その場合はLIKEの全走査に落ちるので、
-**短い検索語は遅く、D1の課金上も高い**。理由と実測は。
+**短い検索語は遅く、D1の課金上も高い**。
 
 ## リアルタイム更新（WebSocket）
 
@@ -290,7 +307,7 @@ R2の鍵は**セッションのuser idから組み立てる**ので、`instanceI
 アップグレードでないGETは `426` を返す。
 
 サーバから届くのは `{ "type": "invalidate" }` の**1種類だけ**で、変更内容は載せない。
-受け取ったら再取得する。理由は。
+受け取ったら再取得する。変更内容を載せると、権限の判定がクライアント側に漏れる。
 **取りこぼしても再取得で正しくなる**前提の設計なので、配信保証は無い。
 
 自分の非GETリクエストが成功したときだけ配られる。宛先はユーザー単位なので、他人の変更は届かない。
@@ -316,10 +333,10 @@ R2の鍵は**セッションのuser idから組み立てる**ので、`instanceI
 | `401` | `{ error: "Unauthorized" }` | セッションが無い。`/api/health` と `/api/auth/*` 以外の全 `/api/*` |
 | `413` | `{ error: "Payload Too Large" }` | 添付が5MBを超えた |
 | `426` | （本文なし） | `/api/realtime` にアップグレードでないGETが来た |
-| `429` | `{ error: "Too Many Requests" }` | レート制限。`Retry-After` ヘッダに秒数。`/api/auth/*`（IP単位）と添付アップロード（ユーザー単位）のみ |
+| `429` | `{ error: "Too Many Requests" }` | レート制限。`Retry-After` ヘッダに秒数。`/api/auth/*` とアドレスでの参加者追加（IP単位）、添付アップロード（ユーザー単位）、`/api/shared/:token`（IP単位） |
 | `500` | `{ error: "Internal Server Error" }` | 未捕捉例外。`app.onError`が構造化JSONログを出したうえで返す |
 
-## 本格的なOpenAPI導入を検討するタイミング
+## OpenAPI
 
 この表は手で書いている。以下のいずれかに該当したら、`@hono/zod-openapi` の導入を検討する。
 
